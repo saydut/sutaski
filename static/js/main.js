@@ -5,6 +5,9 @@ let tedarikciChart = null;
 let tarihFiltreleyici = null;
 let tedarikciSecici = null;
 
+let mevcutSayfa = 1;
+const girdilerSayfaBasi = 15;
+
 function updateChartThemes() {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const textColor = isDark ? '#E2E8F0' : '#333333';
@@ -29,9 +32,7 @@ function updateChartThemes() {
     }
 }
 
-// GÜNCELLENDİ: Sayfa yüklendiğinde tüm işlemleri başlatan ana fonksiyon
 window.onload = async function() {
-    // Önce modal'ları ve kütüphaneleri hazırla
     duzenleModal = new bootstrap.Modal(document.getElementById('duzenleModal'));
     gecmisModal = new bootstrap.Modal(document.getElementById('gecmisModal'));
     silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
@@ -50,15 +51,12 @@ window.onload = async function() {
         });
     }
 
-    // Şimdi verileri yükle
     await baslangicVerileriniYukle(); 
 };
 
-// YENİ: Başlangıç verilerini doğru sırada yükleyen fonksiyon
 async function baslangicVerileriniYukle() {
     document.getElementById('girdiler-baslik').textContent = 'Bugünkü Girdiler';
     
-    // Asenkron olarak yapılabilecek işlemleri aynı anda başlat
     const promises = [
         ozetVerileriniYukle(),
         haftalikGrafigiOlustur(),
@@ -70,10 +68,94 @@ async function baslangicVerileriniYukle() {
     
     await Promise.all(promises);
 
-    // Diğer her şey yüklendikten sonra, son olarak bugünün girdilerini göster
-    girdileriGoster(); 
+    girdileriGoster(1);
 }
 
+// DÜZELTİLDİ: Artık yeni API formatından doğru veriyi okuyor.
+async function ozetVerileriniYukle(tarih = null) {
+    const toplamLitrePanel = document.getElementById('toplam-litre-panel');
+    const girdiSayisiPanel = document.getElementById('bugunku-girdi-sayisi');
+    const ozetBaslik = document.getElementById('ozet-panel-baslik');
+    toplamLitrePanel.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
+    girdiSayisiPanel.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
+    
+    let url = `/api/gunluk_ozet${tarih ? `?tarih=${tarih}` : ''}`;
+    let girdiSayisiUrl = `/api/sut_girdileri${tarih ? `?tarih=${tarih}` : ''}`;
+    
+    const bugun = getLocalDateString();
+    if (tarih && tarih !== bugun) {
+        const [yil, ay, gun] = tarih.split('-');
+        ozetBaslik.textContent = `${gun}.${ay}.${yil} TOPLAMI`;
+    } else {
+        ozetBaslik.textContent = 'BUGÜNKÜ TOPLAM SÜT';
+    }
+
+    try {
+        const [toplamLitreResponse, girdiSayisiResponse] = await Promise.all([fetch(url), fetch(girdiSayisiUrl)]);
+        
+        const toplamLitreData = await toplamLitreResponse.json();
+        const girdiSayisiData = await girdiSayisiResponse.json(); // API'den gelen obje {girdiler: [], toplam_girdi_sayisi: X}
+
+        if (!toplamLitreResponse.ok) throw new Error(toplamLitreData.error || 'Özet verisi alınamadı');
+        if (!girdiSayisiResponse.ok) throw new Error(girdiSayisiData.error ||'Girdi sayısı alınamadı');
+
+        toplamLitrePanel.textContent = `${toplamLitreData.toplam_litre} L`;
+        girdiSayisiPanel.textContent = girdiSayisiData.toplam_girdi_sayisi; // Doğru yerden sayıyı al
+
+    } catch (error) {
+        console.error("Özet yüklenirken hata:", error);
+        toplamLitrePanel.textContent = 'Hata';
+        girdiSayisiPanel.textContent = 'Hata';
+    }
+}
+
+
+async function girdileriGoster(sayfa = 1, tarih = null) {
+    mevcutSayfa = sayfa;
+    if (!tarih) {
+        tarih = tarihFiltreleyici.selectedDates[0] ? getLocalDateString(tarihFiltreleyici.selectedDates[0]) : getLocalDateString(new Date());
+    }
+    
+    const listeElementi = document.getElementById('girdiler-listesi');
+    listeElementi.innerHTML = '<div class="text-center p-5"><div class="spinner-border"></div></div>';
+    
+    let url = `/api/sut_girdileri?tarih=${tarih}&sayfa=${sayfa}`;
+    try {
+        const response = await fetch(url);
+        const veri = await response.json();
+        if (response.ok) {
+            listeElementi.innerHTML = '';
+            const girdiler = veri.girdiler;
+            const toplamGirdi = veri.toplam_girdi_sayisi;
+
+            if (girdiler.length === 0) {
+                listeElementi.innerHTML = '<div class="list-group-item">Bu tarih için girdi bulunamadı.</div>';
+            } else {
+                girdiler.forEach(girdi => {
+                    const tarihObj = new Date(girdi.taplanma_tarihi);
+                    const formatliTarih = !isNaN(tarihObj.getTime()) ? `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}` : 'Geçersiz Saat';
+                    const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark ms-2">Düzenlendi</span>` : '';
+                    let actionButtons = '';
+                    if (USER_ROLE !== 'muhasebeci') {
+                        actionButtons = `
+                            <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="duzenlemeModaliniAc(${girdi.id}, ${girdi.litre})"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-outline-danger border-0" title="Sil" onclick="silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>`;
+                    }
+                    const girdiElementi = `<div class="list-group-item"><div class="d-flex w-100 justify-content-between"><h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${duzenlendiEtiketi}</h5><div>${actionButtons}<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button></div></div><p class="mb-1 girdi-detay">Toplayan: ${girdi.kullanicilar.kullanici_adi} | Saat: ${formatliTarih}</p></div>`;
+                    listeElementi.innerHTML += girdiElementi;
+                });
+            }
+            sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, tarih));
+        } else { 
+            listeElementi.innerHTML = `<p class="text-danger p-3">${veri.error || 'Girdiler yüklenemedi.'}</p>`; 
+        }
+    } catch (error) { 
+        console.error("Girdiler gösterilirken hata oluştu:", error); 
+        listeElementi.innerHTML = '<p class="text-danger p-3">Girdiler yüklenirken bir hata oluştu.</p>'; 
+    }
+}
+
+// --- Diğer tüm fonksiyonlar aynı kalacak ---
 
 async function tedarikciGrafigiOlustur() {
     const veriYokMesaji = document.getElementById('tedarikci-veri-yok');
@@ -135,75 +217,19 @@ function getLocalDateString(date = new Date()) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-async function ozetVerileriniYukle(tarih = null) {
-    const toplamLitrePanel = document.getElementById('toplam-litre-panel');
-    const girdiSayisiPanel = document.getElementById('bugunku-girdi-sayisi');
-    const ozetBaslik = document.getElementById('ozet-panel-baslik');
-    toplamLitrePanel.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
-    girdiSayisiPanel.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
-    let url = `/api/gunluk_ozet${tarih ? `?tarih=${tarih}` : ''}`;
-    let girdiSayisiUrl = `/api/sut_girdileri${tarih ? `?tarih=${tarih}` : ''}`;
-    const bugun = getLocalDateString();
-    if (tarih && tarih !== bugun) {
-        const [yil, ay, gun] = tarih.split('-');
-        ozetBaslik.textContent = `${gun}.${ay}.${yil} TOPLAMI`;
-    } else {
-        ozetBaslik.textContent = 'BUGÜNKÜ TOPLAM SÜT';
-    }
-    try {
-        const [toplamLitreResponse, girdiSayisiResponse] = await Promise.all([fetch(url), fetch(girdiSayisiUrl)]);
-        if (!toplamLitreResponse.ok) throw new Error('Özet verisi alınamadı');
-        if (!girdiSayisiResponse.ok) throw new Error('Girdi sayısı alınamadı');
-        const toplamLitreData = await toplamLitreResponse.json();
-        const girdiSayisiData = await girdiSayisiResponse.json();
-        toplamLitrePanel.textContent = `${toplamLitreData.toplam_litre} L`;
-        girdiSayisiPanel.textContent = girdiSayisiData.length;
-    } catch (error) {
-        console.error("Özet yüklenirken hata:", error);
-        toplamLitrePanel.textContent = 'Hata';
-        girdiSayisiPanel.textContent = 'Hata';
-    }
-}
-
 async function tedarikcileriYukle() {
     if (!tedarikciSecici) return;
     try {
         const response = await fetch('/api/tedarikciler');
-        if (!response.ok) throw new Error('Tedarikçiler alınamadı');
         const tedarikciler = await response.json();
-        
         tedarikciSecici.clear();
         tedarikciSecici.clearOptions();
-        
-        const options = tedarikciler.map(t => ({
-            value: t.id,
-            text: t.isim
-        }));
+        const options = tedarikciler.map(t => ({ value: t.id, text: t.isim }));
         tedarikciSecici.addOptions(options);
-
     } catch (error) {
         console.error("Tedarikçiler yüklenirken hata:", error);
         gosterMesaj("Tedarikçiler yüklenemedi.", "danger");
     }
-}
-
-async function tedarikciEkle() {
-    const isimInput = document.getElementById('yeni-tedarikci-isim');
-    const isim = isimInput.value.trim();
-    if (!isim) { gosterMesaj("Lütfen bir tedarikçi adı girin.", "warning"); return; }
-    try {
-        const response = await fetch('/api/tedarikci_ekle', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isim })
-        });
-        const errorData = await response.json();
-        if (response.ok) {
-            gosterMesaj("Tedarikçi başarıyla eklendi.", "success");
-            isimInput.value = '';
-            await Promise.all([tedarikcileriYukle(), tedarikciGrafigiOlustur()]);
-        } else {
-            gosterMesaj(`Tedarikçi eklenemedi: ${errorData.error || 'Bilinmeyen hata.'}`, "danger");
-        }
-    } catch (error) { console.error("Tedarikçi eklenirken hata:", error); }
 }
 
 async function sutGirdisiEkle() {
@@ -224,7 +250,7 @@ async function sutGirdisiEkle() {
             tedarikciSecici.clear();
             const seciliTarih = tarihFiltreleyici.selectedDates[0];
             const formatliTarih = seciliTarih ? getLocalDateString(seciliTarih) : null;
-            await Promise.all([girdileriGoster(formatliTarih), ozetVerileriniYukle(formatliTarih), haftalikGrafigiOlustur(), tedarikciGrafigiOlustur()]);
+            await Promise.all([girdileriGoster(mevcutSayfa, formatliTarih), ozetVerileriniYukle(formatliTarih), haftalikGrafigiOlustur(), tedarikciGrafigiOlustur()]);
         } else {
             gosterMesaj(`Süt girdisi eklenemedi: ${errorData.error || 'Bilinmeyen hata.'}`, "danger");
         }
@@ -256,45 +282,37 @@ async function sutGirdisiDuzenle() {
             duzenleModal.hide();
             const seciliTarih = tarihFiltreleyici.selectedDates[0];
             const formatliTarih = seciliTarih ? getLocalDateString(seciliTarih) : null;
-            await Promise.all([girdileriGoster(formatliTarih), ozetVerileriniYukle(formatliTarih), haftalikGrafigiOlustur(), tedarikciGrafigiOlustur()]);
+            await Promise.all([girdileriGoster(mevcutSayfa, formatliTarih), ozetVerileriniYukle(formatliTarih), haftalikGrafigiOlustur(), tedarikciGrafigiOlustur()]);
         } else {
             gosterMesaj(`Girdi düzenlenemedi: ${errorData.error || 'Bilinmeyen hata.'}`, "danger");
         }
     } catch (error) { console.error("Girdi düzenlenirken hata:", error); gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger"); }
 }
 
-async function girdileriGoster(tarih = null) {
-    // Eğer tarih parametresi null ise, bugünün tarihini kullan
-    if (!tarih) {
-        tarih = getLocalDateString(new Date());
+function sayfalamaNavOlustur(containerId, toplamOge, aktifSayfa, sayfaBasiOge, sayfaDegistirCallback) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    const toplamSayfa = Math.ceil(toplamOge / sayfaBasiOge);
+    if (toplamSayfa <= 1) return;
+
+    const ul = document.createElement('ul');
+    ul.className = 'pagination';
+
+    for (let i = 1; i <= toplamSayfa; i++) {
+        const li = document.createElement('li');
+        li.className = `page-item ${i === aktifSayfa ? 'active' : ''}`;
+        const a = document.createElement('a');
+        a.className = 'page-link';
+        a.href = '#';
+        a.innerText = i;
+        a.onclick = (e) => {
+            e.preventDefault();
+            sayfaDegistirCallback(i);
+        };
+        li.appendChild(a);
+        ul.appendChild(li);
     }
-    const listeElementi = document.getElementById('girdiler-listesi');
-    listeElementi.innerHTML = '<div class="text-center p-5"><div class="spinner-border"></div></div>';
-    let url = `/api/sut_girdileri?tarih=${tarih}`;
-    try {
-        const response = await fetch(url);
-        const girdiler = await response.json();
-        if (response.ok) {
-            listeElementi.innerHTML = '';
-            if (girdiler.length === 0) {
-                listeElementi.innerHTML = '<div class="list-group-item">Bu tarih için girdi bulunamadı.</div>';
-            } else {
-                girdiler.forEach(girdi => {
-                    const tarihObj = new Date(girdi.taplanma_tarihi);
-                    const formatliTarih = !isNaN(tarihObj.getTime()) ? `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}` : 'Geçersiz Saat';
-                    const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark ms-2">Düzenlendi</span>` : '';
-                    let actionButtons = '';
-                    if (USER_ROLE !== 'muhasebeci') {
-                        actionButtons = `
-                            <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="duzenlemeModaliniAc(${girdi.id}, ${girdi.litre})"><i class="bi bi-pencil"></i></button>
-                            <button class="btn btn-sm btn-outline-danger border-0" title="Sil" onclick="silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>`;
-                    }
-                    const girdiElementi = `<div class="list-group-item"><div class="d-flex w-100 justify-content-between"><h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${duzenlendiEtiketi}</h5><div>${actionButtons}<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button></div></div><p class="mb-1 girdi-detay">Toplayan: ${girdi.kullanicilar.kullanici_adi} | Saat: ${formatliTarih}</p></div>`;
-                    listeElementi.innerHTML += girdiElementi;
-                });
-            }
-        } else { listeElementi.innerHTML = '<p class="text-danger p-3">Girdiler yüklenemedi.</p>'; }
-    } catch (error) { console.error("Girdiler gösterilirken hata oluştu:", error); listeElementi.innerHTML = '<p class="text-danger p-3">Girdiler yüklenirken bir hata oluştu.</p>'; }
+    container.appendChild(ul);
 }
 
 async function gecmisiGoster(girdiId) {
@@ -331,7 +349,7 @@ async function sutGirdisiSil() {
             silmeOnayModal.hide();
             const seciliTarih = tarihFiltreleyici.selectedDates[0];
             const formatliTarih = seciliTarih ? getLocalDateString(seciliTarih) : null;
-            await Promise.all([girdileriGoster(formatliTarih), ozetVerileriniYukle(formatliTarih), haftalikGrafigiOlustur(), tedarikciGrafigiOlustur()]);
+            await Promise.all([girdileriGoster(mevcutSayfa, formatliTarih), ozetVerileriniYukle(formatliTarih), haftalikGrafigiOlustur(), tedarikciGrafigiOlustur()]);
         } else { gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger'); }
     } catch (error) { console.error("Silme sırasında hata:", error); gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger'); }
 }
@@ -348,12 +366,11 @@ function girdileriFiltrele() {
             const [yil, ay, gun] = formatliTarih.split('-');
             baslik.textContent = `${gun}.${ay}.${yil} Tarihli Girdiler`;
         }
-        girdileriGoster(formatliTarih);
+        girdileriGoster(1, formatliTarih);
         ozetVerileriniYukle(formatliTarih);
     }
 }
 
-// GÜNCELLENDİ: Artık ana yükleyici fonksiyonu çağırıyor
 function filtreyiTemizle() {
     tarihFiltreleyici.setDate(new Date(), true);
     baslangicVerileriniYukle();
