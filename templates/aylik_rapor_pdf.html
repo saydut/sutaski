@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ rapor_basligi }}</title>
+    <!-- WeasyPrint, dosya sistemindeki yolları kullanır, bu yüzden url_for yerine direkt dosya yolu verilir. -->
+    <link rel="stylesheet" href="static/css/pdf_style.css">
+</head>
+<body>
+    <div class="rapor-container">
+        <header class="rapor-baslik">
+            <h1>{{ rapor_basligi }}</h1>
+            <p>{{ sirket_adi }} | Rapor Oluşturma Tarihi: {{ olusturma_tarihi }}</p>
+        </header>
+
+        <section class="ozet-karti-container">
+            <div class="ozet-karti">
+                <div class="baslik">Toplam Süt</div>
+                <div class="deger">{{ ozet.toplam_litre|round(2) }} L</div>
+            </div>
+            <div class="ozet-karti">
+                <div class="baslik">Toplam Girdi</div>
+                <div class="deger">{{ ozet.girdi_sayisi }}</div>
+            </div>
+            <div class="ozet-karti">
+                <div class="baslik">Günlük Ortalama</div>
+                <div class="deger">{{ ozet.gunluk_ortalama|round(2) }} L</div>
+            </div>
+        </section>
+
+        <h2>Tedarikçi Dökümü</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Tedarikçi Adı</th>
+                    <th>Toplam Getirdiği Süt (Litre)</th>
+                    <th>Girdi Sayısı</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tedarikci in tedarikci_dokumu %}
+                <tr>
+                    <td>{{ tedarikci.isim }}</td>
+                    <td>{{ tedarikci.toplam_litre|round(2) }}</td>
+                    <td>{{ tedarikci.girdi_sayisi }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" style="text-align: center;">Bu ay için veri bulunamadı.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h2>Günlük Döküm</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Tarih</th>
+                    <th>Toplam Süt (Litre)</th>
+                    <th>Girdi Sayısı</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for gun in gunluk_dokum %}
+                <tr>
+                    <td>{{ gun.tarih }}</td>
+                    <td>{{ gun.toplam_litre|round(2) }}</td>
+                    <td>{{ gun.girdi_sayisi }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <footer class="rapor-altbilgi">
+            Süt Takip Sistemi Tarafından Otomatik Olarak Oluşturulmuştur.
+        </footer>
+    </div>
+</body>
+</html>
