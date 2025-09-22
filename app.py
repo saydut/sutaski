@@ -30,3 +30,29 @@ def create_app():
 if __name__ == '__main__':
     app = create_app()
     app.run(debug=True)
+
+
+####3###
+#
+## Bu dosya PythonAnywhere'in web sunucusu tarafından kullanılır.
+#yüklerken app.py ı aşağıdaki gibi değiştir.
+
+#import sys
+#import os
+
+# Projenin ana dizininin yolu.
+# Dosyalar doğrudan /home/saydut/ içinde olduğu için bu yolu kullanıyoruz.
+#project_home = '/home/saydut'
+#if project_home not in sys.path:
+#    sys.path = [project_home] + sys.path
+
+# app.py dosyasındaki create_app fonksiyonunu kullanarak
+# Flask uygulamasını oluşturun ve sunucuya verin.
+#from app import create_app
+
+#application = create_app()
+
+
+#
+#
+#
