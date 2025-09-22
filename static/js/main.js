@@ -220,7 +220,7 @@ function getLocalDateString(date = new Date()) {
 async function tedarikcileriYukle() {
     if (!tedarikciSecici) return;
     try {
-        const response = await fetch('/api/tedarikciler');
+        const response = await fetch('/api/tedarikciler_liste');
         const tedarikciler = await response.json();
         tedarikciSecici.clear();
         tedarikciSecici.clearOptions();
@@ -410,3 +410,28 @@ function verileriDisaAktar() {
     window.open(url, '_blank');
 }
 
+async function tedarikciEkle() {
+    const yeniTedarikciIsim = document.getElementById('yeni-tedarikci-isim').value.trim();
+    if (!yeniTedarikciIsim) {
+        gosterMesaj("Lütfen bir tedarikçi adı girin.", "warning");
+        return;
+    }
+    try {
+        const response = await fetch('/api/tedarikci_ekle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isim: yeniTedarikciIsim })
+        });
+        const result = await response.json();
+        if (response.ok) {
+            gosterMesaj("Tedarikçi başarıyla eklendi.", "success");
+            document.getElementById('yeni-tedarikci-isim').value = '';
+            await tedarikcileriYukle(); // Tedarikçi listesini yenile
+        } else {
+            gosterMesaj(result.error || "Tedarikçi eklenirken bir hata oluştu.", "danger");
+        }
+    } catch (error) {
+        console.error("Tedarikçi eklenirken hata:", error);
+        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+    }
+}

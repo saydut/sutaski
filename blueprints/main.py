@@ -24,7 +24,11 @@ def parse_supabase_timestamp(timestamp_str):
     try:
         dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S.%f')
     except ValueError:
-        dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S')
+        try:
+            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S')
+        except ValueError:
+            # Eğer saat bilgisi de yoksa, sadece tarihi ayrıştır
+            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%d')
         
     # Nesneyi UTC olarak saat dilimine duyarlı hale getir
     return pytz.utc.localize(dt_obj)
@@ -451,4 +455,3 @@ def change_password():
 @main_bp.route('/offline')
 def offline_page():
     return render_template('offline.html')
-
