@@ -77,7 +77,13 @@ window.onload = function() {
     });
 
     ayYilSecicileriniDoldur();
-    raporOlustur();
+    
+    // --- DEĞİŞİKLİK BURADA ---
+    // raporOlustur() fonksiyonunu çağırmadan önce 100 milisaniye bekliyoruz.
+    // Bu, flatpickr gibi kütüphanelerin mobil cihazlarda tam olarak yüklenip hazır olması için zaman tanır.
+    setTimeout(() => {
+        raporOlustur();
+    }, 100); 
 };
 
 function ozetVerileriniDoldur(summaryData) {
@@ -174,4 +180,3 @@ async function raporOlustur() {
         mesajElementi.textContent = `Hata: ${error.message}`;
     }
 }
-
