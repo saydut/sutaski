@@ -1,21 +1,16 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Süt Takip Paneli - Süt Takip Sistemi</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+{% extends "base.html" %}
+
+{% block title %}Süt Takip Paneli - Süt Takip Sistemi{% endblock %}
+
+{% block head_extra %}
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="{{ url_for('static', filename='theme.js') }}" defer></script>
-</head>
-<body data-user-role="{{ session.get('user', {}).get('rol') }}">
+{% endblock %}
+
+{% block body_attributes %}data-user-role="{{ session.get('user', {}).get('rol') }}"{% endblock %}
+
+{% block content %}
     <div class="main-wrapper p-3 p-md-4">
         <div id="alert-container"></div>
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 mb-md-4">
@@ -70,7 +65,6 @@
                             </div>
                         </div>
                         <div id="girdiler-listesi" class="list-group" style="min-height: 480px; overflow-y: auto;"></div>
-                        <!-- YENİ: Sayfalama için navigasyon alanı -->
                         <nav id="girdiler-sayfalama" class="d-flex justify-content-center mt-3"></nav>
                     </div>
                 </div>
@@ -78,18 +72,16 @@
         </div>
     </div>
     
-    <!-- Modallar -->
+    <!-- Modals -->
     <div class="modal fade" id="duzenleModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Girdiyi Düzenle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" id="edit-girdi-id"><div class="mb-2"><label for="edit-litre-input" class="form-label">Yeni Litre Değeri</label><input type="number" step="0.1" class="form-control form-control-sm" id="edit-litre-input"></div><div class="mb-2"><label for="edit-sebep-input" class="form-label">Düzenleme Sebebi</label><textarea class="form-control form-control-sm" id="edit-sebep-input" rows="2" placeholder="Neden düzenliyorsunuz?"></textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sutGirdisiDuzenle()">Kaydet</button></div></div></div></div>
     <div class="modal fade" id="gecmisModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Girdi Düzenleme Geçmişi</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="gecmis-modal-body"></div></div></div></div>
     <div class="modal fade" id="silmeOnayModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-warning">Silme Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Bu girdiyi silmek istediğinize emin misiniz?</p><input type="hidden" id="silinecek-girdi-id"></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-danger btn-sm" onclick="sutGirdisiSil()">Evet, Sil</button></div></div></div></div>
     <div class="modal fade" id="sifreDegistirModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Şifre Değiştir</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-2"><label for="mevcut-sifre-input" class="form-label">Mevcut Şifreniz</label><input type="password" class="form-control form-control-sm" id="mevcut-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-input" class="form-label">Yeni Şifre</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-tekrar-input" class="form-label">Yeni Şifre (Tekrar)</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-tekrar-input"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sifreDegistir()">Kaydet</button></div></div></div></div>
+{% endblock %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://npmcdn.com/flatpickr/dist/l10n/tr.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-</body>
-</html>
-
+{% endblock %}

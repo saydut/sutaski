@@ -428,3 +428,8 @@ def export_csv():
         print(f"CSV Dışa Aktarma Hatası: {e}")
         return jsonify({"error": "Rapor oluşturulurken bir hata oluştu."}), 500
 
+####Offline modu
+@main_bp.route('/offline')
+def offline_page():
+    return render_template('offline.html')
+
