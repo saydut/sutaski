@@ -54,39 +54,36 @@ async function pdfIndir() {
     button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Oluşturuluyor...`;
 
     try {
+        // 1. PDF dosyasını arka planda fetch ile talep ediyoruz.
         const response = await fetch(`/api/rapor/aylik_pdf?ay=${ay}&yil=${yil}`);
 
         if (!response.ok) {
             throw new Error('PDF raporu oluşturulurken bir hata oluştu.');
         }
 
-        const disposition = response.headers.get('Content-Disposition');
-        let filename = `rapor.pdf`; // Varsayılan
-        if (disposition && disposition.indexOf('attachment') !== -1) {
-            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-            const matches = filenameRegex.exec(disposition);
-            if (matches != null && matches[1]) {
-                filename = matches[1].replace(/['"]/g, '');
-            }
-        }
-
+        // 2. Gelen veriyi bir 'blob' nesnesine çeviriyoruz.
+        // Blob, dosya gibi davranan bir veri yığınıdır.
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        a.remove();
 
-        gosterMesaj("PDF raporu başarıyla indirildi.", "success");
+        // 3. Bu blob için geçici, tarayıcıda açılabilir bir URL oluşturuyoruz.
+        const url = window.URL.createObjectURL(blob);
+
+        // 4. YENİ YÖNTEM: Oluşturulan bu URL'yi yeni bir sekmede açıyoruz.
+        // Bu, tarayıcının PDF'i kendi görüntüleyicisinde açmasını veya
+        // kullanıcıya nasıl devam etmek istediğini sormasını tetikler.
+        window.open(url, '_blank');
+        
+        // 5. Geçici URL'i bir süre sonra bellekten temizliyoruz.
+        setTimeout(() => window.URL.revokeObjectURL(url), 100);
+
+        // Kullanıcıya işlemin başlatıldığına dair bildirim gösteriyoruz.
+        gosterMesaj("PDF raporu yeni sekmede açılıyor...", "success");
 
     } catch (error) {
-        console.error("PDF indirilirken hata:", error);
+        console.error("PDF açılırken hata:", error);
         gosterMesaj(error.message, "danger");
     } finally {
+        // İşlem bittikten sonra butonu hemen eski haline getiriyoruz.
         button.disabled = false;
         button.innerHTML = originalContent;
     }
