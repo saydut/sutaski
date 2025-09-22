@@ -195,7 +195,14 @@ def aylik_rapor_pdf():
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
 
         filename = f"{yil}_{ay:02d}_{sirket_adi.replace(' ', '_')}_raporu.pdf"
-        return Response(pdf_bytes, mimetype='application/pdf', headers={'Content-Disposition': f'attachment; filename={filename}'})
+        # --- DEĞİŞİKLİK BURADA ---
+        # Response yerine, CSV'deki gibi send_file kullanıyoruz.
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
     except Exception as e:
         print(f"PDF Rapor Hatası: {e}")
         return "Rapor oluşturulurken bir hata oluştu.", 500
