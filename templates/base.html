@@ -18,9 +18,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="SütTakip">
-    <!-- İkon dosyasını oluşturunca bu yolu kullanabilirsin
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icon-192x192.png') }}">
-    -->
+    
+    <!-- YORUM SATIRI KALDIRILDI -->
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icon.png') }}">
+    
 
     <!-- Her sayfanın kendi başlığını ve ek CSS'lerini ekleyebileceği alanlar -->
     <title>{% block title %}Süt Takip Sistemi{% endblock %}</title>
@@ -55,3 +56,4 @@
     {% block scripts %}{% endblock %}
 </body>
 </html>
+
