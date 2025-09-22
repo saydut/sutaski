@@ -51,39 +51,56 @@ async function pdfIndir() {
     const originalContent = button.innerHTML;
 
     button.disabled = true;
-    button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Oluşturuluyor...`;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> İşleniyor...`;
 
     try {
-        // 1. PDF dosyasını arka planda fetch ile talep ediyoruz.
+        // 1. PDF dosyasını arka planda BİR KEZ talep ediyoruz.
         const response = await fetch(`/api/rapor/aylik_pdf?ay=${ay}&yil=${yil}`);
 
         if (!response.ok) {
             throw new Error('PDF raporu oluşturulurken bir hata oluştu.');
         }
 
-        // 2. Gelen veriyi bir 'blob' nesnesine çeviriyoruz.
-        // Blob, dosya gibi davranan bir veri yığınıdır.
+        // 2. Sunucunun gönderdiği dosya adını alıyoruz.
+        const disposition = response.headers.get('Content-Disposition');
+        let filename = `rapor.pdf`; // Varsayılan
+        if (disposition && disposition.indexOf('attachment') !== -1) {
+            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+            const matches = filenameRegex.exec(disposition);
+            if (matches != null && matches[1]) {
+                filename = matches[1].replace(/['"]/g, '');
+            }
+        }
+
+        // 3. Gelen veriyi bir 'blob' nesnesine çeviriyoruz.
         const blob = await response.blob();
 
-        // 3. Bu blob için geçici, tarayıcıda açılabilir bir URL oluşturuyoruz.
+        // 4. Bu blob için geçici bir URL oluşturuyoruz. Bu URL'yi her iki işlem için de kullanacağız.
         const url = window.URL.createObjectURL(blob);
 
-        // 4. YENİ YÖNTEM: Oluşturulan bu URL'yi yeni bir sekmede açıyoruz.
-        // Bu, tarayıcının PDF'i kendi görüntüleyicisinde açmasını veya
-        // kullanıcıya nasıl devam etmek istediğini sormasını tetikler.
+        // --- İŞLEM 1: YENİ SEKMEDE AÇMA ---
         window.open(url, '_blank');
-        
-        // 5. Geçici URL'i bir süre sonra bellekten temizliyoruz.
+
+        // --- İŞLEM 2: DOSYAYI İNDİRME ---
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename; // İndirilecek dosyanın adını belirliyoruz.
+        document.body.appendChild(a);
+        a.click();
+        a.remove(); // Linki temizliyoruz.
+
+        // 5. İşlemler bittikten sonra geçici URL'i bellekten siliyoruz.
         setTimeout(() => window.URL.revokeObjectURL(url), 100);
 
-        // Kullanıcıya işlemin başlatıldığına dair bildirim gösteriyoruz.
-        gosterMesaj("PDF raporu yeni sekmede açılıyor...", "success");
+        // 6. Kullanıcıya bildirim veriyoruz.
+        gosterMesaj("Rapor indirildi ve yeni sekmede açıldı.", "success");
 
     } catch (error) {
-        console.error("PDF açılırken hata:", error);
+        console.error("PDF işlenirken hata:", error);
         gosterMesaj(error.message, "danger");
     } finally {
-        // İşlem bittikten sonra butonu hemen eski haline getiriyoruz.
+        // 7. Butonu eski haline getiriyoruz.
         button.disabled = false;
         button.innerHTML = originalContent;
     }
