@@ -6,7 +6,7 @@ let tarihFiltreleyici = null;
 let tedarikciSecici = null;
 
 let mevcutSayfa = 1;
-const girdilerSayfaBasi = 15;
+const girdilerSayfaBasi = 6;
 
 function updateChartThemes() {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
