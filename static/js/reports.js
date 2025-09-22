@@ -42,7 +42,9 @@ function ayYilSecicileriniDoldur() {
     }
 }
 
-function pdfIndir() {
+// static/js/reports.js
+
+async function pdfIndir() {
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
     const button = document.getElementById('pdf-indir-btn');
@@ -51,12 +53,66 @@ function pdfIndir() {
     button.disabled = true;
     button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Oluşturuluyor...`;
 
-    window.location.href = `/api/rapor/aylik_pdf?ay=${ay}&yil=${yil}`;
+    try {
+        // 1. Adım: PDF dosyasını arka planda 'fetch' ile talep ediyoruz.
+        // Bu, sayfanın yönlenmesini engeller.
+        const response = await fetch(`/api/rapor/aylik_pdf?ay=${ay}&yil=${yil}`);
 
-    setTimeout(() => {
+        if (!response.ok) {
+            // Sunucudan bir hata dönerse, kullanıcıyı bilgilendir.
+            const errorData = await response.text();
+            throw new Error(errorData || 'PDF raporu oluşturulurken bir hata oluştu.');
+        }
+
+        // 2. Adım: Sunucunun gönderdiği dosya adını başlıktan (header) alıyoruz.
+        const disposition = response.headers.get('Content-Disposition');
+        let filename = `aylik_rapor_${yil}_${ay}.pdf`; // Eğer başlık yoksa varsayılan ad.
+        if (disposition && disposition.indexOf('attachment') !== -1) {
+            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+            const matches = filenameRegex.exec(disposition);
+            if (matches != null && matches[1]) {
+                filename = matches[1].replace(/['"]/g, '');
+            }
+        }
+
+        // 3. Adım: Gelen veriyi bir 'blob' nesnesine çeviriyoruz.
+        // Blob, dosya gibi davranan bir veri yığınıdır.
+        const blob = await response.blob();
+
+        // 4. Adım: Bu blob için geçici bir URL oluşturuyoruz.
+        const url = window.URL.createObjectURL(blob);
+
+        // 5. Adım: Görünmez bir link (<a>) elementi oluşturup ayarlarını yapıyoruz.
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename; // İndirilecek dosyanın adını belirliyoruz.
+
+        // 6. Adım: Linki sayfaya ekleyip programatik olarak tıklıyoruz.
+        // Bu işlem, tarayıcının indirme penceresini tetikler.
+        document.body.appendChild(a);
+        a.click();
+
+        // 7. Adım: İşlem bittikten sonra oluşturduğumuz geçici URL'i ve linki temizliyoruz.
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+        // 8. Adım: Kullanıcıya işlemin başarılı olduğuna dair bildirim gösteriyoruz.
+        // Bu fonksiyonun `utils.js` dosyasında tanımlı olması gerekir.
+        if (typeof gosterMesaj === 'function') {
+            gosterMesaj("PDF raporu başarıyla indirildi.", "success");
+        }
+
+    } catch (error) {
+        console.error("PDF indirilirken hata:", error);
+        if (typeof gosterMesaj === 'function') {
+            gosterMesaj(error.message, "danger");
+        }
+    } finally {
+        // 9. Adım: İşlem başarılı da olsa, başarısız da olsa butonu eski haline getiriyoruz.
         button.disabled = false;
         button.innerHTML = originalContent;
-    }, 4000);
+    }
 }
 
 

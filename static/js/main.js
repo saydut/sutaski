@@ -403,11 +403,48 @@ async function sifreDegistir() {
     } catch (error) { console.error("Şifre değiştirilirken hata oluştu:", error); gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger"); }
 }
 
-function verileriDisaAktar() {
+// static/js/main.js
+
+async function verileriDisaAktar() {
     const secilenTarih = tarihFiltreleyici.selectedDates[0];
-    const formatliTarih = secilenTarih ? getLocalDateString(seciliTarih) : null;
+    const formatliTarih = secilenTarih ? getLocalDateString(secilenTarih) : null;
     let url = `/api/export_csv${formatliTarih ? `?tarih=${formatliTarih}` : ''}`;
-    window.open(url, '_blank');
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('CSV dosyası oluşturulurken bir hata oluştu.');
+        }
+
+        // Dosya adını Content-Disposition başlığından alıyoruz
+        const disposition = response.headers.get('Content-Disposition');
+        let filename = "sut_raporu.csv"; // Varsayılan dosya adı
+        if (disposition && disposition.indexOf('attachment') !== -1) {
+            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+            const matches = filenameRegex.exec(disposition);
+            if (matches != null && matches[1]) {
+                filename = matches[1].replace(/['"]/g, '');
+            }
+        }
+        
+        const blob = await response.blob();
+        const objectUrl = window.URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(objectUrl);
+        a.remove();
+        
+        gosterMesaj("Veriler başarıyla CSV olarak indirildi.", "success");
+
+    } catch (error) {
+        console.error("CSV dışa aktarılırken hata oluştu:", error);
+        gosterMesaj(error.message, "danger");
+    }
 }
 
 async function tedarikciEkle() {
