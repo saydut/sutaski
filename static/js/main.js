@@ -141,7 +141,8 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
                             <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="duzenlemeModaliniAc(${girdi.id}, ${girdi.litre})"><i class="bi bi-pencil"></i></button>
                             <button class="btn btn-sm btn-outline-danger border-0" title="Sil" onclick="silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>`;
                     }
-                    const girdiElementi = `<div class="list-group-item"><div class="d-flex w-100 justify-content-between"><h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${duzenlendiEtiketi}</h5><div>${actionButtons}<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button></div></div><p class="mb-1 girdi-detay">Toplayan: ${girdi.kullanicilar.kullanici_adi} | Saat: ${formatliTarih}</p></div>`;
+                    const fiyatBilgisi = girdi.fiyat ? `<span class="text-success">@ ${parseFloat(girdi.fiyat).toFixed(2)} TL</span>` : '';
+                    const girdiElementi = `<div class="list-group-item"><div class="d-flex w-100 justify-content-between"><h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${fiyatBilgisi} ${duzenlendiEtiketi}</h5><div>${actionButtons}<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button></div></div><p class="mb-1 girdi-detay">Toplayan: ${girdi.kullanicilar.kullanici_adi} | Saat: ${formatliTarih}</p></div>`;
                     listeElementi.innerHTML += girdiElementi;
                 });
             }
@@ -235,18 +236,25 @@ async function tedarikcileriYukle() {
 async function sutGirdisiEkle() {
     const tedarikciId = tedarikciSecici.getValue(); 
     const litre = document.getElementById('litre-input').value;
-    if (!tedarikciId || !litre || isNaN(parseFloat(litre))) {
+    const fiyat = document.getElementById('fiyat-input').value;
+
+    if (!tedarikciId || !litre || isNaN(parseFloat(litre)) || !fiyat || isNaN(parseFloat(fiyat))) {
         gosterMesaj("Lütfen tüm alanları doğru doldurun.", "warning"); return;
     }
     try {
         const response = await fetch('/api/sut_girdisi_ekle', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tedarikci_id: parseInt(tedarikciId), litre: parseFloat(litre) })
+            body: JSON.stringify({ 
+                tedarikci_id: parseInt(tedarikciId), 
+                litre: parseFloat(litre),
+                fiyat: parseFloat(fiyat)
+            })
         });
         const errorData = await response.json();
         if (response.ok) {
             gosterMesaj("Süt girdisi başarıyla kaydedildi.", "success");
             document.getElementById('litre-input').value = '';
+            document.getElementById('fiyat-input').value = '';
             tedarikciSecici.clear();
             const seciliTarih = tarihFiltreleyici.selectedDates[0];
             const formatliTarih = seciliTarih ? getLocalDateString(seciliTarih) : null;
@@ -327,7 +335,15 @@ async function gecmisiGoster(girdiId) {
             let content = '<ul class="list-group">';
             gecmisKayitlari.forEach(kayit => {
                 const tarih = new Date(kayit.created_at).toLocaleString('tr-TR');
-                content += `<li class="list-group-item"><p class="mb-1 fw-bold">${tarih} - ${kayit.duzenleyen_kullanici_id.kullanici_adi} tarafından düzenlendi.</p><p class="mb-1"><span class="text-warning">Eski Değer:</span> ${kayit.eski_litre_degeri} Litre</p><p class="mb-0"><span class="text-info">Sebep:</span> ${kayit.duzenleme_sebebi}</p></li>`;
+                const eskiFiyatBilgisi = kayit.eski_fiyat_degeri ? ` | <span class="text-warning">Eski Fiyat:</span> ${parseFloat(kayit.eski_fiyat_degeri).toFixed(2)} TL` : '';
+                content += `<li class="list-group-item">
+                                <p class="mb-1 fw-bold">${tarih} - ${kayit.duzenleyen_kullanici_id.kullanici_adi} tarafından düzenlendi.</p>
+                                <p class="mb-1">
+                                    <span class="text-warning">Eski Litre:</span> ${kayit.eski_litre_degeri} Litre
+                                    ${eskiFiyatBilgisi}
+                                </p>
+                                <p class="mb-0"><span class="text-info">Sebep:</span> ${kayit.duzenleme_sebebi}</p>
+                            </li>`;
             });
             modalBody.innerHTML = content + '</ul>';
         } else { modalBody.innerHTML = `<p class="text-danger p-3">Geçmiş yüklenemedi: ${gecmisKayitlari.error || 'Bilinmeyen hata'}</p>`; }

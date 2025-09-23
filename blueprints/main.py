@@ -134,7 +134,7 @@ def get_sut_girdileri():
         offset = (sayfa - 1) * limit
 
         query = supabase.table('sut_girdileri').select(
-            'id,litre,taplanma_tarihi,duzenlendi_mi,kullanicilar(kullanici_adi),tedarikciler(isim)',
+            'id,litre,fiyat,taplanma_tarihi,duzenlendi_mi,kullanicilar(kullanici_adi),tedarikciler(isim)',
             count='exact'
         ).eq('sirket_id', sirket_id)
 
@@ -396,6 +396,7 @@ def add_sut_girdisi():
     data = supabase.table('sut_girdileri').insert({
         'tedarikci_id': yeni_girdi['tedarikci_id'],
         'litre': yeni_girdi['litre'],
+        'fiyat': yeni_girdi.get('fiyat'),
         'kullanici_id': session['user']['id'],
         'sirket_id': session['user']['sirket_id']
     }).execute()
@@ -416,6 +417,7 @@ def update_sut_girdisi(girdi_id):
             'duzenleyen_kullanici_id': session['user']['id'],
             'duzenleme_sebebi': data['duzenleme_sebebi'],
             'eski_litre_degeri': mevcut_girdi_res.data['litre'],
+            'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'),
             'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']
         }).execute()
         guncel_girdi = supabase.table('sut_girdileri').update({'litre': data['yeni_litre'],'duzenlendi_mi': True}).eq('id', girdi_id).execute()
