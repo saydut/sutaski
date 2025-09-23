@@ -2,6 +2,7 @@ const girdilerSayfaBasi = 10; // Bu sayfa için 10 girdi gösterilecek
 let mevcutSayfa = 1;
 
 window.onload = () => {
+    ayYilSecicileriniDoldur();
     verileriYukle(1); // Sayfa yüklendiğinde 1. sayfayı yükle
 };
 
@@ -98,3 +99,70 @@ function sayfalamaNavOlustur(containerId, toplamOge, aktifSayfa, sayfaBasiOge, s
     container.appendChild(ul);
 }
 
+function ayYilSecicileriniDoldur() {
+    const aySecici = document.getElementById('rapor-ay');
+    const yilSecici = document.getElementById('rapor-yil');
+    const aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+    const simdikiTarih = new Date();
+    const simdikiYil = simdikiTarih.getFullYear();
+    const simdikiAy = simdikiTarih.getMonth();
+
+    aylar.forEach((ay, index) => { aySecici.add(new Option(ay, index + 1)); });
+    aySecici.value = simdikiAy + 1;
+
+    for (let i = 0; i < 5; i++) {
+        yilSecici.add(new Option(simdikiYil - i, simdikiYil - i));
+    }
+}
+
+async function hesapOzetiIndir() {
+    const ay = document.getElementById('rapor-ay').value;
+    const yil = document.getElementById('rapor-yil').value;
+    const button = document.getElementById('pdf-indir-btn');
+    const originalContent = button.innerHTML;
+
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> İşleniyor...`;
+
+    try {
+        const response = await fetch(`/api/tedarikci/${TEDARIKCI_ID}/hesap_ozeti_pdf?ay=${ay}&yil=${yil}`);
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'PDF özeti oluşturulurken bir hata oluştu.');
+        }
+
+        const disposition = response.headers.get('Content-Disposition');
+        let filename = `hesap_ozeti.pdf`; // Varsayılan
+        if (disposition && disposition.indexOf('attachment') !== -1) {
+            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+            const matches = filenameRegex.exec(disposition);
+            if (matches != null && matches[1]) {
+                filename = matches[1].replace(/['"]/g, '');
+            }
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        window.open(url, '_blank');
+
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        setTimeout(() => window.URL.revokeObjectURL(url), 100);
+        gosterMesaj("Hesap özeti indirildi ve yeni sekmede açıldı.", "success");
+
+    } catch (error) {
+        console.error("PDF işlenirken hata:", error);
+        gosterMesaj(error.message, "danger");
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalContent;
+    }
+}

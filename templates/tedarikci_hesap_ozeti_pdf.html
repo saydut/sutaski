@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ rapor_basligi }}</title>
+    <link rel="stylesheet" href="static/css/pdf_style.css">
+    <style>
+        .ozet-karti .deger.toplam-alacak {
+            color: #EF4444; /* Kırmızı renk */
+        }
+        .text-right {
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="rapor-container">
+        <header class="rapor-baslik">
+            <h1>{{ rapor_basligi }}</h1>
+            <p>{{ sirket_adi }} | {{ tedarikci_adi }} | Rapor Oluşturma Tarihi: {{ olusturma_tarihi }}</p>
+        </header>
+
+        <section class="ozet-karti-container">
+            <div class="ozet-karti">
+                <div class="baslik">Toplam Süt</div>
+                <div class="deger">{{ ozet.toplam_litre|round(2) }} L</div>
+            </div>
+            <div class="ozet-karti">
+                <div class="baslik">Ortalama Litre Fiyatı</div>
+                <div class="deger">{{ "%.2f"|format(ozet.ortalama_fiyat) }} TL</div>
+            </div>
+            <div class="ozet-karti">
+                <div class="baslik">Toplam Alacak</div>
+                <div class="deger toplam-alacak">{{ "%.2f"|format(ozet.toplam_alacak) }} TL</div>
+            </div>
+        </section>
+
+        <h2>Aylık Döküm</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Tarih</th>
+                    <th class="text-right">Litre</th>
+                    <th class="text-right">Birim Fiyat (TL)</th>
+                    <th class="text-right">Günlük Toplam (TL)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for girdi in girdiler %}
+                <tr>
+                    <td>{{ girdi.tarih }}</td>
+                    <td class="text-right">{{ girdi.litre|round(2) }}</td>
+                    <td class="text-right">{{ "%.2f"|format(girdi.fiyat) if girdi.fiyat else '-' }}</td>
+                    <td class="text-right">{{ "%.2f"|format(girdi.toplam_tutar) if girdi.fiyat else '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" style="text-align: center;">Bu ay için girdi bulunamadı.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+         <table style="margin-top: -15px;">
+            <tfoot>
+                <tr style="background-color: #F1F5F9;">
+                    <td colspan="3" style="text-align: right; font-weight: bold;">AYLIK GENEL TOPLAM</td>
+                    <td class="text-right" style="font-weight: bold; font-size: 14pt;">{{ "%.2f"|format(ozet.toplam_alacak) }} TL</td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <footer class="rapor-altbilgi">
+            Süt Takip Sistemi Tarafından Otomatik Olarak Oluşturulmuştur.
+        </footer>
+    </div>
+</body>
+</html>
