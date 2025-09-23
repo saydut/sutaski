@@ -2,10 +2,6 @@
 
 {% block title %}Tedarikçi Detayı - Süt Takip Sistemi{% endblock %}
 
-{% block head_extra %}
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-{% endblock %}
-
 {% block content %}
 <div class="main-wrapper p-3 p-md-4">
     <div id="alert-container"></div>
@@ -78,7 +74,5 @@
 <script>
     const TEDARIKCI_ID = {{ tedarikci_id }};
 </script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://npmcdn.com/flatpickr/dist/l10n/tr.js"></script>
 <script src="{{ url_for('static', filename='js/tedarikci_detay.js') }}"></script>
 {% endblock %}
