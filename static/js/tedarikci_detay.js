@@ -159,3 +159,41 @@ async function hesapOzetiIndir() {
         button.innerHTML = originalContent;
     }
 }
+
+async function mustahsilMakbuzuIndir() {
+    const ay = document.getElementById('rapor-ay').value;
+    const yil = document.getElementById('rapor-yil').value;
+    const button = document.getElementById('mustahsil-indir-btn');
+    const originalContent = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> İşleniyor...`;
+    try {
+        const response = await fetch(`/api/tedarikci/${TEDARIKCI_ID}/mustahsil_makbuzu_pdf?ay=${ay}&yil=${yil}`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Müstahsil makbuzu oluşturulurken bir hata oluştu.');
+        }
+        const disposition = response.headers.get('Content-Disposition');
+        let filename = `mustahsil_makbuzu.pdf`;
+        if (disposition && disposition.indexOf('attachment') !== -1) {
+            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+            const matches = filenameRegex.exec(disposition);
+            if (matches != null && matches[1]) { filename = matches[1].replace(/['"]/g, ''); }
+        }
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        const a = document.createElement('a');
+        a.style.display = 'none'; a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => window.URL.revokeObjectURL(url), 100);
+        gosterMesaj("Müstahsil makbuzu indirildi ve yeni sekmede açıldı.", "success");
+    } catch (error) {
+        console.error("Makbuz işlenirken hata:", error);
+        gosterMesaj(error.message, "danger");
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalContent;
+    }
+}
+

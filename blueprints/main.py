@@ -65,6 +65,84 @@ def tedarikci_detay_sayfasi(tedarikci_id):
 
 # --- API'LER ---
 
+@main_bp.route('/api/tedarikci/<int:tedarikci_id>/mustahsil_makbuzu_pdf')
+@login_required
+@lisans_kontrolu
+def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
+    try:
+        sirket_id = session['user']['sirket_id']
+        ay = int(request.args.get('ay'))
+        yil = int(request.args.get('yil'))
+
+        # Tedarikçi ve Şirket bilgilerini çek
+        tedarikci_res = supabase.table('tedarikciler').select('isim, tc_no, adres').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
+        sirket_res = supabase.table('sirketler').select('sirket_adi, adres, vergi_dairesi, vergi_no').eq('id', sirket_id).single().execute()
+
+        if not tedarikci_res.data or not sirket_res.data:
+            return jsonify({"error": "Gerekli şirket veya tedarikçi bilgisi bulunamadı."}), 404
+
+        # Tarih aralığını belirle
+        _, ayin_son_gunu = calendar.monthrange(yil, ay)
+        baslangic_tarihi = datetime(yil, ay, 1).date()
+        bitis_tarihi = datetime(yil, ay, ayin_son_gunu).date()
+        start_utc = turkey_tz.localize(datetime.combine(baslangic_tarihi, datetime.min.time())).astimezone(pytz.utc).isoformat()
+        end_utc = turkey_tz.localize(datetime.combine(bitis_tarihi, datetime.max.time())).astimezone(pytz.utc).isoformat()
+
+        # Süt girdilerini çek ve işle
+        sut_response = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).order('taplanma_tarihi', desc=False).execute()
+        
+        islenmis_girdiler = []
+        mal_hizmet_toplam = Decimal('0.0')
+        for girdi in sut_response.data:
+            litre_val = girdi.get('litre')
+            fiyat_val = girdi.get('fiyat')
+            tarih_val = girdi.get('taplanma_tarihi')
+
+            litre = Decimal(str(litre_val)) if litre_val is not None else Decimal('0')
+            fiyat = Decimal(str(fiyat_val)) if fiyat_val is not None else Decimal('0')
+            tutar = litre * fiyat
+            mal_hizmet_toplam += tutar
+            
+            parsed_date = parse_supabase_timestamp(tarih_val)
+
+            islenmis_girdiler.append({
+                "tarih": parsed_date.astimezone(turkey_tz).strftime('%d.%m.%Y') if parsed_date else 'Tarih Yok',
+                "litre": litre,
+                "fiyat": fiyat,
+                "tutar": tutar
+            })
+
+        # Hesaplamaları yap
+        stopaj_orani = Decimal('0.01') # %1 Stopaj
+        stopaj_tutari = mal_hizmet_toplam * stopaj_orani
+        net_odenecek = mal_hizmet_toplam - stopaj_tutari
+        
+        ozet = {
+            "mal_hizmet_toplam": mal_hizmet_toplam,
+            "stopaj_tutari": stopaj_tutari,
+            "net_odenecek": net_odenecek
+        }
+
+        html_out = render_template(
+            'mustahsil_makbuzu_pdf.html',
+            sirket=sirket_res.data,
+            tedarikci=tedarikci_res.data,
+            makbuz_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y'),
+            sut_girdileri=islenmis_girdiler,
+            ozet=ozet,
+            stopaj_orani=stopaj_orani
+        )
+
+        pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
+        filename = f"{yil}_{ay:02d}_{tedarikci_res.data['isim'].replace(' ', '_')}_mustahsil.pdf"
+        
+        return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
+
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"error": "Müstahsil makbuzu oluşturulurken bir hata oluştu."}), 500
+
+
 @main_bp.route('/api/tedarikci/<int:tedarikci_id>/hesap_ozeti_pdf')
 @login_required
 @lisans_kontrolu
@@ -92,12 +170,18 @@ def tedarikci_hesap_ozeti_pdf(tedarikci_id):
         toplam_sut_alacagi = Decimal('0.0')
         islenmis_sut_girdileri = []
         for girdi in sut_response.data:
-            toplam_tutar = Decimal(str(girdi.get('litre', '0'))) * Decimal(str(girdi.get('fiyat', '0')))
+            litre_val = girdi.get('litre')
+            fiyat_val = girdi.get('fiyat')
+            litre = Decimal(str(litre_val)) if litre_val is not None else Decimal('0')
+            fiyat = Decimal(str(fiyat_val)) if fiyat_val is not None else Decimal('0')
+            toplam_tutar = litre * fiyat
             toplam_sut_alacagi += toplam_tutar
+            
+            parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
             islenmis_sut_girdileri.append({
-                'tarih': parse_supabase_timestamp(girdi['taplanma_tarihi']).astimezone(turkey_tz).strftime('%d.%m.%Y'),
-                'litre': Decimal(str(girdi.get('litre', '0'))), 
-                'fiyat': Decimal(str(girdi.get('fiyat', '0'))), 
+                'tarih': parsed_date.astimezone(turkey_tz).strftime('%d.%m.%Y') if parsed_date else 'Tarih Yok',
+                'litre': litre, 
+                'fiyat': fiyat, 
                 'toplam_tutar': toplam_tutar
             })
 
@@ -122,6 +206,14 @@ def tedarikci_hesap_ozeti_pdf(tedarikci_id):
         aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
         rapor_basligi = f"{aylar[ay-1]} {yil} Hesap Özeti"
         
+        # Helper Jinja filter for date formatting
+        def format_tarih_filter(timestamp_str):
+            dt = parse_supabase_timestamp(timestamp_str)
+            return dt.astimezone(turkey_tz).strftime('%d.%m.%Y') if dt else ''
+        
+        # Add filter to Jinja environment for this request
+        current_app.jinja_env.filters['format_tarih'] = format_tarih_filter
+
         html_out = render_template(
             'tedarikci_hesap_ozeti_pdf.html',
             rapor_basligi=rapor_basligi, sirket_adi=sirket_adi, tedarikci_adi=tedarikci_adi,
@@ -229,19 +321,24 @@ def aylik_rapor_pdf():
         gunluk_dokum_dict = {i: {'toplam_litre': 0, 'girdi_sayisi': 0} for i in range(1, ayin_son_gunu + 1)}
         tedarikci_dokumu_dict = {}
         for girdi in girdiler:
-            girdi_tarihi_tr = parse_supabase_timestamp(girdi['taplanma_tarihi']).astimezone(turkey_tz)
+            parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
+            if not parsed_date:
+                continue
+            
+            girdi_tarihi_tr = parsed_date.astimezone(turkey_tz)
             gun = girdi_tarihi_tr.day
-            gunluk_dokum_dict[gun]['toplam_litre'] += girdi['litre']
+            gunluk_dokum_dict[gun]['toplam_litre'] += girdi.get('litre', 0)
             gunluk_dokum_dict[gun]['girdi_sayisi'] += 1
             if girdi.get('tedarikciler') and girdi['tedarikciler'].get('isim'):
                 isim = girdi['tedarikciler']['isim']
                 if isim not in tedarikci_dokumu_dict:
                     tedarikci_dokumu_dict[isim] = {'toplam_litre': 0, 'girdi_sayisi': 0}
-                tedarikci_dokumu_dict[isim]['toplam_litre'] += girdi['litre']
+                tedarikci_dokumu_dict[isim]['toplam_litre'] += girdi.get('litre', 0)
                 tedarikci_dokumu_dict[isim]['girdi_sayisi'] += 1
+                
         gunluk_dokum = [{'tarih': f"{day:02d}.{ay:02d}.{yil}", **data} for day, data in gunluk_dokum_dict.items()]
         tedarikci_dokumu = sorted([{'isim': isim, **data} for isim, data in tedarikci_dokumu_dict.items()], key=lambda x: x['toplam_litre'], reverse=True)
-        toplam_litre = sum(g['litre'] for g in girdiler)
+        toplam_litre = sum(g.get('litre', 0) for g in girdiler)
         ozet = {'toplam_litre': toplam_litre, 'girdi_sayisi': len(girdiler), 'gunluk_ortalama': toplam_litre / ayin_son_gunu if ayin_son_gunu > 0 else 0}
         aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
         rapor_basligi = f"{aylar[ay-1]} {yil} Süt Toplama Raporu"
@@ -250,7 +347,7 @@ def aylik_rapor_pdf():
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
 
         filename = f"{yil}_{ay:02d}_{sirket_adi.replace(' ', '_')}_raporu.pdf"
-        return send_file(io.BytesIO(pdf_bytes), mimetype='text/csv', as_attachment=True, download_name=filename)
+        return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception as e:
         print(f"PDF Rapor Hatası: {e}")
         return "Rapor oluşturulurken bir hata oluştu.", 500
@@ -273,13 +370,15 @@ def get_detayli_rapor():
         daily_totals = {gun.strftime('%Y-%m-%d'): 0 for gun in date_range}
         supplier_totals = {}
         for girdi in response.data:
-            girdi_gunu_str = parse_supabase_timestamp(girdi['taplanma_tarihi']).astimezone(turkey_tz).strftime('%Y-%m-%d')
+            parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
+            if not parsed_date: continue
+            girdi_gunu_str = parsed_date.astimezone(turkey_tz).strftime('%Y-%m-%d')
             if girdi_gunu_str in daily_totals:
-                daily_totals[girdi_gunu_str] += girdi['litre']
+                daily_totals[girdi_gunu_str] += girdi.get('litre', 0)
             if girdi.get('tedarikciler') and girdi.get('tedarikciler').get('isim'):
                 isim = girdi['tedarikciler']['isim']
                 if isim not in supplier_totals: supplier_totals[isim] = {'litre': 0, 'entryCount': 0}
-                supplier_totals[isim]['litre'] += girdi['litre']
+                supplier_totals[isim]['litre'] += girdi.get('litre', 0)
                 supplier_totals[isim]['entryCount'] += 1
         turkce_aylar = {"01":"Oca","02":"Şub","03":"Mar","04":"Nis","05":"May","06":"Haz","07":"Tem","08":"Ağu","09":"Eyl","10":"Eki","11":"Kas","12":"Ara"}
         labels = [f"{datetime.strptime(gun, '%Y-%m-%d').strftime('%d')} {turkce_aylar.get(datetime.strptime(gun, '%Y-%m-%d').strftime('%m'), '')}" for gun in sorted(daily_totals.keys())]
@@ -310,10 +409,11 @@ def export_csv():
         writer = csv.writer(output, delimiter=';')
         writer.writerow(['Tarih', 'Tedarikçi', 'Litre', 'Toplayan Kişi'])
         for row in data:
-            formatli_tarih = parse_supabase_timestamp(row['taplanma_tarihi']).astimezone(turkey_tz).strftime('%d.%m.%Y %H:%M')
+            parsed_date = parse_supabase_timestamp(row.get('taplanma_tarihi'))
+            formatli_tarih = parsed_date.astimezone(turkey_tz).strftime('%d.%m.%Y %H:%M') if parsed_date else ''
             tedarikci_adi = row.get('tedarikciler', {}).get('isim', 'Bilinmiyor')
             toplayan_kisi = row.get('kullanicilar', {}).get('kullanici_adi', 'Bilinmiyor')
-            writer.writerow([formatli_tarih, tedarikci_adi, str(row['litre']).replace('.',','), toplayan_kisi])
+            writer.writerow([formatli_tarih, tedarikci_adi, str(row.get('litre','0')).replace('.',','), toplayan_kisi])
         output.seek(0)
         filename = f"{secilen_tarih_str}_sut_raporu.csv" if secilen_tarih_str else "sut_raporu.csv"
         return send_file(io.BytesIO(output.getvalue().encode('utf-8-sig')), mimetype='text/csv', as_attachment=True, download_name=filename)
@@ -337,7 +437,7 @@ def get_tedarikciler_liste():
             tid = girdi['tedarikci_id']
             if tid not in girdiler_by_tedarikci:
                 girdiler_by_tedarikci[tid] = {'toplam_litre': 0, 'girdi_sayisi': 0}
-            girdiler_by_tedarikci[tid]['toplam_litre'] += girdi['litre']
+            girdiler_by_tedarikci[tid]['toplam_litre'] += girdi.get('litre', 0)
             girdiler_by_tedarikci[tid]['girdi_sayisi'] += 1
 
         for t in tedarikciler:
@@ -439,7 +539,7 @@ def get_gunluk_ozet():
         start_time_utc = start_time_tr.astimezone(pytz.utc).isoformat()
         end_time_utc = end_time_tr.astimezone(pytz.utc).isoformat()
         response = supabase.table('sut_girdileri').select('litre').eq('sirket_id', sirket_id).gte('taplanma_tarihi', start_time_utc).lte('taplanma_tarihi', end_time_utc).execute()
-        toplam_litre = sum(item['litre'] for item in response.data)
+        toplam_litre = sum(item.get('litre', 0) for item in response.data)
         return jsonify({'toplam_litre': round(toplam_litre, 2)})
     except Exception as e:
         print(f"Özet Hatası: {e}")
@@ -460,7 +560,7 @@ def get_haftalik_ozet():
             start_tr = turkey_tz.localize(datetime.combine(target_date, datetime.min.time()))
             end_tr = turkey_tz.localize(datetime.combine(target_date, datetime.max.time()))
             response = supabase.table('sut_girdileri').select('litre').eq('sirket_id', sirket_id).gte('taplanma_tarihi', start_tr.astimezone(pytz.utc).isoformat()).lte('taplanma_tarihi', end_tr.astimezone(pytz.utc).isoformat()).execute()
-            data.append(round(sum(item['litre'] for item in response.data), 2))
+            data.append(round(sum(item.get('litre', 0) for item in response.data), 2))
         return jsonify({'labels': labels[::-1], 'data': data[::-1]})
     except Exception as e:
         print(f"Haftalık özet hatası: {e}")
@@ -478,7 +578,7 @@ def get_tedarikci_dagilimi():
         for girdi in response.data:
             if girdi.get('tedarikciler') and girdi['tedarikciler'].get('isim'):
                 isim = girdi['tedarikciler']['isim']
-                dagilim[isim] = dagilim.get(isim, 0) + girdi['litre']
+                dagilim[isim] = dagilim.get(isim, 0) + girdi.get('litre', 0)
         sorted_dagilim = dict(sorted(dagilim.items(), key=lambda item: item[1], reverse=True))
         return jsonify({'labels': list(sorted_dagilim.keys()), 'data': [round(v, 2) for v in sorted_dagilim.values()]})
     except Exception as e:
@@ -576,3 +676,4 @@ def change_password():
 @main_bp.route('/offline')
 def offline_page():
     return render_template('offline.html')
+
