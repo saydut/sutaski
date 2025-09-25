@@ -17,6 +17,21 @@ def finans_sayfasi():
 
 # --- API UÇ NOKTALARI ---
 
+@finans_bp.route('/api/islemler', methods=['GET'])
+@login_required
+def get_finansal_islemler():
+    """Şirkete ait tüm finansal işlemleri listeler."""
+    try:
+        sirket_id = session['user']['sirket_id']
+        islemler = supabase.table('finansal_islemler').select(
+            '*, tedarikciler(isim)'
+        ).eq('sirket_id', sirket_id).order('islem_tarihi', desc=True).execute()
+        return jsonify(islemler.data)
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"error": "İşlemler listelenirken bir sunucu hatası oluştu."}), 500
+
+
 @finans_bp.route('/api/islemler', methods=['POST'])
 @login_required
 @modification_allowed
@@ -51,10 +66,9 @@ def add_finansal_islem():
             "islem_tipi": islem_tipi,
             "tutar": str(tutar_decimal),
             "aciklama": data.get('aciklama') or None,
-            "islem_tarihi": data.get('islem_tarihi') # Eğer boşsa Supabase'deki default değeri kullanır
+            "islem_tarihi": data.get('islem_tarihi')
         }
         
-        # islem_tarihi boşsa dict'ten kaldır
         if not yeni_islem["islem_tarihi"]:
             del yeni_islem["islem_tarihi"]
 
@@ -65,3 +79,55 @@ def add_finansal_islem():
     except Exception:
         traceback.print_exc()
         return jsonify({"error": "İşlem sırasında bir sunucu hatası oluştu."}), 500
+
+@finans_bp.route('/api/islemler/<int:islem_id>', methods=['PUT'])
+@login_required
+@modification_allowed
+def update_finansal_islem(islem_id):
+    """Mevcut bir finansal işlemi günceller."""
+    try:
+        data = request.get_json()
+        sirket_id = session['user']['sirket_id']
+
+        islem = supabase.table('finansal_islemler').select('id').eq('id', islem_id).eq('sirket_id', sirket_id).single().execute()
+        if not islem.data:
+            return jsonify({"error": "İşlem bulunamadı veya yetkiniz yok."}), 404
+        
+        guncellenecek_veri = {}
+        if 'tutar' in data:
+            try:
+                tutar_decimal = Decimal(data['tutar'])
+                if tutar_decimal <= 0: return jsonify({"error": "Tutar pozitif olmalıdır."}), 400
+                guncellenecek_veri['tutar'] = str(tutar_decimal)
+            except (InvalidOperation, TypeError):
+                return jsonify({"error": "Geçerli bir tutar girin."}), 400
+
+        if 'aciklama' in data:
+            guncellenecek_veri['aciklama'] = data['aciklama'].strip() or None
+
+        if not guncellenecek_veri:
+            return jsonify({"error": "Güncellenecek veri bulunamadı."}), 400
+
+        supabase.table('finansal_islemler').update(guncellenecek_veri).eq('id', islem_id).execute()
+        return jsonify({"message": "İşlem başarıyla güncellendi."})
+
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"error": "Güncelleme sırasında bir sunucu hatası oluştu."}), 500
+
+@finans_bp.route('/api/islemler/<int:islem_id>', methods=['DELETE'])
+@login_required
+@modification_allowed
+def delete_finansal_islem(islem_id):
+    """Bir finansal işlemi siler."""
+    try:
+        sirket_id = session['user']['sirket_id']
+        islem = supabase.table('finansal_islemler').select('id').eq('id', islem_id).eq('sirket_id', sirket_id).single().execute()
+        if not islem.data:
+            return jsonify({"error": "İşlem bulunamadı veya yetkiniz yok."}), 404
+
+        supabase.table('finansal_islemler').delete().eq('id', islem_id).execute()
+        return jsonify({"message": "İşlem başarıyla silindi."})
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"error": "Silme işlemi sırasında bir hata oluştu."}), 500
