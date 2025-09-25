@@ -7,6 +7,7 @@ from extensions import bcrypt
 from blueprints.auth import auth_bp
 from blueprints.main import main_bp
 from blueprints.admin import admin_bp
+from blueprints.yem import yem_bp # YEM BLUEPRINT'İNİ İÇE AKTAR
 
 def create_app():
     """Flask uygulama fabrikası."""

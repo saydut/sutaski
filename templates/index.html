@@ -22,6 +22,8 @@
                 </div>
                 <div class="d-flex align-items-center gap-1 flex-wrap">
                     <a href="{{ url_for('main.tedarikciler_sayfasi') }}" class="btn btn-sm btn-info">Tedarikçiler</a>
+                    <!-- YENİ BUTON EKLENDİ -->
+                    <a href="{{ url_for('yem.yem_yonetimi_sayfasi') }}" class="btn btn-sm btn-primary">Yem Yönetimi</a>
                     <a href="{{ url_for('main.raporlar_page') }}" class="btn btn-sm btn-success">Detaylı Raporlar</a>
                     {% if session.get('user', {}).get('rol') == 'admin' %}
                         <a href="{{ url_for('admin.admin_panel') }}" class="btn btn-sm btn-warning">Admin Paneli</a>
