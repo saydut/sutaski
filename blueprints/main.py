@@ -491,15 +491,6 @@ def get_girdi_gecmisi(girdi_id):
         return jsonify({"error": str(e)}), 500
 
 # --- VERİ DEĞİŞTİRME API'LERİ ---
-@main_bp.route('/api/tedarikci_ekle', methods=['POST'])
-@login_required
-@lisans_kontrolu
-@modification_allowed
-def add_tedarikci():
-    yeni_tedarikci = request.get_json()
-    sirket_id = session['user']['sirket_id']
-    data = supabase.table('tedarikciler').insert({'isim': yeni_tedarikci['isim'], 'sirket_id': sirket_id}).execute()
-    return jsonify({"status": "success", "data": data.data})
 
 @main_bp.route('/api/sut_girdisi_ekle', methods=['POST'])
 @login_required
