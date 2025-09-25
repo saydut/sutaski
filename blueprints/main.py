@@ -76,7 +76,7 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
 
         # Tedarikçi ve Şirket bilgilerini çek
         tedarikci_res = supabase.table('tedarikciler').select('isim, tc_no, adres').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
-        sirket_res = supabase.table('sirketler').select('sirket_adi, adres, vergi_no').eq('id', sirket_id).single().execute()
+        sirket_res = supabase.table('sirketler').select('sirket_adi, adres, vergi_kimlik_no').eq('id', sirket_id).single().execute()
 
         if not tedarikci_res.data or not sirket_res.data:
             return jsonify({"error": "Gerekli şirket veya tedarikçi bilgisi bulunamadı."}), 404
@@ -88,37 +88,47 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
         start_utc = turkey_tz.localize(datetime.combine(baslangic_tarihi, datetime.min.time())).astimezone(pytz.utc).isoformat()
         end_utc = turkey_tz.localize(datetime.combine(bitis_tarihi, datetime.max.time())).astimezone(pytz.utc).isoformat()
 
-        # Süt girdilerini çek ve işle
+        # --- Süt Girdilerini Çek ve İşle ---
         sut_response = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).order('taplanma_tarihi', desc=False).execute()
         
         islenmis_girdiler = []
-        mal_hizmet_toplam = Decimal('0.0')
+        toplam_sut_tutari = Decimal('0.0')
         for girdi in sut_response.data:
-            litre_val = girdi.get('litre')
-            fiyat_val = girdi.get('fiyat')
-            tarih_val = girdi.get('taplanma_tarihi')
-
-            litre = Decimal(str(litre_val)) if litre_val is not None else Decimal('0')
-            fiyat = Decimal(str(fiyat_val)) if fiyat_val is not None else Decimal('0')
+            litre = Decimal(str(girdi.get('litre', '0')))
+            fiyat = Decimal(str(girdi.get('fiyat', '0')))
             tutar = litre * fiyat
-            mal_hizmet_toplam += tutar
-            
-            parsed_date = parse_supabase_timestamp(tarih_val)
-
+            toplam_sut_tutari += tutar
+            parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
             islenmis_girdiler.append({
                 "tarih": parsed_date.astimezone(turkey_tz).strftime('%d.%m.%Y') if parsed_date else 'Tarih Yok',
-                "litre": litre,
-                "fiyat": fiyat,
-                "tutar": tutar
+                "litre": litre, "fiyat": fiyat, "tutar": tutar
             })
 
-        # Hesaplamaları yap
-        stopaj_orani = Decimal('0.01') # %1 Stopaj
-        stopaj_tutari = mal_hizmet_toplam * stopaj_orani
-        net_odenecek = mal_hizmet_toplam - stopaj_tutari
+        # --- YENİ: Yem Alımlarını Çek ---
+        yem_response = supabase.table('yem_islemleri').select('islem_tarihi, miktar_kg, islem_anindaki_birim_fiyat, toplam_tutar, yem_urunleri(yem_adi)').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
+        toplam_yem_borcu = sum(Decimal(str(islem.get('toplam_tutar', '0'))) for islem in yem_response.data)
+
+        # --- YENİ: Finansal İşlemleri Çek ---
+        finans_response = supabase.table('finansal_islemler').select('islem_tarihi, islem_tipi, tutar, aciklama').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
+        toplam_odeme = sum(Decimal(str(islem.get('tutar', '0'))) for islem in finans_response.data)
+
+        # --- GÜNCELLENDİ: Tüm Hesaplamaları Yap ---
+        stopaj_orani = Decimal('0.02') # %2 Stopaj (varsayılan)
+        stopaj_tutari = toplam_sut_tutari * stopaj_orani
+        net_odenecek = (toplam_sut_tutari - stopaj_tutari) - toplam_yem_borcu - toplam_odeme
         
+        # Helper Jinja filter for date formatting
+        def format_tarih_filter(timestamp_str):
+            dt = parse_supabase_timestamp(timestamp_str)
+            return dt.astimezone(turkey_tz).strftime('%d.%m.%Y') if dt else ''
+        
+        # Add filter to Jinja environment for this request
+        current_app.jinja_env.filters['format_tarih'] = format_tarih_filter
+
         ozet = {
-            "mal_hizmet_toplam": mal_hizmet_toplam,
+            "toplam_sut_tutari": toplam_sut_tutari,
+            "toplam_yem_borcu": toplam_yem_borcu,
+            "toplam_odeme": toplam_odeme,
             "stopaj_tutari": stopaj_tutari,
             "net_odenecek": net_odenecek
         }
@@ -129,6 +139,8 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
             tedarikci=tedarikci_res.data,
             makbuz_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y'),
             sut_girdileri=islenmis_girdiler,
+            yem_islemleri=yem_response.data, # YENİ
+            finansal_islemler=finans_response.data, # YENİ
             ozet=ozet,
             stopaj_orani=stopaj_orani
         )
