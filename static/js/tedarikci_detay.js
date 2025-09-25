@@ -5,15 +5,14 @@ window.onload = () => {
 
 async function verileriYukle() {
     const ozetKartlariContainer = document.getElementById('ozet-kartlari');
-    const sutTabloBody = document.getElementById('sut-girdileri-tablosu');
-    const yemTabloBody = document.getElementById('yem-islemleri-tablosu');
     const baslikElementi = document.getElementById('tedarikci-adi-baslik');
     
     // Yükleme animasyonlarını ayarla
     baslikElementi.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
     ozetKartlariContainer.innerHTML = '<div class="col-12 text-center p-5"><div class="spinner-border"></div></div>';
-    sutTabloBody.innerHTML = `<tr><td colspan="5" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
-    yemTabloBody.innerHTML = `<tr><td colspan="6" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
+    document.getElementById('sut-girdileri-tablosu').innerHTML = `<tr><td colspan="5" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
+    document.getElementById('yem-islemleri-tablosu').innerHTML = `<tr><td colspan="6" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
+    document.getElementById('finansal-islemler-tablosu').innerHTML = `<tr><td colspan="5" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
 
     try {
         const response = await fetch(`/api/tedarikci/${TEDARIKCI_ID}/detay`);
@@ -27,6 +26,7 @@ async function verileriYukle() {
         ozetKartlariniDoldur(data.ozet);
         sutGirdileriniDoldur(data.sut_girdileri);
         yemIslemleriniDoldur(data.yem_islemleri);
+        finansalIslemleriDoldur(data.finansal_islemler);
 
     } catch (error) {
         console.error("Hata:", error);
@@ -39,9 +39,10 @@ async function verileriYukle() {
 function ozetKartlariniDoldur(ozet) {
     const container = document.getElementById('ozet-kartlari');
     container.innerHTML = `
-        <div class="col-md-4 col-12"><div class="card p-3 text-center h-100"><div class="fs-6 text-secondary">Toplam Süt Alacağı</div><h4 class="fw-bold mb-0 text-success">${ozet.toplam_sut_alacagi} TL</h4></div></div>
-        <div class="col-md-4 col-12"><div class="card p-3 text-center h-100"><div class="fs-6 text-secondary">Toplam Yem Borcu</div><h4 class="fw-bold mb-0 text-danger">${ozet.toplam_yem_borcu} TL</h4></div></div>
-        <div class="col-md-4 col-12"><div class="card p-3 text-center h-100"><div class="fs-6 text-secondary">Net Bakiye</div><h4 class="fw-bold mb-0 text-primary">${ozet.net_bakiye} TL</h4></div></div>
+        <div class="col-lg-3 col-md-6 col-12"><div class="card p-3 text-center h-100"><div class="fs-6 text-secondary">Toplam Süt Alacağı</div><h4 class="fw-bold mb-0 text-success">${ozet.toplam_sut_alacagi} TL</h4></div></div>
+        <div class="col-lg-3 col-md-6 col-12"><div class="card p-3 text-center h-100"><div class="fs-6 text-secondary">Toplam Yem Borcu</div><h4 class="fw-bold mb-0 text-danger">${ozet.toplam_yem_borcu} TL</h4></div></div>
+        <div class="col-lg-3 col-md-6 col-12"><div class="card p-3 text-center h-100"><div class="fs-6 text-secondary">Toplam Ödeme</div><h4 class="fw-bold mb-0 text-warning">${ozet.toplam_odeme} TL</h4></div></div>
+        <div class="col-lg-3 col-md-6 col-12"><div class="card p-3 text-center h-100"><div class="fs-6 text-secondary">Net Bakiye</div><h4 class="fw-bold mb-0 text-primary">${ozet.net_bakiye} TL</h4></div></div>
     `;
 }
 
@@ -89,8 +90,28 @@ function yemIslemleriniDoldur(islemler) {
     }
 }
 
+function finansalIslemleriDoldur(islemler) {
+    const tbody = document.getElementById('finansal-islemler-tablosu');
+    tbody.innerHTML = '';
+    if (islemler.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center p-4 text-secondary">Bu tedarikçiye ait finansal işlem bulunamadı.</td></tr>';
+    } else {
+        islemler.forEach(islem => {
+            const tutar = parseFloat(islem.tutar).toFixed(2);
+            const tr = `
+                <tr>
+                    <td>${new Date(islem.islem_tarihi).toLocaleDateString('tr-TR')}</td>
+                    <td><span class="badge bg-${islem.islem_tipi === 'Ödeme' ? 'success' : 'warning'}">${islem.islem_tipi}</span></td>
+                    <td class="text-end">${tutar} TL</td>
+                    <td>${islem.aciklama || '-'}</td>
+                    <td>${islem.kullanicilar.kullanici_adi}</td>
+                </tr>`;
+            tbody.innerHTML += tr;
+        });
+    }
+}
+
 function ayYilSecicileriniDoldur() {
-    // Bu fonksiyon aynı kalıyor...
     const aySecici = document.getElementById('rapor-ay');
     const yilSecici = document.getElementById('rapor-yil');
     const aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
@@ -103,7 +124,6 @@ function ayYilSecicileriniDoldur() {
 }
 
 async function hesapOzetiIndir() {
-    // Bu fonksiyon aynı kalıyor...
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
     const button = document.getElementById('pdf-indir-btn');

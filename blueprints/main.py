@@ -18,6 +18,7 @@ getcontext().prec = 10
 
 # --- YARDIMCI FONKSİYON ---
 def parse_supabase_timestamp(timestamp_str):
+    if not timestamp_str: return None
     if '+' in timestamp_str:
         timestamp_str = timestamp_str.split('+')[0]
     try:
@@ -85,38 +86,38 @@ def tedarikci_hesap_ozeti_pdf(tedarikci_id):
         start_utc = turkey_tz.localize(datetime.combine(baslangic_tarihi, datetime.min.time())).astimezone(pytz.utc).isoformat()
         end_utc = turkey_tz.localize(datetime.combine(bitis_tarihi, datetime.max.time())).astimezone(pytz.utc).isoformat()
         
+        # Süt Girdilerini Çek
         sut_response = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).order('taplanma_tarihi', desc=False).execute()
         
         toplam_sut_alacagi = Decimal('0.0')
         islenmis_sut_girdileri = []
         for girdi in sut_response.data:
-            litre = Decimal(str(girdi.get('litre', '0')))
-            fiyat = Decimal(str(girdi.get('fiyat', '0'))) if girdi.get('fiyat') is not None else Decimal('0.0')
-            toplam_tutar = litre * fiyat
+            toplam_tutar = Decimal(str(girdi.get('litre', '0'))) * Decimal(str(girdi.get('fiyat', '0')))
             toplam_sut_alacagi += toplam_tutar
             islenmis_sut_girdileri.append({
                 'tarih': parse_supabase_timestamp(girdi['taplanma_tarihi']).astimezone(turkey_tz).strftime('%d.%m.%Y'),
-                'litre': litre, 'fiyat': fiyat, 'toplam_tutar': toplam_tutar
+                'litre': Decimal(str(girdi.get('litre', '0'))), 
+                'fiyat': Decimal(str(girdi.get('fiyat', '0'))), 
+                'toplam_tutar': toplam_tutar
             })
 
+        # Yem Alımlarını Çek
         yem_response = supabase.table('yem_islemleri').select('islem_tarihi, miktar_kg, islem_anindaki_birim_fiyat, toplam_tutar, yem_urunleri(yem_adi)').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
+        toplam_yem_borcu = sum(Decimal(str(islem.get('toplam_tutar', '0'))) for islem in yem_response.data)
 
-        toplam_yem_borcu = Decimal('0.0')
-        islenmis_yem_islemleri = []
-        for islem in yem_response.data:
-            tutar = Decimal(str(islem.get('toplam_tutar', '0')))
-            toplam_yem_borcu += tutar
-            islenmis_yem_islemleri.append({
-                'tarih': parse_supabase_timestamp(islem['islem_tarihi']).astimezone(turkey_tz).strftime('%d.%m.%Y'),
-                'yem_adi': islem.get('yem_urunleri', {}).get('yem_adi', 'Bilinmeyen Yem'),
-                'miktar_kg': Decimal(str(islem.get('miktar_kg', '0'))),
-                'birim_fiyat': Decimal(str(islem.get('islem_anindaki_birim_fiyat', '0'))),
-                'toplam_tutar': tutar
-            })
+        # Finansal İşlemleri Çek (Yeni Eklendi)
+        finans_response = supabase.table('finansal_islemler').select('islem_tarihi, islem_tipi, tutar, aciklama').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
+        toplam_odeme = sum(Decimal(str(islem.get('tutar', '0'))) for islem in finans_response.data)
+
+        # Net Bakiyeyi Yeni Formülle Hesapla
+        net_bakiye = toplam_sut_alacagi - toplam_yem_borcu - toplam_odeme
         
-        net_bakiye = toplam_sut_alacagi - toplam_yem_borcu
-        
-        ozet = { 'toplam_sut_alacagi': toplam_sut_alacagi, 'toplam_yem_borcu': toplam_yem_borcu, 'net_bakiye': net_bakiye }
+        ozet = { 
+            'toplam_sut_alacagi': toplam_sut_alacagi, 
+            'toplam_yem_borcu': toplam_yem_borcu, 
+            'toplam_odeme': toplam_odeme,
+            'net_bakiye': net_bakiye 
+        }
 
         aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
         rapor_basligi = f"{aylar[ay-1]} {yil} Hesap Özeti"
@@ -125,7 +126,10 @@ def tedarikci_hesap_ozeti_pdf(tedarikci_id):
             'tedarikci_hesap_ozeti_pdf.html',
             rapor_basligi=rapor_basligi, sirket_adi=sirket_adi, tedarikci_adi=tedarikci_adi,
             olusturma_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y %H:%M'),
-            ozet=ozet, sut_girdileri=islenmis_sut_girdileri, yem_islemleri=islenmis_yem_islemleri
+            ozet=ozet, 
+            sut_girdileri=islenmis_sut_girdileri, 
+            yem_islemleri=yem_response.data,
+            finansal_islemler=finans_response.data
         )
         
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
@@ -149,18 +153,22 @@ def get_tedarikci_detay(tedarikci_id):
 
         sut_girdileri_res = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi, kullanicilar(kullanici_adi)').eq('tedarikci_id', tedarikci_id).order('taplanma_tarihi', desc=True).execute()
         yem_islemleri_res = supabase.table('yem_islemleri').select('*, kullanicilar(kullanici_adi), yem_urunleri(yem_adi)').eq('tedarikci_id', tedarikci_id).order('islem_tarihi', desc=True).execute()
+        finansal_islemler_res = supabase.table('finansal_islemler').select('*, kullanicilar(kullanici_adi)').eq('tedarikci_id', tedarikci_id).order('islem_tarihi', desc=True).execute()
         
         toplam_sut_alacagi = sum(Decimal(str(g.get('litre', 0))) * Decimal(str(g.get('fiyat', 0))) for g in sut_girdileri_res.data)
         toplam_yem_borcu = sum(Decimal(str(y.get('toplam_tutar', 0))) for y in yem_islemleri_res.data)
-        
+        toplam_odeme = sum(Decimal(str(f.get('tutar', 0))) for f in finansal_islemler_res.data)
+
         sonuc = {
             "isim": tedarikci_res.data['isim'],
             "sut_girdileri": sut_girdileri_res.data,
             "yem_islemleri": yem_islemleri_res.data,
+            "finansal_islemler": finansal_islemler_res.data,
             "ozet": {
                 "toplam_sut_alacagi": f"{toplam_sut_alacagi:.2f}",
                 "toplam_yem_borcu": f"{toplam_yem_borcu:.2f}",
-                "net_bakiye": f"{toplam_sut_alacagi - toplam_yem_borcu:.2f}"
+                "toplam_odeme": f"{toplam_odeme:.2f}",
+                "net_bakiye": f"{toplam_sut_alacagi - toplam_yem_borcu - toplam_odeme:.2f}"
             }
         }
         return jsonify(sonuc)
@@ -242,7 +250,7 @@ def aylik_rapor_pdf():
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
 
         filename = f"{yil}_{ay:02d}_{sirket_adi.replace(' ', '_')}_raporu.pdf"
-        return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
+        return send_file(io.BytesIO(pdf_bytes), mimetype='text/csv', as_attachment=True, download_name=filename)
     except Exception as e:
         print(f"PDF Rapor Hatası: {e}")
         return "Rapor oluşturulurken bir hata oluştu.", 500

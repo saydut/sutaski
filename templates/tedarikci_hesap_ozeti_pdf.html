@@ -7,9 +7,12 @@
     <style>
         .ozet-karti .deger.borc { color: #D9534F; }
         .ozet-karti .deger.alacak { color: #5CB85C; }
+        .ozet-karti .deger.odeme { color: #F0AD4E; }
         .ozet-karti .deger.net { font-weight: bold; color: #0275D8; }
         .text-right { text-align: right; }
         .toplam-satir { background-color: #F1F5F9; font-weight: bold; }
+        .islem-tipi-odeme { color: #5CB85C; }
+        .islem-tipi-avans { color: #D9534F; }
     </style>
 </head>
 <body>
@@ -27,6 +30,10 @@
             <div class="ozet-karti">
                 <div class="baslik">Toplam Yem Borcu</div>
                 <div class="deger borc">{{ "%.2f"|format(ozet.toplam_yem_borcu) }} TL</div>
+            </div>
+            <div class="ozet-karti">
+                <div class="baslik">Yapılan Toplam Ödeme</div>
+                <div class="deger odeme">{{ "%.2f"|format(ozet.toplam_odeme) }} TL</div>
             </div>
             <div class="ozet-karti">
                 <div class="baslik">Ödenecek Net Tutar</div>
@@ -71,18 +78,18 @@
                     <th>Tarih</th>
                     <th>Ürün Adı</th>
                     <th class="text-right">Miktar (KG)</th>
-                    <th class="text-right">Birim Fiyat</th>
+                    <th class="text-end">Birim Fiyat</th>
                     <th class="text-right">Toplam Tutar</th>
                 </tr>
             </thead>
             <tbody>
                 {% for islem in yem_islemleri %}
                 <tr>
-                    <td>{{ islem.tarih }}</td>
-                    <td>{{ islem.yem_adi }}</td>
-                    <td class="text-right">{{ "%.2f"|format(islem.miktar_kg) }}</td>
-                    <td class="text-right">{{ "%.2f"|format(islem.birim_fiyat) }} TL</td>
-                    <td class="text-right">{{ "%.2f"|format(islem.toplam_tutar) }} TL</td>
+                    <td>{{ islem.islem_tarihi | format_tarih }}</td>
+                    <td>{{ islem.yem_urunleri.yem_adi }}</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.miktar_kg | float) }}</td>
+                    <td class="text-end">{{ "%.2f"|format(islem.islem_anindaki_birim_fiyat | float) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.toplam_tutar | float) }} TL</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="5" style="text-align: center;">Bu ay için yem alımı bulunamadı.</td></tr>
@@ -92,6 +99,40 @@
                 <tr class="toplam-satir">
                     <td colspan="4" class="text-right">Yem Borcu Toplamı</td>
                     <td class="text-right">{{ "%.2f"|format(ozet.toplam_yem_borcu) }} TL</td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <h2>Finansal İşlemler (Ödemeler/Avanslar)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Tarih</th>
+                    <th>İşlem Tipi</th>
+                    <th>Açıklama</th>
+                    <th class="text-right">Tutar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for islem in finansal_islemler %}
+                <tr>
+                    <td>{{ islem.islem_tarihi | format_tarih }}</td>
+                    <td>
+                        <span class="islem-tipi-{{ 'odeme' if islem.islem_tipi == 'Ödeme' else 'avans' }}">
+                            {{ islem.islem_tipi }}
+                        </span>
+                    </td>
+                    <td>{{ islem.aciklama or '-' }}</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.tutar | float) }} TL</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align: center;">Bu ay için ödeme veya avans işlemi bulunamadı.</td></tr>
+                {% endfor %}
+            </tbody>
+             <tfoot>
+                <tr class="toplam-satir">
+                    <td colspan="3" class="text-right">Yapılan Toplam Ödeme</td>
+                    <td class="text-right">{{ "%.2f"|format(ozet.toplam_odeme) }} TL</td>
                 </tr>
             </tfoot>
         </table>
