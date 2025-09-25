@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, render_template, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import traceback # Hata ayıklama için eklendi
 
 # Blueprint'i bir URL ön eki ile oluşturuyoruz.
@@ -49,15 +49,16 @@ def add_yem_urunu():
         yeni_urun = {
             "sirket_id": sirket_id,
             "yem_adi": yem_adi,
-            # --- DÜZELTME BURADA: Decimal'i metne (string) çeviriyoruz ---
             "stok_miktari_kg": str(Decimal(stok)),
             "birim_fiyat": str(Decimal(fiyat))
         }
         result = supabase.table('yem_urunleri').insert(yeni_urun).execute()
         return jsonify(result.data[0]), 201
+    except (InvalidOperation, TypeError):
+        return jsonify({"error": "Lütfen stok ve fiyat için geçerli sayılar girin."}), 400
     except Exception:
         print("--- YEM ÜRÜNÜ EKLEME HATASI ---")
-        traceback.print_exc() # Daha detaylı hata kaydı için
+        traceback.print_exc()
         return jsonify({"error": "Ürün eklenirken bir sunucu hatası oluştu."}), 500
 
 @yem_bp.route('/api/islemler', methods=['POST'])
@@ -74,40 +75,46 @@ def add_yem_islemi():
         tedarikci_id = data.get('tedarikci_id')
         
         try:
+            # Gelen veriyi Decimal'e çevir
             miktar_kg = Decimal(data.get('miktar_kg'))
             if miktar_kg <= 0: return jsonify({"error": "Miktar pozitif bir değer olmalıdır."}), 400
-        except:
-             return jsonify({"error": "Geçersiz miktar formatı."}), 400
+        except (InvalidOperation, TypeError):
+             return jsonify({"error": "Lütfen miktar için geçerli bir sayı girin."}), 400
 
         if not yem_urun_id or not tedarikci_id:
              return jsonify({"error": "Tedarikçi ve yem ürünü seçimi zorunludur."}), 400
 
+        # Veritabanından yem bilgilerini al
         urun_res = supabase.table('yem_urunleri').select('stok_miktari_kg, birim_fiyat').eq('id', yem_urun_id).eq('sirket_id', sirket_id).single().execute()
-        if not urun_res.data: return jsonify({"error": "Yem ürünü bulunamadı."}), 404
+        if not urun_res.data: return jsonify({"error": "Yem ürünü bulunamadı veya bu şirkete ait değil."}), 404
             
         mevcut_stok = Decimal(urun_res.data['stok_miktari_kg'])
         birim_fiyat = Decimal(urun_res.data['birim_fiyat'])
 
+        # Stok kontrolü
         if mevcut_stok < miktar_kg: return jsonify({"error": f"Yetersiz stok! Mevcut stok: {mevcut_stok} kg"}), 400
 
+        # Veritabanına gönderilecek veriyi hazırla
         toplam_tutar = miktar_kg * birim_fiyat
         yeni_islem = {
             "sirket_id": sirket_id, "tedarikci_id": tedarikci_id,
             "yem_urun_id": yem_urun_id, "kullanici_id": kullanici_id,
-            # --- DÜZELTME BURADA: Decimal'leri metne (string) çeviriyoruz ---
+            # Decimal'leri veritabanına göndermeden önce string'e çevir
             "miktar_kg": str(miktar_kg),
             "islem_anindaki_birim_fiyat": str(birim_fiyat),
             "toplam_tutar": str(toplam_tutar),
             "aciklama": data.get('aciklama')
         }
-        result = supabase.table('yem_islemleri').insert(yeni_islem).execute()
+        # Yem işlemini kaydet
+        supabase.table('yem_islemleri').insert(yeni_islem).execute()
 
+        # Stoğu güncelle
         yeni_stok = mevcut_stok - miktar_kg
         supabase.table('yem_urunleri').update({"stok_miktari_kg": str(yeni_stok)}).eq('id', yem_urun_id).execute()
 
-        return jsonify(result.data[0]), 201
+        return jsonify({"message": "Yem çıkışı başarıyla kaydedildi."}), 201
     except Exception:
         print("--- YEM İŞLEMİ EKLEME HATASI ---")
-        traceback.print_exc() # Daha detaylı hata kaydı için
+        traceback.print_exc()
         return jsonify({"error": "İşlem sırasında bir hata oluştu."}), 500
 
