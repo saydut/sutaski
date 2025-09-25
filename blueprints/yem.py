@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, render_template, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal # BU SATIR EKLENDİ
 
 # Yem blueprint'ini oluşturuyoruz.
 yem_bp = Blueprint('yem', __name__, url_prefix='/yem')
@@ -121,3 +121,4 @@ def add_yem_islemi():
     except Exception as e:
         print(f"Yem işlemi hatası: {e}")
         return jsonify({"error": "İşlem sırasında bir hata oluştu."}), 500
+
