@@ -39,6 +39,14 @@
         <p class="text-center mt-3 mb-0">
             <small class="text-secondary">Hesabın yok mu? <a href="{{ url_for('auth.register_page') }}">Yeni Kayıt Oluştur</a></small>
         </p>
+        
+        <!-- YENİ BUTON -->
+        <p class="text-center mt-4">
+            <a href="#" class="text-secondary" data-bs-toggle="modal" data-bs-target="#hakkindaModal">
+                <i class="bi bi-info-circle"></i> Uygulama Hakkında
+            </a>
+        </p>
+
     </div>
 </div>
 {% endblock %}
@@ -46,3 +54,4 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/login.js') }}"></script>
 {% endblock %}
+

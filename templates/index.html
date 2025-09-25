@@ -31,6 +31,10 @@
                         <li><a class="dropdown-item" href="{{ url_for('finans.finans_sayfasi') }}"><i class="bi bi-cash-coin me-2"></i>Finans Yönetimi</a></li>
                         <li><a class="dropdown-item" href="{{ url_for('main.raporlar_page') }}"><i class="bi bi-bar-chart-line-fill me-2"></i>Detaylı Raporlar</a></li>
                         <li><hr class="dropdown-divider"></li>
+                        
+                        <!-- YENİ BUTON -->
+                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#hakkindaModal"><i class="bi bi-info-circle-fill me-2"></i>Uygulama Hakkında</a></li>
+                        
                         {% if session.get('user', {}).get('rol') == 'admin' %}
                             <li><a class="dropdown-item" href="{{ url_for('admin.admin_panel') }}"><i class="bi bi-shield-lock-fill me-2"></i>Admin Paneli</a></li>
                         {% endif %}
@@ -95,3 +99,4 @@
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% endblock %}
+
