@@ -1,16 +1,15 @@
 let tedarikciSecici, yemUrunSecici;
-let yemUrunuModal;
+let yemUrunuModal, yemSilmeOnayModal;
+let allYemUrunleri = []; // Tüm yem ürünlerini burada saklayacağız
 
 // Sayfa yüklendiğinde çalışacak ana fonksiyon
 window.onload = function() {
-    // Bootstrap Modal instance'ını oluştur
     yemUrunuModal = new bootstrap.Modal(document.getElementById('yemUrunuModal'));
+    yemSilmeOnayModal = new bootstrap.Modal(document.getElementById('yemSilmeOnayModal'));
     
-    // TomSelect (gelişmiş seçim kutuları) instance'larını başlat
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
     yemUrunSecici = new TomSelect("#yem-urun-sec", { create: false, sortField: { field: "text", direction: "asc" } });
 
-    // Sayfa için gerekli verileri (tedarikçiler, yemler) sunucudan çek
     verileriYukle();
 };
 
@@ -54,29 +53,31 @@ async function yemUrunleriniDoldur() {
         const response = await fetch('/yem/api/urunler');
         if (!response.ok) throw new Error('Yem ürünleri yüklenemedi.');
 
-        const urunler = await response.json();
+        allYemUrunleri = await response.json(); // Gelen veriyi global değişkene ata
         
-        // Yem ürünleri tablosunu doldur
         const tbody = document.getElementById('yem-urunleri-tablosu');
         tbody.innerHTML = '';
-        if (urunler.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-secondary p-4">Kayıtlı yem ürünü bulunamadı.</td></tr>';
+        if (allYemUrunleri.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary p-4">Kayıtlı yem ürünü bulunamadı.</td></tr>';
         } else {
-            urunler.forEach(urun => {
+            allYemUrunleri.forEach(urun => {
                 const tr = `
                     <tr>
                         <td><strong>${urun.yem_adi}</strong></td>
                         <td class="text-end">${parseFloat(urun.stok_miktari_kg).toFixed(2)} KG</td>
                         <td class="text-end">${parseFloat(urun.birim_fiyat).toFixed(2)} TL</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="yemDuzenleAc(${urun.id})"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="yemSilmeOnayiAc(${urun.id}, '${urun.yem_adi}')"><i class="bi bi-trash"></i></button>
+                        </td>
                     </tr>`;
                 tbody.innerHTML += tr;
             });
         }
 
-        // Yem çıkışı formundaki seçim kutusunu doldur
         yemUrunSecici.clear();
         yemUrunSecici.clearOptions();
-        const options = urunler.map(u => ({ 
+        const options = allYemUrunleri.map(u => ({ 
             value: u.id, 
             text: `${u.yem_adi} (Stok: ${parseFloat(u.stok_miktari_kg).toFixed(2)} kg)` 
         }));
@@ -88,6 +89,32 @@ async function yemUrunleriniDoldur() {
         document.getElementById('yem-urunleri-tablosu').innerHTML = `<tr><td colspan="3" class="text-center text-danger p-4">${error.message}</td></tr>`;
     }
 }
+
+
+// YENİ: "Yeni Yem Ekle" butonuna basıldığında modal'ı temizler ve açar.
+function yeniYemModaliniAc() {
+    document.getElementById('yemUrunuModalLabel').innerText = 'Yeni Yem Ürünü Ekle';
+    document.getElementById('yem-urun-form').reset();
+    document.getElementById('edit-yem-id').value = '';
+    yemUrunuModal.show();
+}
+
+// YENİ: "Düzenle" butonuna basıldığında modal'ı doldurur ve açar.
+function yemDuzenleAc(id) {
+    const urun = allYemUrunleri.find(y => y.id === id);
+    if (urun) {
+        document.getElementById('yemUrunuModalLabel').innerText = 'Yem Ürününü Düzenle';
+        document.getElementById('edit-yem-id').value = urun.id;
+        document.getElementById('yem-adi-input').value = urun.yem_adi;
+        document.getElementById('yem-stok-input').value = parseFloat(urun.stok_miktari_kg);
+        document.getElementById('yem-fiyat-input').value = parseFloat(urun.birim_fiyat);
+        yemUrunuModal.show();
+    }
+}
+
+
+
+
 
 /**
  * "Çıkışı Kaydet" butonuna tıklandığında çalışır. Form verilerini sunucuya gönderir.
@@ -130,36 +157,64 @@ async function yemCikisiYap() {
 /**
  * Yeni yem ürünü modal'ındaki "Kaydet" butonuna tıklandığında çalışır.
  */
+// GÜNCELLENDİ: Hem ekleme hem de düzenleme yapacak şekilde güncellendi.
 async function yemUrunuKaydet() {
-    const yem_adi = document.getElementById('yem-adi-input').value.trim();
-    const stok_miktari_kg = document.getElementById('yem-stok-input').value;
-    const birim_fiyat = document.getElementById('yem-fiyat-input').value;
+    const id = document.getElementById('edit-yem-id').value;
+    const veri = {
+        yem_adi: document.getElementById('yem-adi-input').value.trim(),
+        stok_miktari_kg: document.getElementById('yem-stok-input').value,
+        birim_fiyat: document.getElementById('yem-fiyat-input').value
+    };
     
-    if (!yem_adi || !stok_miktari_kg || !birim_fiyat) {
-        gosterMesaj('Lütfen ürün için tüm alanları doldurun.', 'warning');
+    if (!veri.yem_adi || !veri.stok_miktari_kg || !veri.birim_fiyat) {
+        gosterMesaj('Lütfen tüm zorunlu alanları doldurun.', 'warning');
         return;
     }
 
+    const url = id ? `/yem/api/urunler/${id}` : '/yem/api/urunler';
+    const method = id ? 'PUT' : 'POST';
+
     try {
-        const response = await fetch('/yem/api/urunler', {
-            method: 'POST',
+        const response = await fetch(url, {
+            method: method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ yem_adi, stok_miktari_kg, birim_fiyat })
+            body: JSON.stringify(veri)
         });
         
+        const result = await response.json();
         if (response.ok) {
-            gosterMesaj('Yeni yem ürünü başarıyla eklendi.', 'success');
-            yemUrunuModal.hide(); // Modalı kapat
-            // Formu temizle
-            document.getElementById('yem-adi-input').value = '';
-            document.getElementById('yem-stok-input').value = '';
-            document.getElementById('yem-fiyat-input').value = '';
-            await yemUrunleriniDoldur(); // Listeyi yenile
+            gosterMesaj(result.message, 'success');
+            yemUrunuModal.hide();
+            await yemUrunleriniDoldur();
         } else {
-            const result = await response.json();
-            gosterMesaj(result.error || 'Ekleme sırasında hata.', 'danger');
+            gosterMesaj(result.error || 'İşlem sırasında bir hata oluştu.', 'danger');
         }
     } catch (error) {
-        gosterMesaj('Sunucu hatası.', 'danger');
+        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+    }
+}
+
+// YENİ: Silme onay modal'ını açar.
+function yemSilmeOnayiAc(id, isim) {
+    document.getElementById('silinecek-yem-id').value = id;
+    document.getElementById('silinecek-yem-adi').innerText = isim;
+    yemSilmeOnayModal.show();
+}
+
+// YENİ: Silme işlemini gerçekleştiren fonksiyon.
+async function yemUrunuSil() {
+    const id = document.getElementById('silinecek-yem-id').value;
+    try {
+        const response = await fetch(`/yem/api/urunler/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (response.ok) {
+            gosterMesaj(result.message, 'success');
+            yemSilmeOnayModal.hide();
+            await yemUrunleriniDoldur(); // Listeyi yenile
+        } else {
+            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
+        }
+    } catch (error) {
+        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
     }
 }

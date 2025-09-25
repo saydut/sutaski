@@ -2,6 +2,11 @@
 
 {% block title %}Tedarikçiler - Süt Takip Sistemi{% endblock %}
 
+{% block head_extra %}
+    <!-- Bu sayfa artık TomSelect kullandığı için CSS dosyasını ekliyoruz -->
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
 <div class="main-wrapper p-3 p-md-4">
     <div id="alert-container"></div>
@@ -9,6 +14,10 @@
         <h1 class="fw-bold">Tedarikçi Yönetimi</h1>
         <div class="d-flex align-items-center gap-2">
             <a href="{{ url_for('main.anasayfa') }}" class="btn btn-secondary btn-sm">Ana Panele Dön</a>
+            <!-- YENİ TEDARİKÇİ EKLEME BUTONU -->
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#tedarikciModal">
+                <i class="bi bi-plus-circle"></i> Yeni Tedarikçi Ekle
+            </button>
             <button id="theme-toggle" class="btn btn-sm">
                 <i id="sun-icon" class="bi bi-sun-fill"></i>
                 <i id="moon-icon" class="bi bi-moon-fill"></i>
@@ -21,7 +30,7 @@
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="card-title mb-0">Tüm Tedarikçiler</h5>
                 <div class="col-md-4">
-                    <input type="text" id="arama-input" class="form-control form-control-sm" placeholder="Tedarikçi adıyla ara...">
+                    <input type="text" id="arama-input" class="form-control form-control-sm" placeholder="İsim veya telefon ile ara...">
                 </div>
             </div>
             <div class="table-responsive">
@@ -29,8 +38,8 @@
                     <thead>
                         <tr>
                             <th>Tedarikçi Adı</th>
-                            <th class="text-end">Toplam Getirdiği Süt (Litre)</th>
-                            <th class="text-end">Toplam Girdi Sayısı</th>
+                            <th>Telefon No</th>
+                            <th class="text-end">Toplam Süt (Litre)</th>
                             <th class="text-center">İşlemler</th>
                         </tr>
                     </thead>
@@ -45,8 +54,67 @@
         </div>
     </div>
 </div>
+
+<!-- Tedarikçi Ekleme/Düzenleme Modal'ı -->
+<div class="modal fade" id="tedarikciModal" tabindex="-1" aria-labelledby="tedarikciModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tedarikciModalLabel">Yeni Tedarikçi Ekle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="tedarikci-form">
+                    <input type="hidden" id="edit-tedarikci-id">
+                    <div class="mb-2">
+                        <label for="tedarikci-isim-input" class="form-label">İsim Soyisim <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="tedarikci-isim-input" required>
+                    </div>
+                    <div class="mb-2">
+                        <label for="tedarikci-tc-input" class="form-label">TC Kimlik No</label>
+                        <input type="text" class="form-control form-control-sm" id="tedarikci-tc-input">
+                    </div>
+                    <div class="mb-2">
+                        <label for="tedarikci-tel-input" class="form-label">Telefon Numarası</label>
+                        <input type="text" class="form-control form-control-sm" id="tedarikci-tel-input" placeholder="Örn: 532 123 4567">
+                    </div>
+                    <div class="mb-2">
+                        <label for="tedarikci-adres-input" class="form-label">Adres</label>
+                        <textarea class="form-control form-control-sm" id="tedarikci-adres-input" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="tedarikciKaydet()">Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Silme Onay Modal'ı -->
+<div class="modal fade" id="silmeOnayModal" tabindex="-1" aria-labelledby="silmeOnayModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger" id="silmeOnayModalLabel">Silme Onayı</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong><span id="silinecek-tedarikci-adi"></span></strong> adlı tedarikçiyi ve bu tedarikçiye ait TÜM süt/yem girdilerini kalıcı olarak silmek istediğinize emin misiniz?</p>
+                <p class="text-danger small">Bu işlem geri alınamaz!</p>
+                <input type="hidden" id="silinecek-tedarikci-id">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="tedarikciSil()">Evet, Sil</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script src="{{ url_for('static', filename='js/tedarikciler.js') }}"></script>
 {% endblock %}

@@ -3,13 +3,11 @@ from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-import traceback # Hata ayıklama için eklendi
+import traceback
 
-# Blueprint'i bir URL ön eki ile oluşturuyoruz.
 yem_bp = Blueprint('yem', __name__, url_prefix='/yem')
 
 # --- ARAYÜZ SAYFALARI ---
-
 @yem_bp.route('/yonetim')
 @login_required
 @lisans_kontrolu
@@ -34,7 +32,6 @@ def get_yem_urunleri():
 @login_required
 @modification_allowed
 def add_yem_urunu():
-    """Yeni bir yem ürünü ekler."""
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
@@ -52,8 +49,8 @@ def add_yem_urunu():
             "stok_miktari_kg": str(Decimal(stok)),
             "birim_fiyat": str(Decimal(fiyat))
         }
-        result = supabase.table('yem_urunleri').insert(yeni_urun).execute()
-        return jsonify(result.data[0]), 201
+        supabase.table('yem_urunleri').insert(yeni_urun).execute()
+        return jsonify({"message": "Yeni yem ürünü başarıyla eklendi."}), 201
     except (InvalidOperation, TypeError):
         return jsonify({"error": "Lütfen stok ve fiyat için geçerli sayılar girin."}), 400
     except Exception:
@@ -61,11 +58,53 @@ def add_yem_urunu():
         traceback.print_exc()
         return jsonify({"error": "Ürün eklenirken bir sunucu hatası oluştu."}), 500
 
+@yem_bp.route('/api/urunler/<int:id>', methods=['PUT'])
+@login_required
+@modification_allowed
+def update_yem_urunu(id):
+    try:
+        data = request.get_json()
+        sirket_id = session['user']['sirket_id']
+        
+        urun = supabase.table('yem_urunleri').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
+        if not urun.data:
+            return jsonify({"error": "Yem ürünü bulunamadı veya yetkiniz yok."}), 404
+
+        guncel_veri = {
+            "yem_adi": data.get('yem_adi'),
+            "stok_miktari_kg": str(Decimal(data.get('stok_miktari_kg'))),
+            "birim_fiyat": str(Decimal(data.get('birim_fiyat')))
+        }
+        supabase.table('yem_urunleri').update(guncel_veri).eq('id', id).execute()
+        return jsonify({"message": "Yem ürünü başarıyla güncellendi."})
+    except (InvalidOperation, TypeError):
+        return jsonify({"error": "Lütfen stok ve fiyat için geçerli sayılar girin."}), 400
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"error": "Güncelleme sırasında bir sunucu hatası oluştu."}), 500
+
+@yem_bp.route('/api/urunler/<int:id>', methods=['DELETE'])
+@login_required
+@modification_allowed
+def delete_yem_urunu(id):
+    try:
+        sirket_id = session['user']['sirket_id']
+        urun = supabase.table('yem_urunleri').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
+        if not urun.data:
+            return jsonify({"error": "Yem ürünü bulunamadı veya yetkiniz yok."}), 404
+
+        supabase.table('yem_urunleri').delete().eq('id', id).execute()
+        return jsonify({"message": "Yem ürünü başarıyla silindi."})
+    except Exception as e:
+        if 'violates foreign key constraint' in str(e).lower():
+            return jsonify({"error": "Bu yeme ait çıkış işlemleri olduğu için silinemiyor."}), 409
+        traceback.print_exc()
+        return jsonify({"error": "Silme işlemi sırasında bir hata oluştu."}), 500
+
 @yem_bp.route('/api/islemler', methods=['POST'])
 @login_required
 @modification_allowed
 def add_yem_islemi():
-    """Yeni bir yem çıkış işlemi kaydeder ve stoku günceller."""
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
@@ -75,7 +114,6 @@ def add_yem_islemi():
         tedarikci_id = data.get('tedarikci_id')
         
         try:
-            # Gelen veriyi Decimal'e çevir
             miktar_kg = Decimal(data.get('miktar_kg'))
             if miktar_kg <= 0: return jsonify({"error": "Miktar pozitif bir değer olmalıdır."}), 400
         except (InvalidOperation, TypeError):
@@ -84,31 +122,25 @@ def add_yem_islemi():
         if not yem_urun_id or not tedarikci_id:
              return jsonify({"error": "Tedarikçi ve yem ürünü seçimi zorunludur."}), 400
 
-        # Veritabanından yem bilgilerini al
         urun_res = supabase.table('yem_urunleri').select('stok_miktari_kg, birim_fiyat').eq('id', yem_urun_id).eq('sirket_id', sirket_id).single().execute()
         if not urun_res.data: return jsonify({"error": "Yem ürünü bulunamadı veya bu şirkete ait değil."}), 404
             
         mevcut_stok = Decimal(urun_res.data['stok_miktari_kg'])
         birim_fiyat = Decimal(urun_res.data['birim_fiyat'])
 
-        # Stok kontrolü
         if mevcut_stok < miktar_kg: return jsonify({"error": f"Yetersiz stok! Mevcut stok: {mevcut_stok} kg"}), 400
 
-        # Veritabanına gönderilecek veriyi hazırla
         toplam_tutar = miktar_kg * birim_fiyat
         yeni_islem = {
             "sirket_id": sirket_id, "tedarikci_id": tedarikci_id,
             "yem_urun_id": yem_urun_id, "kullanici_id": kullanici_id,
-            # Decimal'leri veritabanına göndermeden önce string'e çevir
             "miktar_kg": str(miktar_kg),
             "islem_anindaki_birim_fiyat": str(birim_fiyat),
             "toplam_tutar": str(toplam_tutar),
             "aciklama": data.get('aciklama')
         }
-        # Yem işlemini kaydet
         supabase.table('yem_islemleri').insert(yeni_islem).execute()
 
-        # Stoğu güncelle
         yeni_stok = mevcut_stok - miktar_kg
         supabase.table('yem_urunleri').update({"stok_miktari_kg": str(yeni_stok)}).eq('id', yem_urun_id).execute()
 

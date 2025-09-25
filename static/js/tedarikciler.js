@@ -1,65 +1,173 @@
-// Bu dosya, tedarikciler.html sayfasının mantığını yönetir.
-
-// Tüm tedarikçi verilerini global olarak saklayalım ki arama yaparken tekrar API'ye gitmeyelim.
+// Global değişkenler
 let allSuppliers = [];
+let tedarikciModal, silmeOnayModal;
 
 /**
- * Sayfa yüklendiğinde tedarikçi verilerini çeker.
+ * Sayfa yüklendiğinde çalışacak ana fonksiyon.
  */
 window.onload = async () => {
-    const tbody = document.getElementById('tedarikciler-tablosu');
-    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border" role="status"><span class="visually-hidden">Yükleniyor...</span></div></td></tr>`;
-    
-    try {
-        const response = await fetch('/api/tedarikciler_liste');
-        if (!response.ok) {
-            throw new Error('Veri çekilemedi.');
-        }
-        allSuppliers = await response.json();
-        renderTable(allSuppliers); // Gelen veriyle tabloyu doldur
-    } catch (error) {
-        console.error("Hata:", error);
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-4">Tedarikçiler yüklenirken bir hata oluştu.</td></tr>`;
-    }
+    // Bootstrap Modal instance'larını oluştur
+    tedarikciModal = new bootstrap.Modal(document.getElementById('tedarikciModal'));
+    silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
 
-    // Arama input'una her tuşa basıldığında filtreleme yap
+    // "Yeni Tedarikçi Ekle" butonuna basıldığında veya modal açıldığında formu temizle
+    document.getElementById('tedarikciModal').addEventListener('show.bs.modal', (event) => {
+        // Eğer modal bir "düzenle" butonu tarafından tetiklenmediyse formu sıfırla
+        if (!event.relatedTarget || !event.relatedTarget.classList.contains('btn-outline-primary')) {
+            document.getElementById('tedarikciModalLabel').innerText = 'Yeni Tedarikçi Ekle';
+            document.getElementById('edit-tedarikci-id').value = '';
+            document.getElementById('tedarikci-form').reset();
+        }
+    });
+    
+    // Tedarikçi listesini yükle
+    await tedarikcileriYukle();
+
+    // Arama kutusuna her tuşa basıldığında filtreleme yap
     const aramaInput = document.getElementById('arama-input');
     aramaInput.addEventListener('keyup', () => {
         const searchTerm = aramaInput.value.toLowerCase();
         const filteredSuppliers = allSuppliers.filter(supplier => 
-            supplier.isim.toLowerCase().includes(searchTerm)
+            supplier.isim.toLowerCase().includes(searchTerm) ||
+            (supplier.telefon_no && supplier.telefon_no.includes(searchTerm))
         );
         renderTable(filteredSuppliers);
     });
 };
 
 /**
- * Gelen tedarikçi verisine göre HTML tablosunu oluşturur ve ekrana basar.
- * @param {Array} suppliers Gösterilecek tedarikçilerin listesi.
+ * Sunucudan tüm tedarikçileri çeker ve tabloyu doldurur.
+ */
+async function tedarikcileriYukle() {
+    const tbody = document.getElementById('tedarikciler-tablosu');
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
+    
+    try {
+        const response = await fetch('/api/tedarikciler_liste');
+        if (!response.ok) throw new Error('Tedarikçi verileri çekilemedi.');
+        
+        allSuppliers = await response.json();
+        renderTable(allSuppliers);
+    } catch (error) {
+        console.error("Hata:", error);
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-4">${error.message}</td></tr>`;
+    }
+}
+
+/**
+ * Gelen tedarikçi listesine göre HTML tablosunu oluşturur.
+ * @param {Array} suppliers - Gösterilecek tedarikçilerin listesi.
  */
 function renderTable(suppliers) {
     const tbody = document.getElementById('tedarikciler-tablosu');
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    tbody.innerHTML = ''; // Tabloyu temizle
+    tbody.innerHTML = '';
 
     if (suppliers.length === 0) {
-        veriYokMesaji.style.display = 'block'; // Veri yok mesajını göster
+        veriYokMesaji.style.display = 'block';
     } else {
-        veriYokMesaji.style.display = 'none'; // Veri yok mesajını gizle
+        veriYokMesaji.style.display = 'none';
         suppliers.forEach(supplier => {
             const tr = `
                 <tr>
                     <td><strong>${supplier.isim}</strong></td>
-                    <td class="text-end">${supplier.toplam_litre.toFixed(2)} L</td>
-                    <td class="text-end">${supplier.girdi_sayisi}</td>
+                    <td>${supplier.telefon_no || '-'}</td>
+                    <td class="text-end">${(supplier.toplam_litre || 0).toFixed(2)} L</td>
                     <td class="text-center">
-                        <a href="/tedarikci/${supplier.id}" class="btn btn-sm btn-outline-info">
-                            Detayları Gör <i class="bi bi-arrow-right-short"></i>
-                        </a>
+                        <a href="/tedarikci/${supplier.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
+                        <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="tedarikciDuzenleAc(${supplier.id})"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="silmeOnayiAc(${supplier.id}, '${supplier.isim}')"><i class="bi bi-trash"></i></button>
                     </td>
                 </tr>
             `;
             tbody.innerHTML += tr;
         });
+    }
+}
+
+/**
+ * Ekleme/Düzenleme modal'ındaki kaydet butonuna basıldığında çalışır.
+ */
+async function tedarikciKaydet() {
+    const id = document.getElementById('edit-tedarikci-id').value;
+    const veri = {
+        isim: document.getElementById('tedarikci-isim-input').value.trim(),
+        tc_no: document.getElementById('tedarikci-tc-input').value.trim(),
+        telefon_no: document.getElementById('tedarikci-tel-input').value.trim(),
+        adres: document.getElementById('tedarikci-adres-input').value.trim()
+    };
+
+    if (!veri.isim) {
+        gosterMesaj("Tedarikçi ismi zorunludur.", "warning");
+        return;
+    }
+
+    const url = id ? `/api/tedarikci_duzenle/${id}` : '/api/tedarikci_ekle';
+    const method = id ? 'PUT' : 'POST';
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(veri)
+        });
+        const result = await response.json();
+        if (response.ok) {
+            gosterMesaj(result.message, "success");
+            tedarikciModal.hide();
+            await tedarikcileriYukle();
+        } else {
+            gosterMesaj(result.error || "Bir hata oluştu.", "danger");
+        }
+    } catch (error) {
+        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+    }
+}
+
+/**
+ * Düzenle butonuna basıldığında modal'ı ilgili tedarikçinin bilgileriyle doldurur.
+ * @param {number} id - Düzenlenecek tedarikçinin ID'si.
+ */
+function tedarikciDuzenleAc(id) {
+    const supplier = allSuppliers.find(s => s.id === id);
+    if (supplier) {
+        document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
+        document.getElementById('edit-tedarikci-id').value = supplier.id;
+        document.getElementById('tedarikci-isim-input').value = supplier.isim;
+        document.getElementById('tedarikci-tc-input').value = supplier.tc_no || '';
+        document.getElementById('tedarikci-tel-input').value = supplier.telefon_no || '';
+        document.getElementById('tedarikci-adres-input').value = supplier.adres || '';
+        tedarikciModal.show();
+    }
+}
+
+/**
+ * Sil butonuna basıldığında onay modal'ını açar.
+ * @param {number} id - Silinecek tedarikçinin ID'si.
+ * @param {string} isim - Silinecek tedarikçinin adı.
+ */
+function silmeOnayiAc(id, isim) {
+    document.getElementById('silinecek-tedarikci-id').value = id;
+    document.getElementById('silinecek-tedarikci-adi').innerText = isim;
+    silmeOnayModal.show();
+}
+
+/**
+ * Onay modal'ındaki sil butonuna basıldığında silme işlemini gerçekleştirir.
+ */
+async function tedarikciSil() {
+    const id = document.getElementById('silinecek-tedarikci-id').value;
+    try {
+        const response = await fetch(`/api/tedarikci_sil/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (response.ok) {
+            gosterMesaj(result.message, 'success');
+            silmeOnayModal.hide();
+            await tedarikcileriYukle();
+        } else {
+            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
+        }
+    } catch (error) {
+        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
     }
 }

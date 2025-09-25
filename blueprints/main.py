@@ -318,22 +318,113 @@ def export_csv():
 def get_tedarikciler_liste():
     try:
         sirket_id = session['user']['sirket_id']
-        tedarikciler_response = supabase.table('tedarikciler').select('id, isim').eq('sirket_id', sirket_id).execute()
+        # Değişiklik burada: Artık tedarikçinin tüm bilgilerini (*) çekiyoruz.
+        tedarikciler_response = supabase.table('tedarikciler').select('*').eq('sirket_id', sirket_id).execute()
         tedarikciler = tedarikciler_response.data
+        
+        # Bu kısım süt ve girdi sayılarını hesaplamak için aynı kalıyor
         girdiler_response = supabase.table('sut_girdileri').select('tedarikci_id, litre').eq('sirket_id', sirket_id).execute()
-        girdiler = girdiler_response.data
-        tedarikci_stats = {t['id']: {'isim': t['isim'], 'toplam_litre': 0, 'girdi_sayisi': 0} for t in tedarikciler}
-        for girdi in girdiler:
+        girdiler_by_tedarikci = {}
+        for girdi in girdiler_response.data:
             tid = girdi['tedarikci_id']
-            if tid in tedarikci_stats:
-                tedarikci_stats[tid]['toplam_litre'] += girdi['litre']
-                tedarikci_stats[tid]['girdi_sayisi'] += 1
-        sonuc = [{'id': tid, **stats} for tid, stats in tedarikci_stats.items()]
-        sonuc_sirali = sorted(sonuc, key=lambda x: x['isim'])
+            if tid not in girdiler_by_tedarikci:
+                girdiler_by_tedarikci[tid] = {'toplam_litre': 0, 'girdi_sayisi': 0}
+            girdiler_by_tedarikci[tid]['toplam_litre'] += girdi['litre']
+            girdiler_by_tedarikci[tid]['girdi_sayisi'] += 1
+
+        # Her bir tedarikçiye hesaplanan süt bilgilerini ekliyoruz
+        for t in tedarikciler:
+            stats = girdiler_by_tedarikci.get(t['id'], {'toplam_litre': 0, 'girdi_sayisi': 0})
+            t.update(stats)
+
+        sonuc_sirali = sorted(tedarikciler, key=lambda x: x['isim'])
         return jsonify(sonuc_sirali)
     except Exception as e:
         print(f"Tedarikçi liste hatası: {e}")
         return jsonify({"error": "Veri alınırken sunucu hatası oluştu."}), 500
+
+
+
+#yeni eklenenler#
+
+# YENİ FONKSİYON 1
+@main_bp.route('/api/tedarikci_ekle', methods=['POST'])
+@login_required
+@lisans_kontrolu
+@modification_allowed
+def add_tedarikci():
+    try:
+        data = request.get_json()
+        sirket_id = session['user']['sirket_id']
+        
+        if not data.get('isim'):
+            return jsonify({"error": "Tedarikçi ismi zorunludur."}), 400
+
+        supabase.table('tedarikciler').insert({
+            'isim': data.get('isim'),
+            'sirket_id': sirket_id,
+            'tc_no': data.get('tc_no') or None,
+            'telefon_no': data.get('telefon_no') or None,
+            'adres': data.get('adres') or None
+        }).execute()
+        return jsonify({"message": "Tedarikçi başarıyla eklendi."}), 201
+    except Exception as e:
+        print(f"Tedarikçi ekleme hatası: {e}")
+        return jsonify({"error": "Tedarikçi eklenirken bir hata oluştu."}), 500
+    
+# YENİ FONKSİYON 2
+@main_bp.route('/api/tedarikci_duzenle/<int:id>', methods=['PUT'])
+@login_required
+@lisans_kontrolu
+@modification_allowed
+def update_tedarikci(id):
+    try:
+        data = request.get_json()
+        sirket_id = session['user']['sirket_id']
+
+        # Güvenlik kontrolü: Kullanıcı sadece kendi şirketinin tedarikçisini güncelleyebilir.
+        tedarikci = supabase.table('tedarikciler').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
+        if not tedarikci.data:
+            return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
+
+        supabase.table('tedarikciler').update({
+            'isim': data.get('isim'),
+            'tc_no': data.get('tc_no') or None,
+            'telefon_no': data.get('telefon_no') or None,
+            'adres': data.get('adres') or None
+        }).eq('id', id).execute()
+        return jsonify({"message": "Tedarikçi bilgileri güncellendi."})
+    except Exception as e:
+        print(f"Tedarikçi güncelleme hatası: {e}")
+        return jsonify({"error": "Güncelleme sırasında bir hata oluştu."}), 500
+    
+# YENİ FONKSİYON 3
+@main_bp.route('/api/tedarikci_sil/<int:id>', methods=['DELETE'])
+@login_required
+@lisans_kontrolu
+@modification_allowed
+def delete_tedarikci(id):
+    try:
+        sirket_id = session['user']['sirket_id']
+        # Güvenlik kontrolü: Kullanıcı sadece kendi şirketinin tedarikçisini silebilir.
+        tedarikci = supabase.table('tedarikciler').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
+        if not tedarikci.data:
+            return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
+        
+        # Tedarikçiyi sil. Veritabanındaki CASCADE ayarı sayesinde bu tedarikçiye ait
+        # tüm süt ve yem girdileri de otomatik olarak silinecektir.
+        supabase.table('tedarikciler').delete().eq('id', id).execute()
+        return jsonify({"message": "Tedarikçi başarıyla silindi."})
+    except Exception as e:
+        print(f"Tedarikçi silme hatası: {e}")
+        # Eğer CASCADE ayarında bir sorun olursa veya veritabanı hatası alınırsa
+        if 'violates foreign key constraint' in str(e).lower():
+            return jsonify({"error": "Bu tedarikçiye ait girdiler olduğu için silinemiyor."}), 409
+        return jsonify({"error": "Silme işlemi sırasında bir hata oluştu."}), 500
+
+
+#yeni eklenenler#
+
 
 @main_bp.route('/api/gunluk_ozet')
 @login_required
