@@ -54,7 +54,7 @@
     {% block scripts %}{% endblock %}
 
     <!-- =============================================================================== -->
-    <!-- YENİ HAKKINDA MODAL PENCERESİ (SEKMELİ YAPI) -->
+    <!-- HAKKINDA MODAL PENCERESİ (SEKMELİ YAPI) -->
     <!-- =============================================================================== -->
     <div class="modal fade" id="hakkindaModal" tabindex="-1" aria-labelledby="hakkindaModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
@@ -98,14 +98,15 @@
                         <!-- 2. Güncelleme Notları Sekmesi -->
                         <div class="tab-pane fade" id="guncellemeler-pane" role="tabpanel" aria-labelledby="guncellemeler-tab" tabindex="0">
                              <div class="d-flex justify-content-between align-items-center mb-3 p-2 rounded" style="background-color: var(--bs-table-striped-bg);">
-                                <h6 class="mb-0">Mevcut Sürüm: 1.1.0</h6>
+                                <h6 class="mb-0">Mevcut Sürüm: 1.2.0</h6>
                                 <span class="text-secondary small">Yayın Tarihi: 25.09.2025</span>
                             </div>
                             <div class="accordion" id="guncellemeNotlariAccordion">
+                                <!-- Sürüm 1.2.0 -->
                                 <div class="accordion-item">
                                     <h2 class="accordion-header">
                                         <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true">
-                                            <strong>Sürüm 1.1.0 - (25.09.2025)</strong>
+                                            <strong>Sürüm 1.2.0 - (25.09.2025)</strong>
                                         </button>
                                     </h2>
                                     <div id="collapseOne" class="accordion-collapse collapse show" data-bs-parent="#guncellemeNotlariAccordion">
@@ -115,6 +116,53 @@
                                                 <li><strong>Geliştirme:</strong> Müstahsil makbuzuna yem ve finansal işlemlerin detayı eklendi.</li>
                                                 <li><strong>Düzeltme:</strong> Müstahsil makbuzu PDF oluşturma sırasındaki veritabanı hataları giderildi.</li>
                                             </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Sürüm 1.1.0 -->
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false">
+                                            <strong>Sürüm 1.1.0 - (24.09.2025)</strong>
+                                        </button>
+                                    </h2>
+                                    <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#guncellemeNotlariAccordion">
+                                        <div class="accordion-body">
+                                           <ul>
+                                                <li><strong>Yeni:</strong> Finans Yönetimi modülü (Ödeme/Avans takibi) eklendi.</li>
+                                                <li><strong>Yeni:</strong> Tedarikçi detay sayfası oluşturuldu.</li>
+                                                <li><strong>Geliştirme:</strong> Raporlar sayfasına aylık PDF indirme seçeneği eklendi.</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Sürüm 1.0.0 -->
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false">
+                                           <strong>Sürüm 1.0.0 - (22.09.2025)</strong>
+                                        </button>
+                                    </h2>
+                                    <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#guncellemeNotlariAccordion">
+                                        <div class="accordion-body">
+                                            <ul>
+                                                <li><strong>Yeni:</strong> Yem Yönetimi modülü (stok takibi, yem çıkışı) eklendi.</li>
+                                                <li><strong>Yeni:</strong> Tedarikçi yönetimi sayfası (Ekleme/Silme/Düzenleme) eklendi.</li>
+                                                <li><strong>Geliştirme:</strong> Ana panele grafiksel raporlar (Haftalık, Tedarikçi Dağılımı) eklendi.</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Sürüm 0.9.0 -->
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFour" aria-expanded="false">
+                                            <strong>Sürüm 0.9.0 - Beta (20.09.2025)</strong>
+                                        </button>
+                                    </h2>
+                                    <div id="collapseFour" class="accordion-collapse collapse" data-bs-parent="#guncellemeNotlariAccordion">
+                                        <div class="accordion-body">
+                                           İlk Beta Sürümü yayınlandı. Temel süt girdisi ekleme, düzenleme, silme ve kullanıcı sistemi gibi ana işlevler eklendi.
                                         </div>
                                     </div>
                                 </div>
