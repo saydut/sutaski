@@ -8,6 +8,7 @@ from blueprints.auth import auth_bp
 from blueprints.main import main_bp
 from blueprints.admin import admin_bp
 from blueprints.yem import yem_bp # YEM BLUEPRINT'İNİ İÇE AKTAR
+from blueprints.finans import finans_bp # FİNANS BLUEPRINT'İNİ İÇE AKTAR
 
 def create_app():
     """Flask uygulama fabrikası."""
@@ -25,6 +26,7 @@ def create_app():
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(yem_bp) # YEM BLUEPRINT'İNİ KAYDET
+    app.register_blueprint(finans_bp) # FİNANS BLUEPRINT'İNİ KAYDET
 
     return app
 

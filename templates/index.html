@@ -28,6 +28,7 @@
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="{{ url_for('main.tedarikciler_sayfasi') }}"><i class="bi bi-people-fill me-2"></i>Tedarikçi Yönetimi</a></li>
                         <li><a class="dropdown-item" href="{{ url_for('yem.yem_yonetimi_sayfasi') }}"><i class="bi bi-inboxes-fill me-2"></i>Yem Yönetimi</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('finans.finans_sayfasi') }}"><i class="bi bi-cash-coin me-2"></i>Finans Yönetimi</a></li>
                         <li><a class="dropdown-item" href="{{ url_for('main.raporlar_page') }}"><i class="bi bi-bar-chart-line-fill me-2"></i>Detaylı Raporlar</a></li>
                         <li><hr class="dropdown-divider"></li>
                         {% if session.get('user', {}).get('rol') == 'admin' %}
