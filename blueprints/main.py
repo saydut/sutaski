@@ -1,46 +1,37 @@
-from flask import Blueprint, jsonify, render_template, request, session, send_file, Response, current_app
-from decorators import login_required, lisans_kontrolu, modification_allowed 
-from extensions import supabase, turkey_tz, bcrypt
+# blueprints/main.py
+
+# --- GEREKLİ KÜTÜPHANELER ---
+from flask import Blueprint, jsonify, render_template, request, session, send_file, current_app
+from decorators import login_required, lisans_kontrolu, modification_allowed
+from extensions import supabase, turkey_tz, bcrypt  # bcrypt burada import ediliyor
 from datetime import datetime, timedelta
 import pytz
 import io
 import csv
 import calendar
-from weasyprint import HTML, CSS
-import os
+from weasyprint import HTML
 from decimal import Decimal, getcontext
+import traceback
 
 # Decimal hassasiyetini ayarla
 getcontext().prec = 10
 
-# --- YENİ YARDIMCI FONKSİYON ---
-# Bu fonksiyon, Python 3.10'un ayrıştıramadığı Supabase tarih formatını düzeltir.
+# --- YARDIMCI FONKSİYON ---
 def parse_supabase_timestamp(timestamp_str):
-    """
-    Supabase'den gelen '2025-09-21T09:32:57.45851+00:00' gibi zaman damgalarını
-    güvenilir bir şekilde ayrıştırır.
-    """
-    # Zaman damgasını saat dilimi ayırıcısından böl
     if '+' in timestamp_str:
         timestamp_str = timestamp_str.split('+')[0]
-    
-    # Mikrosaniye olup olmadığını kontrol ederek ayrıştır
     try:
         dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S.%f')
     except ValueError:
         try:
             dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S')
         except ValueError:
-            # Eğer saat bilgisi de yoksa, sadece tarihi ayrıştır
             dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%d')
-        
-    # Nesneyi UTC olarak saat dilimine duyarlı hale getir
     return pytz.utc.localize(dt_obj)
-# --- YARDIMCI FONKSİYON SONU ---
 
-
+# --- BLUEPRINT TANIMLAMASI ---
 main_bp = Blueprint(
-    'main', 
+    'main',
     __name__,
     template_folder='../../templates',
     static_folder='../../static'
@@ -71,7 +62,6 @@ def tedarikciler_sayfasi():
 def tedarikci_detay_sayfasi(tedarikci_id):
     return render_template('tedarikci_detay.html', tedarikci_id=tedarikci_id)
 
-
 # --- API'LER ---
 
 @main_bp.route('/api/tedarikci/<int:tedarikci_id>/hesap_ozeti_pdf')
@@ -95,114 +85,91 @@ def tedarikci_hesap_ozeti_pdf(tedarikci_id):
         start_utc = turkey_tz.localize(datetime.combine(baslangic_tarihi, datetime.min.time())).astimezone(pytz.utc).isoformat()
         end_utc = turkey_tz.localize(datetime.combine(bitis_tarihi, datetime.max.time())).astimezone(pytz.utc).isoformat()
         
-        response = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).order('taplanma_tarihi', desc=False).execute()
+        sut_response = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).order('taplanma_tarihi', desc=False).execute()
         
-        islenmis_girdiler = []
-        toplam_litre = Decimal('0.0')
-        toplam_alacak = Decimal('0.0')
-
-        for girdi in response.data:
+        toplam_sut_alacagi = Decimal('0.0')
+        islenmis_sut_girdileri = []
+        for girdi in sut_response.data:
             litre = Decimal(str(girdi.get('litre', '0')))
-            fiyat = Decimal(str(girdi.get('fiyat', '0'))) if girdi.get('fiyat') is not None else None
-            toplam_tutar = (litre * fiyat) if fiyat is not None else None
-
-            islenmis_girdiler.append({
-                'tarih': parse_supabase_timestamp(girdi['taplanma_tarihi']).astimezone(turkey_tz).strftime('%d.%m.%Y %H:%M'),
-                'litre': litre,
-                'fiyat': fiyat,
-                'toplam_tutar': toplam_tutar
+            fiyat = Decimal(str(girdi.get('fiyat', '0'))) if girdi.get('fiyat') is not None else Decimal('0.0')
+            toplam_tutar = litre * fiyat
+            toplam_sut_alacagi += toplam_tutar
+            islenmis_sut_girdileri.append({
+                'tarih': parse_supabase_timestamp(girdi['taplanma_tarihi']).astimezone(turkey_tz).strftime('%d.%m.%Y'),
+                'litre': litre, 'fiyat': fiyat, 'toplam_tutar': toplam_tutar
             })
-            toplam_litre += litre
-            if toplam_tutar is not None:
-                toplam_alacak += toplam_tutar
 
-        ortalama_fiyat = (toplam_alacak / toplam_litre) if toplam_litre > 0 else Decimal('0.0')
+        yem_response = supabase.table('yem_islemleri').select('islem_tarihi, miktar_kg, islem_anindaki_birim_fiyat, toplam_tutar, yem_urunleri(yem_adi)').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
+
+        toplam_yem_borcu = Decimal('0.0')
+        islenmis_yem_islemleri = []
+        for islem in yem_response.data:
+            tutar = Decimal(str(islem.get('toplam_tutar', '0')))
+            toplam_yem_borcu += tutar
+            islenmis_yem_islemleri.append({
+                'tarih': parse_supabase_timestamp(islem['islem_tarihi']).astimezone(turkey_tz).strftime('%d.%m.%Y'),
+                'yem_adi': islem.get('yem_urunleri', {}).get('yem_adi', 'Bilinmeyen Yem'),
+                'miktar_kg': Decimal(str(islem.get('miktar_kg', '0'))),
+                'birim_fiyat': Decimal(str(islem.get('islem_anindaki_birim_fiyat', '0'))),
+                'toplam_tutar': tutar
+            })
         
-        ozet = {
-            'toplam_litre': toplam_litre,
-            'toplam_alacak': toplam_alacak,
-            'ortalama_fiyat': ortalama_fiyat
-        }
+        net_bakiye = toplam_sut_alacagi - toplam_yem_borcu
+        
+        ozet = { 'toplam_sut_alacagi': toplam_sut_alacagi, 'toplam_yem_borcu': toplam_yem_borcu, 'net_bakiye': net_bakiye }
 
         aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
         rapor_basligi = f"{aylar[ay-1]} {yil} Hesap Özeti"
         
         html_out = render_template(
             'tedarikci_hesap_ozeti_pdf.html',
-            rapor_basligi=rapor_basligi,
-            sirket_adi=sirket_adi,
-            tedarikci_adi=tedarikci_adi,
+            rapor_basligi=rapor_basligi, sirket_adi=sirket_adi, tedarikci_adi=tedarikci_adi,
             olusturma_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y %H:%M'),
-            ozet=ozet,
-            girdiler=islenmis_girdiler
+            ozet=ozet, sut_girdileri=islenmis_sut_girdileri, yem_islemleri=islenmis_yem_islemleri
         )
         
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
         filename = f"{yil}_{ay:02d}_{tedarikci_adi.replace(' ', '_')}_hesap_ozeti.pdf"
         
-        return send_file(
-            io.BytesIO(pdf_bytes),
-            mimetype='application/pdf',
-            as_attachment=True,
-            download_name=filename
-        )
-    except Exception as e:
-        print(f"Tedarikçi PDF Rapor Hatası: {e}")
+        return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
+    except Exception:
+        print(f"--- TEDARİKÇİ PDF RAPOR HATASI ---")
+        traceback.print_exc()
         return jsonify({"error": "Rapor oluşturulurken bir hata oluştu."}), 500
-
 
 @main_bp.route('/api/tedarikci/<int:tedarikci_id>/detay')
 @login_required
 def get_tedarikci_detay(tedarikci_id):
     try:
         sirket_id = session['user']['sirket_id']
-        sayfa = int(request.args.get('sayfa', 1))
-        limit = 10
-        offset = (sayfa - 1) * limit
-
-        tedarikci_res = supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
+        
+        tedarikci_res = supabase.table('tedarikciler').select('id, isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
         if not tedarikci_res.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
 
-        count_res = supabase.table('sut_girdileri').select('id', count='exact').eq('tedarikci_id', tedarikci_id).execute()
-        toplam_girdi_sayisi = count_res.count
-
-        girdiler_res = supabase.table('sut_girdileri') \
-            .select('litre, taplanma_tarihi, kullanicilar(kullanici_adi)') \
-            .eq('tedarikci_id', tedarikci_id) \
-            .order('taplanma_tarihi', desc=True) \
-            .range(offset, offset + limit - 1) \
-            .execute()
-        girdiler = girdiler_res.data
+        sut_girdileri_res = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi, kullanicilar(kullanici_adi)').eq('tedarikci_id', tedarikci_id).order('taplanma_tarihi', desc=True).execute()
+        yem_islemleri_res = supabase.table('yem_islemleri').select('*, kullanicilar(kullanici_adi), yem_urunleri(yem_adi)').eq('tedarikci_id', tedarikci_id).order('islem_tarihi', desc=True).execute()
         
-        ozet_res = supabase.table('sut_girdileri').select('litre, taplanma_tarihi').eq('tedarikci_id', tedarikci_id).order('taplanma_tarihi', desc=True).execute()
-        tum_girdiler_ozet = ozet_res.data
-        
-        toplam_litre = sum(g['litre'] for g in tum_girdiler_ozet)
-        girdi_sayisi = len(tum_girdiler_ozet)
-        ortalama_litre = toplam_litre / girdi_sayisi if girdi_sayisi > 0 else 0
-        ilk_girdi_tarihi = ''
-        if tum_girdiler_ozet:
-            # DÜZELTME: Yeni yardımcı fonksiyon kullanıldı.
-            ilk_girdi_tarihi_dt = parse_supabase_timestamp(tum_girdiler_ozet[-1]['taplanma_tarihi'])
-            ilk_girdi_tarihi = ilk_girdi_tarihi_dt.astimezone(turkey_tz).strftime('%d.%m.%Y')
+        toplam_sut_alacagi = sum(Decimal(str(g.get('litre', 0))) * Decimal(str(g.get('fiyat', 0))) for g in sut_girdileri_res.data)
+        toplam_yem_borcu = sum(Decimal(str(y.get('toplam_tutar', 0))) for y in yem_islemleri_res.data)
         
         sonuc = {
-            "id": tedarikci_id,
             "isim": tedarikci_res.data['isim'],
-            "girdiler": girdiler,
-            "toplam_girdi_sayisi": toplam_girdi_sayisi,
+            "sut_girdileri": sut_girdileri_res.data,
+            "yem_islemleri": yem_islemleri_res.data,
             "ozet": {
-                "toplam_litre": toplam_litre,
-                "girdi_sayisi": girdi_sayisi,
-                "ortalama_litre": ortalama_litre,
-                "ilk_girdi_tarihi": ilk_girdi_tarihi
+                "toplam_sut_alacagi": f"{toplam_sut_alacagi:.2f}",
+                "toplam_yem_borcu": f"{toplam_yem_borcu:.2f}",
+                "net_bakiye": f"{toplam_sut_alacagi - toplam_yem_borcu:.2f}"
             }
         }
         return jsonify(sonuc)
-    except Exception as e:
-        print(f"Tedarikçi detay hatası: {e}")
+    except Exception:
+        print(f"--- TEDARİKÇİ DETAY HATASI ---")
+        traceback.print_exc()
         return jsonify({"error": "Veri alınırken sunucu hatası oluştu."}), 500
+
+# --- BURADAN SONRASI ESKİ KODLARIN TAMAMI ---
 
 @main_bp.route('/api/sut_girdileri', methods=['GET'])
 @login_required
@@ -254,7 +221,6 @@ def aylik_rapor_pdf():
         gunluk_dokum_dict = {i: {'toplam_litre': 0, 'girdi_sayisi': 0} for i in range(1, ayin_son_gunu + 1)}
         tedarikci_dokumu_dict = {}
         for girdi in girdiler:
-            # DÜZELTME: Yeni yardımcı fonksiyon kullanıldı.
             girdi_tarihi_tr = parse_supabase_timestamp(girdi['taplanma_tarihi']).astimezone(turkey_tz)
             gun = girdi_tarihi_tr.day
             gunluk_dokum_dict[gun]['toplam_litre'] += girdi['litre']
@@ -276,14 +242,7 @@ def aylik_rapor_pdf():
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
 
         filename = f"{yil}_{ay:02d}_{sirket_adi.replace(' ', '_')}_raporu.pdf"
-        # --- DEĞİŞİKLİK BURADA ---
-        # Response yerine, CSV'deki gibi send_file kullanıyoruz.
-        return send_file(
-            io.BytesIO(pdf_bytes),
-            mimetype='application/pdf',
-            as_attachment=True,
-            download_name=filename
-        )
+        return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception as e:
         print(f"PDF Rapor Hatası: {e}")
         return "Rapor oluşturulurken bir hata oluştu.", 500
@@ -306,7 +265,6 @@ def get_detayli_rapor():
         daily_totals = {gun.strftime('%Y-%m-%d'): 0 for gun in date_range}
         supplier_totals = {}
         for girdi in response.data:
-            # DÜZELTME: Yeni yardımcı fonksiyon kullanıldı.
             girdi_gunu_str = parse_supabase_timestamp(girdi['taplanma_tarihi']).astimezone(turkey_tz).strftime('%Y-%m-%d')
             if girdi_gunu_str in daily_totals:
                 daily_totals[girdi_gunu_str] += girdi['litre']
@@ -344,7 +302,6 @@ def export_csv():
         writer = csv.writer(output, delimiter=';')
         writer.writerow(['Tarih', 'Tedarikçi', 'Litre', 'Toplayan Kişi'])
         for row in data:
-            # DÜZELTME: Yeni yardımcı fonksiyon kullanıldı.
             formatli_tarih = parse_supabase_timestamp(row['taplanma_tarihi']).astimezone(turkey_tz).strftime('%d.%m.%Y %H:%M')
             tedarikci_adi = row.get('tedarikciler', {}).get('isim', 'Bilinmiyor')
             toplayan_kisi = row.get('kullanicilar', {}).get('kullanici_adi', 'Bilinmiyor')
@@ -355,10 +312,6 @@ def export_csv():
     except Exception as e:
         print(f"CSV Dışa Aktarma Hatası: {e}")
         return jsonify({"error": "Rapor oluşturulurken bir hata oluştu."}), 500
-
-# Diğer tüm fonksiyonlar aynı kalacak şekilde devam ediyor...
-# ...
-# --- DİĞER API'LER (Değişiklik yok) ---
 
 @main_bp.route('/api/tedarikciler_liste')
 @login_required
@@ -456,8 +409,7 @@ def get_girdi_gecmisi(girdi_id):
         print(f"Geçmiş Hatası: {e}")
         return jsonify({"error": str(e)}), 500
 
-# --- VERİ DEĞİŞTİRME API'LERİ (Muhasebeci erişemez) ---
-
+# --- VERİ DEĞİŞTİRME API'LERİ ---
 @main_bp.route('/api/tedarikci_ekle', methods=['POST'])
 @login_required
 @lisans_kontrolu
@@ -523,7 +475,6 @@ def delete_sut_girdisi(girdi_id):
         return jsonify({"error": str(e)}), 500
 
 # --- KULLANICI İŞLEMLERİ ---
-
 @main_bp.route('/api/user/change_password', methods=['POST'])
 @login_required
 def change_password():
@@ -541,8 +492,7 @@ def change_password():
         print(f"Kullanıcı şifre değiştirme hatası: {e}")
         return jsonify({"error": "Şifre değiştirilirken bir hata oluştu."}), 500
 
-####Offline modu
+# --- OFFLINE MODU ---
 @main_bp.route('/offline')
 def offline_page():
     return render_template('offline.html')
-
