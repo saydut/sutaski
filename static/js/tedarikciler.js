@@ -1,6 +1,9 @@
 // Global değişkenler
 let allSuppliers = [];
 let tedarikciModal, silmeOnayModal;
+// Sıralama durumu için değişkenler
+let mevcutSiralamaSutunu = 'isim';
+let mevcutSiralamaYonu = 'asc'; // 'asc' (artan) veya 'desc' (azalan)
 
 /**
  * Sayfa yüklendiğinde çalışacak ana fonksiyon.
@@ -26,14 +29,74 @@ window.onload = async () => {
     // Arama kutusuna her tuşa basıldığında filtreleme yap
     const aramaInput = document.getElementById('arama-input');
     aramaInput.addEventListener('keyup', () => {
-        const searchTerm = aramaInput.value.toLowerCase();
-        const filteredSuppliers = allSuppliers.filter(supplier => 
-            supplier.isim.toLowerCase().includes(searchTerm) ||
-            (supplier.telefon_no && supplier.telefon_no.includes(searchTerm))
-        );
-        renderTable(filteredSuppliers);
+        filtreleVeSirala(); // Arama yapıldığında da sıralamayı koru
+    });
+
+    // Tablo başlıklarına tıklama olaylarını ekle
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.addEventListener('click', () => {
+            const sutun = header.dataset.sort;
+            if (mevcutSiralamaSutunu === sutun) {
+                mevcutSiralamaYonu = mevcutSiralamaYonu === 'asc' ? 'desc' : 'asc';
+            } else {
+                mevcutSiralamaSutunu = sutun;
+                mevcutSiralamaYonu = 'asc';
+            }
+            filtreleVeSirala();
+        });
     });
 };
+
+/**
+ * Arama ve sıralamayı birlikte yapan merkezi fonksiyon.
+ */
+function filtreleVeSirala() {
+    const aramaInput = document.getElementById('arama-input');
+    const searchTerm = aramaInput.value.toLowerCase();
+    
+    let gosterilecekTedarikciler = allSuppliers.filter(supplier => 
+        supplier.isim.toLowerCase().includes(searchTerm) ||
+        (supplier.telefon_no && supplier.telefon_no.toLowerCase().includes(searchTerm))
+    );
+
+    gosterilecekTedarikciler.sort((a, b) => {
+        let valA = a[mevcutSiralamaSutunu];
+        let valB = b[mevcutSiralamaSutunu];
+
+        // Sayısal ve metinsel sıralama için kontrol
+        if (typeof valA === 'string') {
+            valA = valA.toLowerCase();
+            valB = (valB || '').toLowerCase(); // b'nin null olabileceği duruma karşı kontrol
+        } else {
+            valA = valA || 0; // Eğer değer null ise 0 kabul et
+            valB = valB || 0;
+        }
+
+        if (valA < valB) {
+            return mevcutSiralamaYonu === 'asc' ? -1 : 1;
+        }
+        if (valA > valB) {
+            return mevcutSiralamaYonu === 'asc' ? 1 : -1;
+        }
+        return 0;
+    });
+
+    renderTable(gosterilecekTedarikciler);
+    basliklariGuncelle();
+}
+
+/**
+ * Sıralama ikonlarını güncelleyen fonksiyon.
+ */
+function basliklariGuncelle() {
+    document.querySelectorAll('.sortable').forEach(header => {
+        const sutun = header.dataset.sort;
+        header.classList.remove('asc', 'desc');
+        if (sutun === mevcutSiralamaSutunu) {
+            header.classList.add(mevcutSiralamaYonu);
+        }
+    });
+}
 
 /**
  * Sunucudan tüm tedarikçileri çeker ve tabloyu doldurur.
@@ -47,7 +110,7 @@ async function tedarikcileriYukle() {
         if (!response.ok) throw new Error('Tedarikçi verileri çekilemedi.');
         
         allSuppliers = await response.json();
-        renderTable(allSuppliers);
+        filtreleVeSirala(); // Veri yüklendiğinde varsayılan sıralama ile göster
     } catch (error) {
         console.error("Hata:", error);
         tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-4">${error.message}</td></tr>`;
@@ -171,3 +234,4 @@ async function tedarikciSil() {
         gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
     }
 }
+
