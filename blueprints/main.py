@@ -8,6 +8,10 @@ import csv
 import calendar
 from weasyprint import HTML, CSS
 import os
+from decimal import Decimal, getcontext
+
+# Decimal hassasiyetini ayarla
+getcontext().prec = 10
 
 # --- YENİ YARDIMCI FONKSİYON ---
 # Bu fonksiyon, Python 3.10'un ayrıştıramadığı Supabase tarih formatını düzeltir.
@@ -69,6 +73,83 @@ def tedarikci_detay_sayfasi(tedarikci_id):
 
 
 # --- API'LER ---
+
+@main_bp.route('/api/tedarikci/<int:tedarikci_id>/hesap_ozeti_pdf')
+@login_required
+@lisans_kontrolu
+def tedarikci_hesap_ozeti_pdf(tedarikci_id):
+    try:
+        sirket_id = session['user']['sirket_id']
+        sirket_adi = session['user'].get('sirket_adi', 'Bilinmeyen Şirket')
+        ay = int(request.args.get('ay'))
+        yil = int(request.args.get('yil'))
+
+        tedarikci_res = supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
+        if not tedarikci_res.data:
+            return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
+        tedarikci_adi = tedarikci_res.data['isim']
+
+        _, ayin_son_gunu = calendar.monthrange(yil, ay)
+        baslangic_tarihi = datetime(yil, ay, 1).date()
+        bitis_tarihi = datetime(yil, ay, ayin_son_gunu).date()
+        start_utc = turkey_tz.localize(datetime.combine(baslangic_tarihi, datetime.min.time())).astimezone(pytz.utc).isoformat()
+        end_utc = turkey_tz.localize(datetime.combine(bitis_tarihi, datetime.max.time())).astimezone(pytz.utc).isoformat()
+        
+        response = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).order('taplanma_tarihi', desc=False).execute()
+        
+        islenmis_girdiler = []
+        toplam_litre = Decimal('0.0')
+        toplam_alacak = Decimal('0.0')
+
+        for girdi in response.data:
+            litre = Decimal(str(girdi.get('litre', '0')))
+            fiyat = Decimal(str(girdi.get('fiyat', '0'))) if girdi.get('fiyat') is not None else None
+            toplam_tutar = (litre * fiyat) if fiyat is not None else None
+
+            islenmis_girdiler.append({
+                'tarih': parse_supabase_timestamp(girdi['taplanma_tarihi']).astimezone(turkey_tz).strftime('%d.%m.%Y %H:%M'),
+                'litre': litre,
+                'fiyat': fiyat,
+                'toplam_tutar': toplam_tutar
+            })
+            toplam_litre += litre
+            if toplam_tutar is not None:
+                toplam_alacak += toplam_tutar
+
+        ortalama_fiyat = (toplam_alacak / toplam_litre) if toplam_litre > 0 else Decimal('0.0')
+        
+        ozet = {
+            'toplam_litre': toplam_litre,
+            'toplam_alacak': toplam_alacak,
+            'ortalama_fiyat': ortalama_fiyat
+        }
+
+        aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+        rapor_basligi = f"{aylar[ay-1]} {yil} Hesap Özeti"
+        
+        html_out = render_template(
+            'tedarikci_hesap_ozeti_pdf.html',
+            rapor_basligi=rapor_basligi,
+            sirket_adi=sirket_adi,
+            tedarikci_adi=tedarikci_adi,
+            olusturma_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y %H:%M'),
+            ozet=ozet,
+            girdiler=islenmis_girdiler
+        )
+        
+        pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
+        filename = f"{yil}_{ay:02d}_{tedarikci_adi.replace(' ', '_')}_hesap_ozeti.pdf"
+        
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        print(f"Tedarikçi PDF Rapor Hatası: {e}")
+        return jsonify({"error": "Rapor oluşturulurken bir hata oluştu."}), 500
+
 
 @main_bp.route('/api/tedarikci/<int:tedarikci_id>/detay')
 @login_required
@@ -464,3 +545,4 @@ def change_password():
 @main_bp.route('/offline')
 def offline_page():
     return render_template('offline.html')
+
