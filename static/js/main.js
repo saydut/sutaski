@@ -463,28 +463,3 @@ async function verileriDisaAktar() {
     }
 }
 
-async function tedarikciEkle() {
-    const yeniTedarikciIsim = document.getElementById('yeni-tedarikci-isim').value.trim();
-    if (!yeniTedarikciIsim) {
-        gosterMesaj("Lütfen bir tedarikçi adı girin.", "warning");
-        return;
-    }
-    try {
-        const response = await fetch('/api/tedarikci_ekle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isim: yeniTedarikciIsim })
-        });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj("Tedarikçi başarıyla eklendi.", "success");
-            document.getElementById('yeni-tedarikci-isim').value = '';
-            await tedarikcileriYukle(); // Tedarikçi listesini yenile
-        } else {
-            gosterMesaj(result.error || "Tedarikçi eklenirken bir hata oluştu.", "danger");
-        }
-    } catch (error) {
-        console.error("Tedarikçi eklenirken hata:", error);
-        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
-    }
-}
