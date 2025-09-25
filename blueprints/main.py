@@ -313,16 +313,16 @@ def export_csv():
         print(f"CSV Dışa Aktarma Hatası: {e}")
         return jsonify({"error": "Rapor oluşturulurken bir hata oluştu."}), 500
 
+# YENİ KODU EKLE
 @main_bp.route('/api/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
     try:
         sirket_id = session['user']['sirket_id']
-        # Değişiklik burada: Artık tedarikçinin tüm bilgilerini (*) çekiyoruz.
+        # Değişiklik: Artık sadece id ve isim değil, tüm sütunları (*) çekiyoruz.
         tedarikciler_response = supabase.table('tedarikciler').select('*').eq('sirket_id', sirket_id).execute()
         tedarikciler = tedarikciler_response.data
         
-        # Bu kısım süt ve girdi sayılarını hesaplamak için aynı kalıyor
         girdiler_response = supabase.table('sut_girdileri').select('tedarikci_id, litre').eq('sirket_id', sirket_id).execute()
         girdiler_by_tedarikci = {}
         for girdi in girdiler_response.data:
@@ -332,7 +332,6 @@ def get_tedarikciler_liste():
             girdiler_by_tedarikci[tid]['toplam_litre'] += girdi['litre']
             girdiler_by_tedarikci[tid]['girdi_sayisi'] += 1
 
-        # Her bir tedarikçiye hesaplanan süt bilgilerini ekliyoruz
         for t in tedarikciler:
             stats = girdiler_by_tedarikci.get(t['id'], {'toplam_litre': 0, 'girdi_sayisi': 0})
             t.update(stats)
@@ -344,10 +343,10 @@ def get_tedarikciler_liste():
         return jsonify({"error": "Veri alınırken sunucu hatası oluştu."}), 500
 
 
-
 #yeni eklenenler#
 
-# YENİ FONKSİYON 1
+# YENİ FONKSİYONLARI BU KISMA EKLE
+
 @main_bp.route('/api/tedarikci_ekle', methods=['POST'])
 @login_required
 @lisans_kontrolu
@@ -371,8 +370,7 @@ def add_tedarikci():
     except Exception as e:
         print(f"Tedarikçi ekleme hatası: {e}")
         return jsonify({"error": "Tedarikçi eklenirken bir hata oluştu."}), 500
-    
-# YENİ FONKSİYON 2
+
 @main_bp.route('/api/tedarikci_duzenle/<int:id>', methods=['PUT'])
 @login_required
 @lisans_kontrolu
@@ -382,7 +380,6 @@ def update_tedarikci(id):
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
 
-        # Güvenlik kontrolü: Kullanıcı sadece kendi şirketinin tedarikçisini güncelleyebilir.
         tedarikci = supabase.table('tedarikciler').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
         if not tedarikci.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
@@ -397,8 +394,7 @@ def update_tedarikci(id):
     except Exception as e:
         print(f"Tedarikçi güncelleme hatası: {e}")
         return jsonify({"error": "Güncelleme sırasında bir hata oluştu."}), 500
-    
-# YENİ FONKSİYON 3
+
 @main_bp.route('/api/tedarikci_sil/<int:id>', methods=['DELETE'])
 @login_required
 @lisans_kontrolu
@@ -406,23 +402,17 @@ def update_tedarikci(id):
 def delete_tedarikci(id):
     try:
         sirket_id = session['user']['sirket_id']
-        # Güvenlik kontrolü: Kullanıcı sadece kendi şirketinin tedarikçisini silebilir.
         tedarikci = supabase.table('tedarikciler').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
         if not tedarikci.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
         
-        # Tedarikçiyi sil. Veritabanındaki CASCADE ayarı sayesinde bu tedarikçiye ait
-        # tüm süt ve yem girdileri de otomatik olarak silinecektir.
         supabase.table('tedarikciler').delete().eq('id', id).execute()
         return jsonify({"message": "Tedarikçi başarıyla silindi."})
     except Exception as e:
         print(f"Tedarikçi silme hatası: {e}")
-        # Eğer CASCADE ayarında bir sorun olursa veya veritabanı hatası alınırsa
         if 'violates foreign key constraint' in str(e).lower():
-            return jsonify({"error": "Bu tedarikçiye ait girdiler olduğu için silinemiyor."}), 409
+            return jsonify({"error": "Bu tedarikçiye ait süt veya yem girdisi olduğu için silinemiyor."}), 409
         return jsonify({"error": "Silme işlemi sırasında bir hata oluştu."}), 500
-
-
 #yeni eklenenler#
 
 
