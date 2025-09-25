@@ -1,16 +1,15 @@
-# blueprints/yem.py
 from flask import Blueprint, jsonify, render_template, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase
 from datetime import datetime
-from decimal import Decimal # BU SATIR EKLENDİ
+from decimal import Decimal
 
-# Yem blueprint'ini oluşturuyoruz.
+# Blueprint'i bir URL ön eki ile oluşturuyoruz. Artık tüm URL'ler /yem ile başlayacak.
 yem_bp = Blueprint('yem', __name__, url_prefix='/yem')
 
 # --- ARAYÜZ SAYFALARI ---
 
-@yem_bp.route('/yonetim')
+@yem_bp.route('/yonetim') # URL artık -> /yem/yonetim
 @login_required
 @lisans_kontrolu
 def yem_yonetimi_sayfasi():
@@ -20,7 +19,7 @@ def yem_yonetimi_sayfasi():
 # --- API UÇ NOKTALARI ---
 
 # Yem Ürünleri API'leri
-@yem_bp.route('/api/urunler', methods=['GET'])
+@yem_bp.route('/api/urunler', methods=['GET']) # URL artık -> /yem/api/urunler
 @login_required
 def get_yem_urunleri():
     """Şirkete ait tüm yem ürünlerini listeler."""
@@ -32,7 +31,7 @@ def get_yem_urunleri():
         print(f"Yem ürünleri listeleme hatası: {e}")
         return jsonify({"error": "Ürünler listelenirken bir sunucu hatası oluştu."}), 500
 
-@yem_bp.route('/api/urunler', methods=['POST'])
+@yem_bp.route('/api/urunler', methods=['POST']) # URL artık -> /yem/api/urunler
 @login_required
 @modification_allowed
 def add_yem_urunu():
@@ -41,7 +40,6 @@ def add_yem_urunu():
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
         
-        # Gelen verilerin doğruluğunu kontrol et
         yem_adi = data.get('yem_adi')
         stok = data.get('stok_miktari_kg')
         fiyat = data.get('birim_fiyat')
@@ -62,7 +60,7 @@ def add_yem_urunu():
         return jsonify({"error": "Ürün eklenirken bir sunucu hatası oluştu."}), 500
 
 # Yem İşlemleri API'leri
-@yem_bp.route('/api/islemler', methods=['POST'])
+@yem_bp.route('/api/islemler', methods=['POST']) # URL artık -> /yem/api/islemler
 @login_required
 @modification_allowed
 def add_yem_islemi():
@@ -75,7 +73,6 @@ def add_yem_islemi():
         yem_urun_id = data.get('yem_urun_id')
         tedarikci_id = data.get('tedarikci_id')
         
-        # Gelen miktarı Decimal'e çeviriyoruz
         try:
             miktar_kg = Decimal(data.get('miktar_kg'))
             if miktar_kg <= 0:
@@ -86,7 +83,6 @@ def add_yem_islemi():
         if not yem_urun_id or not tedarikci_id:
              return jsonify({"error": "Tedarikçi ve yem ürünü seçimi zorunludur."}), 400
 
-        # 1. Yem ürününün güncel bilgilerini veritabanından al
         urun_res = supabase.table('yem_urunleri').select('stok_miktari_kg, birim_fiyat').eq('id', yem_urun_id).eq('sirket_id', sirket_id).single().execute()
         if not urun_res.data:
             return jsonify({"error": "Yem ürünü bulunamadı."}), 404
@@ -94,11 +90,9 @@ def add_yem_islemi():
         mevcut_stok = Decimal(urun_res.data['stok_miktari_kg'])
         birim_fiyat = Decimal(urun_res.data['birim_fiyat'])
 
-        # 2. Stok kontrolü yap
         if mevcut_stok < miktar_kg:
             return jsonify({"error": f"Yetersiz stok! Mevcut stok: {mevcut_stok} kg"}), 400
 
-        # 3. Yem işlemi kaydını oluştur
         toplam_tutar = miktar_kg * birim_fiyat
         yeni_islem = {
             "sirket_id": sirket_id,
@@ -112,12 +106,10 @@ def add_yem_islemi():
         }
         result = supabase.table('yem_islemleri').insert(yeni_islem).execute()
 
-        # 4. Stoktan düş
         yeni_stok = mevcut_stok - miktar_kg
         supabase.table('yem_urunleri').update({"stok_miktari_kg": yeni_stok}).eq('id', yem_urun_id).execute()
 
         return jsonify(result.data[0]), 201
-
     except Exception as e:
         print(f"Yem işlemi hatası: {e}")
         return jsonify({"error": "İşlem sırasında bir hata oluştu."}), 500
