@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Müstahsil Makbuzu</title>
     <style>
+        /* PDF için stiller. Google Fonts importu ve temel sayfa düzeni */
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
         
         body {
@@ -138,9 +139,9 @@
                     <td>{{ loop.index }}</td>
                     <td>{{ girdi.tarih }}</td>
                     <td>Soğutulmuş Çiğ İnek Sütü</td>
-                    <td class="text-right">{{ "%.2f"|format(girdi.litre) }} Lt.</td>
-                    <td class="text-right">{{ "%.2f"|format(girdi.fiyat) }} TL</td>
-                    <td class="text-right">{{ "%.2f"|format(girdi.tutar) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(girdi.litre | float) }} Lt.</td>
+                    <td class="text-right">{{ "%.2f"|format(girdi.fiyat | float) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(girdi.tutar | float) }} TL</td>
                 </tr>
                 {% else %}
                 <tr>
@@ -154,15 +155,15 @@
             <table class="summary-table">
                 <tr>
                     <td class="label">Mal Hizmet Toplam Tutarı</td>
-                    <td class="text-right">{{ "%.2f"|format(ozet.mal_hizmet_toplam) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(ozet.mal_hizmet_toplam | float) }} TL</td>
                 </tr>
                 <tr>
-                    <td class="label">G.V. Stopajı (%{{ stopaj_orani * 100 }})</td>
-                    <td class="text-right">{{ "%.2f"|format(ozet.stopaj_tutari) }} TL</td>
+                    <td class="label">G.V. Stopajı (%{{ (stopaj_orani * 100) | round(0) }})</td>
+                    <td class="text-right">{{ "%.2f"|format(ozet.stopaj_tutari | float) }} TL</td>
                 </tr>
                 <tr class="total">
                     <td class="label">ÖDENECEK TUTAR</td>
-                    <td class="text-right">{{ "%.2f"|format(ozet.net_odenecek) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(ozet.net_odenecek | float) }} TL</td>
                 </tr>
             </table>
         </div>
