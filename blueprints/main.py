@@ -76,7 +76,7 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
 
         # Tedarikçi ve Şirket bilgilerini çek
         tedarikci_res = supabase.table('tedarikciler').select('isim, tc_no, adres').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
-        sirket_res = supabase.table('sirketler').select('sirket_adi, adres, vergi_dairesi, vergi_no').eq('id', sirket_id).single().execute()
+        sirket_res = supabase.table('sirketler').select('sirket_adi, adres, vergi_no').eq('id', sirket_id).single().execute()
 
         if not tedarikci_res.data or not sirket_res.data:
             return jsonify({"error": "Gerekli şirket veya tedarikçi bilgisi bulunamadı."}), 404
