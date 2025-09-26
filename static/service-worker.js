@@ -1,23 +1,30 @@
 // static/service-worker.js
 // Tarayıcının bu yeni dosyayı kesinlikle kurmasını sağlamak için sürümü bir kez daha artırıyoruz.
-const CACHE_NAME = 'sut-takip-cache-v8'; 
+const CACHE_NAME = 'sut-takip-cache-v9'; 
 const APP_SHELL_URL = '/';
 const LOGIN_URL = '/login';
+const REGISTER_URL = '/register'; // YENİ: Kayıt sayfasını da ekleyelim.
 const OFFLINE_URL = '/offline';
 
 // Uygulamanın çevrimdışı çalışabilmesi için önbelleğe alınacak temel dosyalar
 const ASSETS_TO_CACHE = [
+    // Temel Sayfalar
     APP_SHELL_URL,
     LOGIN_URL,
+    REGISTER_URL, // YENİ
     OFFLINE_URL,
+    
+    // Temel Stil ve Scriptler
     '/static/style.css',
     '/static/theme.js',
     '/static/js/utils.js',
     '/static/js/main.js',
     '/static/js/login.js',
+    '/static/js/register.js', // YENİ
     '/static/js/offline.js',
     '/static/images/icon.png',
-    // --- CDN DOSYALARI ---
+    
+    // CDN Dosyaları (Kütüphaneler)
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css',
@@ -26,7 +33,7 @@ const ASSETS_TO_CACHE = [
     'https://cdn.jsdelivr.net/npm/flatpickr',
     'https://unpkg.com/dexie@3/dist/dexie.js',
     
-    // YENİ EKLENEN İKON DOSYALARI (SORUNUN ÇÖZÜMÜ)
+    // İKON FONT DOSYALARI (ANA SORUNUN ÇÖZÜMÜ)
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?v=1.11.3',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff?v=1.11.3'
@@ -38,7 +45,6 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('Cache açıldı ve temel varlıklar önbelleğe alınıyor.');
-        // addAll atomik bir işlemdir. Biri bile başarısız olursa, hiçbiri eklenmez.
         return cache.addAll(ASSETS_TO_CACHE);
       })
   );
