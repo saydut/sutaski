@@ -154,89 +154,92 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
     if (!tarih) {
         tarih = tarihFiltreleyici.selectedDates[0] ? getLocalDateString(tarihFiltreleyici.selectedDates[0]) : getLocalDateString(new Date());
     }
-    
+
     const listeElementi = document.getElementById('girdiler-listesi');
     listeElementi.innerHTML = '<div class="text-center p-5"><div class="spinner-border"></div></div>';
-    
-    try {
-        // Sunucudan verileri çek
-        let url = `/api/sut_girdileri?tarih=${tarih}&sayfa=${sayfa}`;
-        const response = await fetch(url);
-        const sunucuVerisi = await response.json();
 
-        if (!response.ok) {
-            // İnternet yoksa ve hata geldiyse, sadece yerel verileri göster
-            if (!navigator.onLine) {
-                 sunucuVerisi.girdiler = [];
-                 sunucuVerisi.toplam_girdi_sayisi = 0;
-            } else {
-                throw new Error(sunucuVerisi.error || 'Girdiler yüklenemedi.');
+    let sunucuVerisi = { girdiler: [], toplam_girdi_sayisi: 0 };
+    let hataMesaji = null;
+
+    // 1. ADIM: Sadece internet varsa sunucudan veri çekmeyi dene
+    if (navigator.onLine) {
+        try {
+            const url = `/api/sut_girdileri?tarih=${tarih}&sayfa=${sayfa}`;
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Girdiler sunucudan yüklenemedi.');
             }
+            sunucuVerisi = data; // Başarılı olursa sunucu verisini al
+        } catch (error) {
+            console.error("Sunucudan veri çekerken hata:", error);
+            // İnternet var gibi görünüp de sunucuya ulaşılamazsa hata mesajını sakla
+            hataMesaji = "Sunucuya ulaşılamıyor. Lütfen internet bağlantınızı kontrol edin.";
         }
-        
-        let tumGirdiler = sunucuVerisi.girdiler;
-        let toplamGirdi = sunucuVerisi.toplam_girdi_sayisi;
+    }
 
-        // Sadece bugünün verileri gösterilirken ve ilk sayfadayken bekleyen girdileri ekle
-        const bugunTarihi = getLocalDateString(new Date());
-        if (tarih === bugunTarihi && sayfa === 1) {
+    // 2. ADIM: Her zaman yereldeki (çevrimdışı kaydedilmiş) verileri de al
+    let tumGirdiler = sunucuVerisi.girdiler;
+    let toplamGirdi = sunucuVerisi.toplam_girdi_sayisi;
+    const bugunTarihi = getLocalDateString(new Date());
+
+    // Sadece bugünün tarihine bakılırken ve ilk sayfadayken bekleyen girdileri ekle
+    if (tarih === bugunTarihi && sayfa === 1) {
+        try {
             const bekleyenGirdiler = await bekleyenGirdileriGetir();
-            
-            // Bekleyen girdileri, sunucudan gelen girdilerle aynı formata getir
             const islenmisBekleyenler = bekleyenGirdiler.map(girdi => {
-                // Tedarikçi adını global listeden bul
                 const tedarikci = tumTedarikciler.find(t => t.id === girdi.tedarikci_id);
-                const tedarikciAdi = tedarikci ? tedarikci.isim : `Bilinmeyen Tedarikçi (ID: ${girdi.tedarikci_id})`;
-
+                const tedarikciAdi = tedarikci ? tedarikci.isim : `Bilinmeyen (ID: ${girdi.tedarikci_id})`;
                 return {
-                    id: `offline-${girdi.id}`, // Benzersiz bir ID
+                    id: `offline-${girdi.id}`,
                     litre: girdi.litre,
                     fiyat: girdi.fiyat,
                     taplanma_tarihi: girdi.eklendigi_zaman,
                     duzenlendi_mi: false,
-                    isOffline: true, // Çevrimdışı olduğunu belirtmek için özel işaret
+                    isOffline: true,
                     kullanicilar: { kullanici_adi: 'Siz (Beklemede)' },
                     tedarikciler: { isim: tedarikciAdi }
                 };
             });
-
-            // Bekleyenleri ana listenin başına ekle ve toplam sayıyı güncelle
+            // Bekleyenleri ana listenin başına ekle
             tumGirdiler = [...islenmisBekleyenler.reverse(), ...tumGirdiler];
             toplamGirdi += islenmisBekleyenler.length;
+        } catch (dbError) {
+            console.error("Yerel veritabanından okuma hatası:", dbError);
+            hataMesaji = (hataMesaji ? hataMesaji + "\n" : "") + "Yerel veriler okunamadı.";
         }
-
-        listeElementi.innerHTML = '';
-        if (tumGirdiler.length === 0) {
-            listeElementi.innerHTML = '<div class="list-group-item">Bu tarih için girdi bulunamadı.</div>';
-        } else {
-            tumGirdiler.forEach(girdi => {
-                const tarihObj = new Date(girdi.taplanma_tarihi);
-                const formatliTarih = !isNaN(tarihObj.getTime()) ? `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}` : 'Geçersiz Saat';
-                const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark ms-2">Düzenlendi</span>` : '';
-                
-                // Çevrimdışı girdiler için özel bekleme etiketi
-                const cevrimdisiEtiketi = girdi.isOffline ? `<span class="badge bg-info text-dark ms-2" title="İnternet geldiğinde gönderilecek"><i class="bi bi-cloud-upload"></i> Beklemede</span>` : '';
-
-                let actionButtons = '';
-                // Sadece çevrimiçi ve yetkili kullanıcılar için butonları göster
-                if (!girdi.isOffline && USER_ROLE !== 'muhasebeci') {
-                    actionButtons = `
-                        <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="duzenlemeModaliniAc(${girdi.id}, ${girdi.litre})"><i class="bi bi-pencil"></i></button>
-                        <button class="btn btn-sm btn-outline-danger border-0" title="Sil" onclick="silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>`;
-                }
-                
-                const gecmisButonu = !girdi.isOffline ? `<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button>` : '';
-
-                const fiyatBilgisi = girdi.fiyat ? `<span class="text-success">@ ${parseFloat(girdi.fiyat).toFixed(2)} TL</span>` : '';
-                const girdiElementi = `<div class="list-group-item"><div class="d-flex w-100 justify-content-between flex-wrap"><h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${fiyatBilgisi} ${duzenlendiEtiketi} ${cevrimdisiEtiketi}</h5><div class="btn-group">${actionButtons} ${gecmisButonu}</div></div><p class="mb-1 girdi-detay">Toplayan: ${girdi.kullanicilar.kullanici_adi} | Saat: ${formatliTarih}</p></div>`;
-                listeElementi.innerHTML += girdiElementi;
-            });
-        }
-        sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, tarih));
-    } catch (error) { 
-        console.error("Girdiler gösterilirken hata oluştu:", error); 
-        listeElementi.innerHTML = `<p class="text-danger p-3">${error.message}</p>`; 
     }
+
+    // 3. ADIM: Sonuçları ekrana yazdır
+    listeElementi.innerHTML = '';
+    if (tumGirdiler.length === 0) {
+        if (!navigator.onLine) {
+            listeElementi.innerHTML = '<div class="list-group-item">Çevrimdışısınız. Bu tarih için gösterilecek yerel girdi bulunamadı.</div>';
+        } else if (hataMesaji) {
+            listeElementi.innerHTML = `<p class="text-danger p-3">${hataMesaji}</p>`;
+        } else {
+            listeElementi.innerHTML = '<div class="list-group-item">Bu tarih için girdi bulunamadı.</div>';
+        }
+    } else {
+        tumGirdiler.forEach(girdi => {
+            const tarihObj = new Date(girdi.taplanma_tarihi);
+            const formatliTarih = !isNaN(tarihObj.getTime()) ? `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}` : 'Geçersiz Saat';
+            const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark ms-2">Düzenlendi</span>` : '';
+            const cevrimdisiEtiketi = girdi.isOffline ? `<span class="badge bg-info text-dark ms-2" title="İnternet geldiğinde gönderilecek"><i class="bi bi-cloud-upload"></i> Beklemede</span>` : '';
+            let actionButtons = '';
+            if (!girdi.isOffline && USER_ROLE !== 'muhasebeci') {
+                actionButtons = `
+                    <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="duzenlemeModaliniAc(${girdi.id}, ${girdi.litre})"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-danger border-0" title="Sil" onclick="silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>`;
+            }
+            const gecmisButonu = !girdi.isOffline ? `<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button>` : '';
+            const fiyatBilgisi = girdi.fiyat ? `<span class="text-success">@ ${parseFloat(girdi.fiyat).toFixed(2)} TL</span>` : '';
+            const girdiElementi = `<div class="list-group-item"><div class="d-flex w-100 justify-content-between flex-wrap"><h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${fiyatBilgisi} ${duzenlendiEtiketi} ${cevrimdisiEtiketi}</h5><div class="btn-group">${actionButtons} ${gecmisButonu}</div></div><p class="mb-1 girdi-detay">Toplayan: ${girdi.kullanicilar.kullanici_adi} | Saat: ${formatliTarih}</p></div>`;
+            listeElementi.innerHTML += girdiElementi;
+        });
+    }
+    sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, tarih));
 }
 
 // --- Diğer tüm fonksiyonlar aynı kalacak ---
