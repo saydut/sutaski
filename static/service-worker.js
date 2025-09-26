@@ -76,8 +76,10 @@ self.addEventListener('fetch', event => {
                 } catch (error) {
                     console.log('Ağ hatası, önbellekten sunuluyor.', error);
                     const cache = await caches.open(CACHE_NAME);
-                    const cachedResponse = await cache.match(APP_SHELL_URL);
-                    return cachedResponse || await cache.match(OFFLINE_URL);
+                    
+                    // İstenen sayfa önbellekte varsa onu, yoksa ana kabuğu, o da yoksa offline sayfasını ver
+                    const cachedResponse = await cache.match(event.request);
+                    return cachedResponse || await cache.match(APP_SHELL_URL) || await cache.match(OFFLINE_URL);
                 }
             })()
         );
