@@ -18,6 +18,13 @@ def create_app():
     app = Flask(__name__, template_folder='templates', static_folder='static')
     app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")
 
+    # YENİ: Uygulama genelinde kullanılacak değişkenleri context'e ekle
+    @app.context_processor
+    def inject_global_vars():
+        return {
+            'APP_VERSION': '1.2.0' # Güncelleme yaptıkça burayı değiştir
+        }
+
     # Eklentileri başlat
     bcrypt.init_app(app)
 
