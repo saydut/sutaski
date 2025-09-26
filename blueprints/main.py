@@ -660,6 +660,11 @@ def delete_sut_girdisi(girdi_id):
         mevcut_girdi_res = supabase.table('sut_girdileri').select('sirket_id').eq('id', girdi_id).single().execute()
         if not mevcut_girdi_res.data or mevcut_girdi_res.data['sirket_id'] != session['user']['sirket_id']:
              return jsonify({"error": "Girdi bulunamadı veya silme yetkiniz yok."}), 403
+        
+        # DÜZELTME: Ana girdiyi silmeden önce, bu girdiye ait tüm geçmiş kayıtlarını siliyoruz.
+        supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
+
+        # Şimdi ana girdiyi güvenle silebiliriz.
         supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
         return jsonify({"message": "Girdi başarıyla silindi."}), 200
     except Exception as e:
@@ -688,4 +693,3 @@ def change_password():
 @main_bp.route('/offline')
 def offline_page():
     return render_template('offline.html')
-
