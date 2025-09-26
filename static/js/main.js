@@ -121,10 +121,10 @@ async function ozetVerileriniYukle(tarih = null) {
     if (tarih && tarih !== bugun) {
         const [yil, ay, gun] = tarih.split('-');
         ozetBaslik.textContent = `${gun}.${ay}.${yil} TOPLAMI`;
-        girdiSayisiBaslik.textContent = 'O GÜNÜN GİRDİSİ'; // YENİ EKLENDİ
+        girdiSayisiBaslik.textContent = `${gun}.${ay}.${yil} TOPLAM GİRDİ`; // GÜNCELLENDİ
     } else {
         ozetBaslik.textContent = 'BUGÜNKÜ TOPLAM SÜT';
-        girdiSayisiBaslik.textContent = 'BUGÜNKÜ TOPLAM GİRDİ'; // YENİ EKLENDİ
+        girdiSayisiBaslik.textContent = 'BUGÜNKÜ TOPLAM GİRDİ';
     }
 
     try {
