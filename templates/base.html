@@ -32,6 +32,11 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    
+    <!-- Çevrimdışı veritabanı için Dexie kütüphanesini ekliyoruz -->
+    <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
+    <!-- Yeni çevrimdışı mantığını içeren JS dosyamızı ekliyoruz -->
+    <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
 
     <script>
         if ('serviceWorker' in navigator) {
@@ -203,3 +208,4 @@
     </div>
 </body>
 </html>
+

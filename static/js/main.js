@@ -5,6 +5,9 @@ let tedarikciChart = null;
 let tarihFiltreleyici = null;
 let tedarikciSecici = null;
 
+// Eklenen Global Değişken: Tedarikçi listesini burada saklayacağız.
+let tumTedarikciler = [];
+
 let mevcutSayfa = 1;
 const girdilerSayfaBasi = 6;
 
@@ -155,40 +158,84 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
     const listeElementi = document.getElementById('girdiler-listesi');
     listeElementi.innerHTML = '<div class="text-center p-5"><div class="spinner-border"></div></div>';
     
-    let url = `/api/sut_girdileri?tarih=${tarih}&sayfa=${sayfa}`;
     try {
+        // Sunucudan verileri çek
+        let url = `/api/sut_girdileri?tarih=${tarih}&sayfa=${sayfa}`;
         const response = await fetch(url);
-        const veri = await response.json();
-        if (response.ok) {
-            listeElementi.innerHTML = '';
-            const girdiler = veri.girdiler;
-            const toplamGirdi = veri.toplam_girdi_sayisi;
+        const sunucuVerisi = await response.json();
 
-            if (girdiler.length === 0) {
-                listeElementi.innerHTML = '<div class="list-group-item">Bu tarih için girdi bulunamadı.</div>';
+        if (!response.ok) {
+            // İnternet yoksa ve hata geldiyse, sadece yerel verileri göster
+            if (!navigator.onLine) {
+                 sunucuVerisi.girdiler = [];
+                 sunucuVerisi.toplam_girdi_sayisi = 0;
             } else {
-                girdiler.forEach(girdi => {
-                    const tarihObj = new Date(girdi.taplanma_tarihi);
-                    const formatliTarih = !isNaN(tarihObj.getTime()) ? `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}` : 'Geçersiz Saat';
-                    const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark ms-2">Düzenlendi</span>` : '';
-                    let actionButtons = '';
-                    if (USER_ROLE !== 'muhasebeci') {
-                        actionButtons = `
-                            <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="duzenlemeModaliniAc(${girdi.id}, ${girdi.litre})"><i class="bi bi-pencil"></i></button>
-                            <button class="btn btn-sm btn-outline-danger border-0" title="Sil" onclick="silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>`;
-                    }
-                    const fiyatBilgisi = girdi.fiyat ? `<span class="text-success">@ ${parseFloat(girdi.fiyat).toFixed(2)} TL</span>` : '';
-                    const girdiElementi = `<div class="list-group-item"><div class="d-flex w-100 justify-content-between"><h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${fiyatBilgisi} ${duzenlendiEtiketi}</h5><div>${actionButtons}<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button></div></div><p class="mb-1 girdi-detay">Toplayan: ${girdi.kullanicilar.kullanici_adi} | Saat: ${formatliTarih}</p></div>`;
-                    listeElementi.innerHTML += girdiElementi;
-                });
+                throw new Error(sunucuVerisi.error || 'Girdiler yüklenemedi.');
             }
-            sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, tarih));
-        } else { 
-            listeElementi.innerHTML = `<p class="text-danger p-3">${veri.error || 'Girdiler yüklenemedi.'}</p>`; 
         }
+        
+        let tumGirdiler = sunucuVerisi.girdiler;
+        let toplamGirdi = sunucuVerisi.toplam_girdi_sayisi;
+
+        // Sadece bugünün verileri gösterilirken ve ilk sayfadayken bekleyen girdileri ekle
+        const bugunTarihi = getLocalDateString(new Date());
+        if (tarih === bugunTarihi && sayfa === 1) {
+            const bekleyenGirdiler = await bekleyenGirdileriGetir();
+            
+            // Bekleyen girdileri, sunucudan gelen girdilerle aynı formata getir
+            const islenmisBekleyenler = bekleyenGirdiler.map(girdi => {
+                // Tedarikçi adını global listeden bul
+                const tedarikci = tumTedarikciler.find(t => t.id === girdi.tedarikci_id);
+                const tedarikciAdi = tedarikci ? tedarikci.isim : `Bilinmeyen Tedarikçi (ID: ${girdi.tedarikci_id})`;
+
+                return {
+                    id: `offline-${girdi.id}`, // Benzersiz bir ID
+                    litre: girdi.litre,
+                    fiyat: girdi.fiyat,
+                    taplanma_tarihi: girdi.eklendigi_zaman,
+                    duzenlendi_mi: false,
+                    isOffline: true, // Çevrimdışı olduğunu belirtmek için özel işaret
+                    kullanicilar: { kullanici_adi: 'Siz (Beklemede)' },
+                    tedarikciler: { isim: tedarikciAdi }
+                };
+            });
+
+            // Bekleyenleri ana listenin başına ekle ve toplam sayıyı güncelle
+            tumGirdiler = [...islenmisBekleyenler.reverse(), ...tumGirdiler];
+            toplamGirdi += islenmisBekleyenler.length;
+        }
+
+        listeElementi.innerHTML = '';
+        if (tumGirdiler.length === 0) {
+            listeElementi.innerHTML = '<div class="list-group-item">Bu tarih için girdi bulunamadı.</div>';
+        } else {
+            tumGirdiler.forEach(girdi => {
+                const tarihObj = new Date(girdi.taplanma_tarihi);
+                const formatliTarih = !isNaN(tarihObj.getTime()) ? `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}` : 'Geçersiz Saat';
+                const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark ms-2">Düzenlendi</span>` : '';
+                
+                // Çevrimdışı girdiler için özel bekleme etiketi
+                const cevrimdisiEtiketi = girdi.isOffline ? `<span class="badge bg-info text-dark ms-2" title="İnternet geldiğinde gönderilecek"><i class="bi bi-cloud-upload"></i> Beklemede</span>` : '';
+
+                let actionButtons = '';
+                // Sadece çevrimiçi ve yetkili kullanıcılar için butonları göster
+                if (!girdi.isOffline && USER_ROLE !== 'muhasebeci') {
+                    actionButtons = `
+                        <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="duzenlemeModaliniAc(${girdi.id}, ${girdi.litre})"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-sm btn-outline-danger border-0" title="Sil" onclick="silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>`;
+                }
+                
+                const gecmisButonu = !girdi.isOffline ? `<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button>` : '';
+
+                const fiyatBilgisi = girdi.fiyat ? `<span class="text-success">@ ${parseFloat(girdi.fiyat).toFixed(2)} TL</span>` : '';
+                const girdiElementi = `<div class="list-group-item"><div class="d-flex w-100 justify-content-between flex-wrap"><h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${fiyatBilgisi} ${duzenlendiEtiketi} ${cevrimdisiEtiketi}</h5><div class="btn-group">${actionButtons} ${gecmisButonu}</div></div><p class="mb-1 girdi-detay">Toplayan: ${girdi.kullanicilar.kullanici_adi} | Saat: ${formatliTarih}</p></div>`;
+                listeElementi.innerHTML += girdiElementi;
+            });
+        }
+        sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, tarih));
     } catch (error) { 
         console.error("Girdiler gösterilirken hata oluştu:", error); 
-        listeElementi.innerHTML = '<p class="text-danger p-3">Girdiler yüklenirken bir hata oluştu.</p>'; 
+        listeElementi.innerHTML = `<p class="text-danger p-3">${error.message}</p>`; 
     }
 }
 
@@ -259,6 +306,9 @@ async function tedarikcileriYukle() {
     try {
         const response = await fetch('/api/tedarikciler_liste');
         const tedarikciler = await response.json();
+        // Tedarikçi listesini global değişkende sakla
+        tumTedarikciler = tedarikciler; 
+        
         tedarikciSecici.clear();
         tedarikciSecici.clearOptions();
         const options = tedarikciler.map(t => ({ value: t.id, text: t.isim }));
@@ -277,14 +327,31 @@ async function sutGirdisiEkle() {
     if (!tedarikciId || !litre || isNaN(parseFloat(litre)) || !fiyat || isNaN(parseFloat(fiyat))) {
         gosterMesaj("Lütfen tüm alanları doğru doldurun.", "warning"); return;
     }
+    
+    const yeniGirdi = {
+        tedarikci_id: parseInt(tedarikciId),
+        litre: parseFloat(litre),
+        fiyat: parseFloat(fiyat)
+    };
+
+    // İnternet bağlantısını kontrol et
+    if (!navigator.onLine) {
+        // Çevrimdışı kaydet
+        const basarili = await kaydetCevrimdisi(yeniGirdi);
+        if (basarili) {
+            // Formu temizle ve listeyi anında yenile
+            document.getElementById('litre-input').value = '';
+            document.getElementById('fiyat-input').value = '';
+            tedarikciSecici.clear();
+            await girdileriGoster(); // Sayfayı yenilemeye gerek kalmadan listeyi güncelle
+        }
+        return;
+    }
+
     try {
         const response = await fetch('/api/sut_girdisi_ekle', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                tedarikci_id: parseInt(tedarikciId), 
-                litre: parseFloat(litre),
-                fiyat: parseFloat(fiyat)
-            })
+            body: JSON.stringify(yeniGirdi)
         });
         const errorData = await response.json();
         if (response.ok) {
@@ -498,4 +565,5 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
+
 
