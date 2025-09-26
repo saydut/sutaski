@@ -101,23 +101,30 @@ async function baslangicVerileriniYukle() {
     girdileriGoster(1);
 }
 
-// DÜZELTİLDİ: Artık yeni API formatından doğru veriyi okuyor.
+// GÜNCELLENDİ: "Toplam Girdi" sayısının her zaman seçili tarihe göre gelmesi sağlandı.
 async function ozetVerileriniYukle(tarih = null) {
     const toplamLitrePanel = document.getElementById('toplam-litre-panel');
     const girdiSayisiPanel = document.getElementById('bugunku-girdi-sayisi');
     const ozetBaslik = document.getElementById('ozet-panel-baslik');
+    const girdiSayisiBaslik = document.getElementById('girdi-sayisi-baslik'); // YENİ EKLENDİ
     toplamLitrePanel.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
     girdiSayisiPanel.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
+
+    // GÜNCELLEME: Tarih parametresi boş geldiğinde (sayfa ilk yüklendiğinde) bugünün tarihini kullanarak
+    // her zaman belirli bir günün verisinin çekilmesini sağlıyoruz.
+    const effectiveDate = tarih || getLocalDateString(new Date());
     
-    let url = `/api/gunluk_ozet${tarih ? `?tarih=${tarih}` : ''}`;
-    let girdiSayisiUrl = `/api/sut_girdileri${tarih ? `?tarih=${tarih}` : ''}`;
+    let url = `/api/gunluk_ozet?tarih=${effectiveDate}`;
+    let girdiSayisiUrl = `/api/sut_girdileri?tarih=${effectiveDate}`;
     
     const bugun = getLocalDateString();
     if (tarih && tarih !== bugun) {
         const [yil, ay, gun] = tarih.split('-');
         ozetBaslik.textContent = `${gun}.${ay}.${yil} TOPLAMI`;
+        girdiSayisiBaslik.textContent = 'O GÜNÜN GİRDİSİ'; // YENİ EKLENDİ
     } else {
         ozetBaslik.textContent = 'BUGÜNKÜ TOPLAM SÜT';
+        girdiSayisiBaslik.textContent = 'BUGÜNKÜ TOPLAM GİRDİ'; // YENİ EKLENDİ
     }
 
     try {
@@ -138,7 +145,6 @@ async function ozetVerileriniYukle(tarih = null) {
         girdiSayisiPanel.textContent = 'Hata';
     }
 }
-
 
 async function girdileriGoster(sayfa = 1, tarih = null) {
     mevcutSayfa = sayfa;
@@ -492,3 +498,4 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
+
