@@ -23,6 +23,16 @@
                     <span class="text-secondary d-block" style="font-size: 0.85rem;">Hoş geldin, <strong>{{ session.get('user', {}).get('kullanici_adi') }}</strong></span>
                     <span class="text-secondary d-block" style="font-size: 0.85rem;">Şirket: {{ session.get('user', {}).get('sirket_adi') }}</span>
                 </div>
+
+                <!-- ÇEVRİMDIŞI DURUM GÖSTERGESİ (DOĞRU YER) -->
+                <div id="offline-status-container" class="d-flex align-items-center d-none">
+                    <span id="offline-status-badge" class="badge rounded-pill bg-warning text-dark me-2">
+                        <i class="bi bi-cloud-slash-fill me-1"></i> Çevrimdışı
+                    </span>
+                    <span id="sync-status-badge" class="badge rounded-pill bg-info me-2">
+                        <i class="bi bi-arrow-repeat me-1"></i> <span id="sync-count">0</span> bekleyen girdi
+                    </span>
+                </div>
                 
                 <div class="btn-group">
                     <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
@@ -61,7 +71,7 @@
             <div class="col-lg-4 col-12">
                 <div class="row g-3 mb-3">
                     <div class="col-lg-12 col-6"><div class="card p-3 text-center"><div id="ozet-panel-baslik" class="ozet-baslik">BUGÜNKÜ TOPLAM SÜT</div><div id="toplam-litre-panel" class="ozet-deger"><div class="spinner-border spinner-border-sm" role="status"></div></div></div></div>
-                    <div class="col-lg-12 col-6"><div class="card p-3 text-center"><div id="girdi-sayisi-baslik" class="ozet-baslik">TOPLAM GİRDİ</div><div class="ozet-deger" id="bugunku-girdi-sayisi"><div class="spinner-border spinner-border-sm" role="status"></div></div></div></div>
+                    <div class="col-lg-12 col-6"><div class="card p-3 text-center"><div id="girdi-sayisi-baslik" class="ozet-baslik">BUGÜNKÜ TOPLAM GİRDİ</div><div class="ozet-deger" id="bugunku-girdi-sayisi"><div class="spinner-border spinner-border-sm" role="status"></div></div></div></div>
                 </div>
                 {% if session.get('user', {}).get('rol') != 'muhasebeci' %}
                 <div id="veri-giris-paneli">
@@ -75,24 +85,24 @@
                         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                             <h5 id="girdiler-baslik" class="mb-0">Bugünkü Girdiler</h5>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <div class="text-end d-none d-md-block">
-                        <span class="text-secondary d-block" style="font-size: 0.85rem;">Hoş geldin, <strong>{{ session.get('user', {}).get('kullanici_adi') }}</strong></span>
-                        <span class="text-secondary d-block" style="font-size: 0.85rem;">Şirket: {{ session.get('user', {}).get('sirket_adi') }}</span>
+                                <input type="text" class="form-control form-control-sm" id="tarih-filtre" style="width: auto;" placeholder="Tarih Seçin">
+                                <button class="btn btn-sm btn-info" onclick="girdileriFiltrele()">Filtrele</button>
+                                <button class="btn btn-sm btn-secondary" onclick="filtreyiTemizle()">Temizle</button>
+                                <button class="btn btn-sm btn-success" onclick="verileriDisaAktar()" title="Excel'e Aktar"><i class="bi bi-file-earmark-excel"></i> Aktar</button>
+                            </div>
+                        </div>
+                        <div id="girdiler-listesi" class="list-group" style="min-height: 480px; overflow-y: auto;"></div>
+                        <nav id="girdiler-sayfalama" class="d-flex justify-content-center mt-3"></nav>
                     </div>
-
-                    <!-- ÇEVRİMDIŞI DURUM GÖSTERGESİ EKLENDİ -->
-                    <div id="offline-status-container" class="d-flex align-items-center d-none">
-                        <span id="offline-status-badge" class="badge rounded-pill bg-warning text-dark me-2">
-                            <i class="bi bi-cloud-slash-fill me-1"></i> Çevrimdışı
-                        </span>
-                        <span id="sync-status-badge" class="badge rounded-pill bg-info me-2">
-                            <i class="bi bi-arrow-repeat me-1"></i> <span id="sync-count">0</span> bekleyen girdi
-                        </span>
-                    </div>
-                    
-                    <div class="btn-group">
-                        <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-lightning-charge-fill"></i> Hızlı İşlemler
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal fade" id="duzenleModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Girdiyi Düzenle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" id="edit-girdi-id"><div class="mb-2"><label for="edit-litre-input" class="form-label">Yeni Litre Değeri</label><input type="number" step="0.1" class="form-control form-control-sm" id="edit-litre-input"></div><div class="mb-2"><label for="edit-sebep-input" class="form-label">Düzenleme Sebebi</label><textarea class="form-control form-control-sm" id="edit-sebep-input" rows="2" placeholder="Neden düzenliyorsunuz?"></textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sutGirdisiDuzenle()">Kaydet</button></div></div></div></div>
+    <div class="modal fade" id="gecmisModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Girdi Düzenleme Geçmişi</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="gecmis-modal-body"></div></div></div></div>
+    <div class="modal fade" id="silmeOnayModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-warning">Silme Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Bu girdiyi silmek istediğinize emin misiniz?</p><input type="hidden" id="silinecek-girdi-id"></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-danger btn-sm" onclick="sutGirdisiSil()">Evet, Sil</button></div></div></div></div>
+    <div class="modal fade" id="sifreDegistirModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Şifre Değiştir</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-2"><label for="mevcut-sifre-input" class="form-label">Mevcut Şifreniz</label><input type="password" class="form-control form-control-sm" id="mevcut-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-input" class="form-label">Yeni Şifre</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-tekrar-input" class="form-label">Yeni Şifre (Tekrar)</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-tekrar-input"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sifreDegistir()">Kaydet</button></div></div></div></div>
 {% endblock %}
 
 {% block scripts %}
@@ -101,4 +111,3 @@
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% endblock %}
-
