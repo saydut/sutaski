@@ -22,7 +22,7 @@ def create_app():
     @app.context_processor
     def inject_global_vars():
         return {
-            'APP_VERSION': '1.2.0' # Güncelleme yaptıkça burayı değiştir
+            'APP_VERSION': '1.3.0' # Sürümü 1.3.0 olarak güncelledik
         }
 
     # Eklentileri başlat

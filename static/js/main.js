@@ -51,8 +51,38 @@ window.onload = async function() {
         });
     }
 
+    // YENİ: Sayfa yüklendiğinde lisans durumunu kontrol et
+    lisansUyarisiKontrolEt();
+
     await baslangicVerileriniYukle(); 
 };
+
+/**
+ * YENİ FONKSİYON
+ * Lisans bitiş tarihini kontrol eder ve gerekirse bir uyarı gösterir.
+ */
+function lisansUyarisiKontrolEt() {
+    const lisansBitisStr = document.body.dataset.lisansBitis;
+    
+    // Eğer lisans bitiş tarihi yoksa veya boşsa, bir şey yapma.
+    if (!lisansBitisStr || lisansBitisStr === 'None') {
+        return;
+    }
+
+    const lisansBitisTarihi = new Date(lisansBitisStr);
+    const bugun = new Date();
+    
+    // İki tarih arasındaki farkı gün olarak hesapla
+    const zamanFarki = lisansBitisTarihi.getTime() - bugun.getTime();
+    const gunFarki = Math.ceil(zamanFarki / (1000 * 3600 * 24));
+
+    // Lisans süresi dolmuşsa veya 30 gün içinde dolacaksa uyar.
+    if (gunFarki <= 0) {
+        gosterMesaj(`<strong>Dikkat:</strong> Şirketinizin lisans süresi dolmuştur! Lütfen yöneticinizle iletişime geçin.`, 'danger');
+    } else if (gunFarki <= 30) {
+        gosterMesaj(`<strong>Bilgi:</strong> Şirketinizin lisans süresinin dolmasına ${gunFarki} gün kaldı.`, 'warning');
+    }
+}
 
 async function baslangicVerileriniYukle() {
     document.getElementById('girdiler-baslik').textContent = 'Bugünkü Girdiler';
@@ -462,4 +492,3 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
-
