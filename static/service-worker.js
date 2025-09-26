@@ -1,9 +1,9 @@
 // static/service-worker.js
-// Tarayıcının bu yeni dosyayı kesinlikle kurmasını sağlamak için sürümü bir kez daha artırıyoruz.
-const CACHE_NAME = 'sut-takip-cache-v9'; 
+// Tarayıcının bu yeni dosyayı KESİNLİKLE kurmasını sağlamak için sürümü son kez artırıyoruz.
+const CACHE_NAME = 'sut-takip-cache-v10'; 
 const APP_SHELL_URL = '/';
 const LOGIN_URL = '/login';
-const REGISTER_URL = '/register'; // YENİ: Kayıt sayfasını da ekleyelim.
+const REGISTER_URL = '/register';
 const OFFLINE_URL = '/offline';
 
 // Uygulamanın çevrimdışı çalışabilmesi için önbelleğe alınacak temel dosyalar
@@ -11,7 +11,7 @@ const ASSETS_TO_CACHE = [
     // Temel Sayfalar
     APP_SHELL_URL,
     LOGIN_URL,
-    REGISTER_URL, // YENİ
+    REGISTER_URL,
     OFFLINE_URL,
     
     // Temel Stil ve Scriptler
@@ -20,7 +20,7 @@ const ASSETS_TO_CACHE = [
     '/static/js/utils.js',
     '/static/js/main.js',
     '/static/js/login.js',
-    '/static/js/register.js', // YENİ
+    '/static/js/register.js',
     '/static/js/offline.js',
     '/static/images/icon.png',
     
@@ -30,10 +30,15 @@ const ASSETS_TO_CACHE = [
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css',
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
-    'https://cdn.jsdelivr.net/npm/flatpickr',
+    
+    // DÜZELTME BURADA: Hatalı URL'yi doğru dosya yoluyla değiştiriyoruz.
+    'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js', 
+    // Türkçe dil dosyasını da ekliyoruz.
+    'https://npmcdn.com/flatpickr/dist/l10n/tr.js',
+
     'https://unpkg.com/dexie@3/dist/dexie.js',
     
-    // İKON FONT DOSYALARI (ANA SORUNUN ÇÖZÜMÜ)
+    // İKON FONT DOSYALARI
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?v=1.11.3',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff?v=1.11.3'
@@ -46,6 +51,9 @@ self.addEventListener('install', event => {
       .then(cache => {
         console.log('Cache açıldı ve temel varlıklar önbelleğe alınıyor.');
         return cache.addAll(ASSETS_TO_CACHE);
+      })
+      .catch(err => {
+        console.error('Önbelleğe alma başarısız oldu:', err);
       })
   );
   self.skipWaiting();
