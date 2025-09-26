@@ -17,8 +17,12 @@ def create_app():
     # templates ve static klasörlerinin ana dizinde olduğunu belirtiyoruz
     app = Flask(__name__, template_folder='templates', static_folder='static')
     app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")
+    
+    # JSON cevaplarında Türkçe karakterlerin doğru gösterilmesini sağlar.
+    # Bu satırın burada olması testlerin doğru çalışması için kritiktir.
+    app.config['JSON_AS_ASCII'] = False
 
-    # YENİ: Uygulama genelinde kullanılacak değişkenleri context'e ekle
+    # Uygulama genelinde kullanılacak değişkenleri context'e ekle
     @app.context_processor
     def inject_global_vars():
         return {
@@ -67,3 +71,4 @@ if __name__ == '__main__':
 #
 #
 #
+
