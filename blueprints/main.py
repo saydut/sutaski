@@ -1,9 +1,9 @@
 # blueprints/main.py
 
 # --- GEREKLİ KÜTÜPHANELER ---
-from flask import Blueprint, jsonify, render_template, request, session, send_file, current_app
+from flask import Blueprint, jsonify, render_template, request, session, send_file, current_app, flash, redirect, url_for
 from decorators import login_required, lisans_kontrolu, modification_allowed
-from extensions import supabase, turkey_tz, bcrypt  # bcrypt burada import ediliyor
+from extensions import supabase, turkey_tz, bcrypt
 from datetime import datetime, timedelta
 import pytz
 import io
@@ -40,9 +40,39 @@ main_bp = Blueprint(
 
 # --- ARAYÜZ SAYFALARI ---
 @main_bp.route('/')
-@login_required
-@lisans_kontrolu
 def anasayfa():
+    # Service Worker'ın önbellekleme isteğini özel bir başlık ile anlıyoruz
+    if request.headers.get('X-Cache-Me') == 'true':
+        # Eğer istek Service Worker'dan geliyorsa, giriş kontrolü yapmadan
+        # temiz bir "uygulama kabuğu" gönderiyoruz.
+        return render_template('index.html', session={})
+
+    # Eğer normal bir kullanıcı isteğiyse, giriş kontrolü yapıyoruz
+    if 'user' not in session:
+        flash("Bu sayfayı görüntülemek için giriş yapmalısınız.", "warning")
+        return redirect(url_for('auth.login_page'))
+
+    # Lisans kontrolü mantığı (decorator'den buraya taşındı)
+    user_info = session.get('user')
+    if user_info and user_info.get('rol') != 'admin':
+        lisans_bitis = user_info.get('lisans_bitis_tarihi')
+        if lisans_bitis:
+            try:
+                lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis, '%Y-%m-%d').date()
+                if lisans_bitis_tarihi_obj < datetime.now().date():
+                    flash("Şirketinizin lisans süresi dolmuştur. Lütfen sistem yöneticinizle iletişime geçin.", "danger")
+                    session.pop('user', None)
+                    return redirect(url_for('auth.login_page'))
+            except (ValueError, TypeError):
+                 flash("Lisans tarihi formatı geçersiz.", "danger")
+                 session.pop('user', None)
+                 return redirect(url_for('auth.login_page'))
+        else:
+             flash("Şirketiniz için bir lisans tanımlanmamıştır.", "danger")
+             session.pop('user', None)
+             return redirect(url_for('auth.login_page'))
+            
+    # Tüm kontrollerden geçtiyse, kullanıcı verisiyle dolu normal sayfayı gönder
     return render_template('index.html', session=session)
 
 @main_bp.route('/raporlar')
@@ -64,7 +94,6 @@ def tedarikci_detay_sayfasi(tedarikci_id):
     return render_template('tedarikci_detay.html', tedarikci_id=tedarikci_id)
 
 # --- API'LER ---
-
 @main_bp.route('/api/tedarikci/<int:tedarikci_id>/mustahsil_makbuzu_pdf')
 @login_required
 @lisans_kontrolu
@@ -73,24 +102,16 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
         sirket_id = session['user']['sirket_id']
         ay = int(request.args.get('ay'))
         yil = int(request.args.get('yil'))
-
-        # Tedarikçi ve Şirket bilgilerini çek
         tedarikci_res = supabase.table('tedarikciler').select('isim, tc_no, adres').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
         sirket_res = supabase.table('sirketler').select('sirket_adi, adres, vergi_kimlik_no').eq('id', sirket_id).single().execute()
-
         if not tedarikci_res.data or not sirket_res.data:
             return jsonify({"error": "Gerekli şirket veya tedarikçi bilgisi bulunamadı."}), 404
-
-        # Tarih aralığını belirle
         _, ayin_son_gunu = calendar.monthrange(yil, ay)
         baslangic_tarihi = datetime(yil, ay, 1).date()
         bitis_tarihi = datetime(yil, ay, ayin_son_gunu).date()
         start_utc = turkey_tz.localize(datetime.combine(baslangic_tarihi, datetime.min.time())).astimezone(pytz.utc).isoformat()
         end_utc = turkey_tz.localize(datetime.combine(bitis_tarihi, datetime.max.time())).astimezone(pytz.utc).isoformat()
-
-        # --- Süt Girdilerini Çek ve İşle ---
         sut_response = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).order('taplanma_tarihi', desc=False).execute()
-        
         islenmis_girdiler = []
         toplam_sut_tutari = Decimal('0.0')
         for girdi in sut_response.data:
@@ -103,28 +124,17 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
                 "tarih": parsed_date.astimezone(turkey_tz).strftime('%d.%m.%Y') if parsed_date else 'Tarih Yok',
                 "litre": litre, "fiyat": fiyat, "tutar": tutar
             })
-
-        # --- YENİ: Yem Alımlarını Çek ---
         yem_response = supabase.table('yem_islemleri').select('islem_tarihi, miktar_kg, islem_anindaki_birim_fiyat, toplam_tutar, yem_urunleri(yem_adi)').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
         toplam_yem_borcu = sum(Decimal(str(islem.get('toplam_tutar', '0'))) for islem in yem_response.data)
-
-        # --- YENİ: Finansal İşlemleri Çek ---
         finans_response = supabase.table('finansal_islemler').select('islem_tarihi, islem_tipi, tutar, aciklama').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
         toplam_odeme = sum(Decimal(str(islem.get('tutar', '0'))) for islem in finans_response.data)
-
-        # --- GÜNCELLENDİ: Tüm Hesaplamaları Yap ---
-        stopaj_orani = Decimal('0.02') # %2 Stopaj (varsayılan)
+        stopaj_orani = Decimal('0.02')
         stopaj_tutari = toplam_sut_tutari * stopaj_orani
         net_odenecek = (toplam_sut_tutari - stopaj_tutari) - toplam_yem_borcu - toplam_odeme
-        
-        # Helper Jinja filter for date formatting
         def format_tarih_filter(timestamp_str):
             dt = parse_supabase_timestamp(timestamp_str)
             return dt.astimezone(turkey_tz).strftime('%d.%m.%Y') if dt else ''
-        
-        # Add filter to Jinja environment for this request
         current_app.jinja_env.filters['format_tarih'] = format_tarih_filter
-
         ozet = {
             "toplam_sut_tutari": toplam_sut_tutari,
             "toplam_yem_borcu": toplam_yem_borcu,
@@ -132,28 +142,13 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
             "stopaj_tutari": stopaj_tutari,
             "net_odenecek": net_odenecek
         }
-
-        html_out = render_template(
-            'mustahsil_makbuzu_pdf.html',
-            sirket=sirket_res.data,
-            tedarikci=tedarikci_res.data,
-            makbuz_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y'),
-            sut_girdileri=islenmis_girdiler,
-            yem_islemleri=yem_response.data, # YENİ
-            finansal_islemler=finans_response.data, # YENİ
-            ozet=ozet,
-            stopaj_orani=stopaj_orani
-        )
-
+        html_out = render_template('mustahsil_makbuzu_pdf.html', sirket=sirket_res.data, tedarikci=tedarikci_res.data, makbuz_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y'), sut_girdileri=islenmis_girdiler, yem_islemleri=yem_response.data, finansal_islemler=finans_response.data, ozet=ozet, stopaj_orani=stopaj_orani)
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
         filename = f"{yil}_{ay:02d}_{tedarikci_res.data['isim'].replace(' ', '_')}_mustahsil.pdf"
-        
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
-
     except Exception:
         traceback.print_exc()
         return jsonify({"error": "Müstahsil makbuzu oluşturulurken bir hata oluştu."}), 500
-
 
 @main_bp.route('/api/tedarikci/<int:tedarikci_id>/hesap_ozeti_pdf')
 @login_required
@@ -164,21 +159,16 @@ def tedarikci_hesap_ozeti_pdf(tedarikci_id):
         sirket_adi = session['user'].get('sirket_adi', 'Bilinmeyen Şirket')
         ay = int(request.args.get('ay'))
         yil = int(request.args.get('yil'))
-
         tedarikci_res = supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
         if not tedarikci_res.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
         tedarikci_adi = tedarikci_res.data['isim']
-
         _, ayin_son_gunu = calendar.monthrange(yil, ay)
         baslangic_tarihi = datetime(yil, ay, 1).date()
         bitis_tarihi = datetime(yil, ay, ayin_son_gunu).date()
         start_utc = turkey_tz.localize(datetime.combine(baslangic_tarihi, datetime.min.time())).astimezone(pytz.utc).isoformat()
         end_utc = turkey_tz.localize(datetime.combine(bitis_tarihi, datetime.max.time())).astimezone(pytz.utc).isoformat()
-        
-        # Süt Girdilerini Çek
         sut_response = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).order('taplanma_tarihi', desc=False).execute()
-        
         toplam_sut_alacagi = Decimal('0.0')
         islenmis_sut_girdileri = []
         for girdi in sut_response.data:
@@ -188,60 +178,25 @@ def tedarikci_hesap_ozeti_pdf(tedarikci_id):
             fiyat = Decimal(str(fiyat_val)) if fiyat_val is not None else Decimal('0')
             toplam_tutar = litre * fiyat
             toplam_sut_alacagi += toplam_tutar
-            
             parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
-            islenmis_sut_girdileri.append({
-                'tarih': parsed_date.astimezone(turkey_tz).strftime('%d.%m.%Y') if parsed_date else 'Tarih Yok',
-                'litre': litre, 
-                'fiyat': fiyat, 
-                'toplam_tutar': toplam_tutar
-            })
-
-        # Yem Alımlarını Çek
+            islenmis_sut_girdileri.append({'tarih': parsed_date.astimezone(turkey_tz).strftime('%d.%m.%Y') if parsed_date else 'Tarih Yok', 'litre': litre, 'fiyat': fiyat, 'toplam_tutar': toplam_tutar})
         yem_response = supabase.table('yem_islemleri').select('islem_tarihi, miktar_kg, islem_anindaki_birim_fiyat, toplam_tutar, yem_urunleri(yem_adi)').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
         toplam_yem_borcu = sum(Decimal(str(islem.get('toplam_tutar', '0'))) for islem in yem_response.data)
-
-        # Finansal İşlemleri Çek (Yeni Eklendi)
         finans_response = supabase.table('finansal_islemler').select('islem_tarihi, islem_tipi, tutar, aciklama').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
         toplam_odeme = sum(Decimal(str(islem.get('tutar', '0'))) for islem in finans_response.data)
-
-        # Net Bakiyeyi Yeni Formülle Hesapla
         net_bakiye = toplam_sut_alacagi - toplam_yem_borcu - toplam_odeme
-        
-        ozet = { 
-            'toplam_sut_alacagi': toplam_sut_alacagi, 
-            'toplam_yem_borcu': toplam_yem_borcu, 
-            'toplam_odeme': toplam_odeme,
-            'net_bakiye': net_bakiye 
-        }
-
+        ozet = {'toplam_sut_alacagi': toplam_sut_alacagi, 'toplam_yem_borcu': toplam_yem_borcu, 'toplam_odeme': toplam_odeme, 'net_bakiye': net_bakiye}
         aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
         rapor_basligi = f"{aylar[ay-1]} {yil} Hesap Özeti"
-        
-        # Helper Jinja filter for date formatting
         def format_tarih_filter(timestamp_str):
             dt = parse_supabase_timestamp(timestamp_str)
             return dt.astimezone(turkey_tz).strftime('%d.%m.%Y') if dt else ''
-        
-        # Add filter to Jinja environment for this request
         current_app.jinja_env.filters['format_tarih'] = format_tarih_filter
-
-        html_out = render_template(
-            'tedarikci_hesap_ozeti_pdf.html',
-            rapor_basligi=rapor_basligi, sirket_adi=sirket_adi, tedarikci_adi=tedarikci_adi,
-            olusturma_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y %H:%M'),
-            ozet=ozet, 
-            sut_girdileri=islenmis_sut_girdileri, 
-            yem_islemleri=yem_response.data,
-            finansal_islemler=finans_response.data
-        )
-        
+        html_out = render_template('tedarikci_hesap_ozeti_pdf.html', rapor_basligi=rapor_basligi, sirket_adi=sirket_adi, tedarikci_adi=tedarikci_adi, olusturma_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y %H:%M'), ozet=ozet, sut_girdileri=islenmis_sut_girdileri, yem_islemleri=yem_response.data, finansal_islemler=finans_response.data)
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
         filename = f"{yil}_{ay:02d}_{tedarikci_adi.replace(' ', '_')}_hesap_ozeti.pdf"
-        
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception:
-        print(f"--- TEDARİKÇİ PDF RAPOR HATASI ---")
         traceback.print_exc()
         return jsonify({"error": "Rapor oluşturulurken bir hata oluştu."}), 500
 
@@ -250,19 +205,15 @@ def tedarikci_hesap_ozeti_pdf(tedarikci_id):
 def get_tedarikci_detay(tedarikci_id):
     try:
         sirket_id = session['user']['sirket_id']
-        
         tedarikci_res = supabase.table('tedarikciler').select('id, isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
         if not tedarikci_res.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
-
         sut_girdileri_res = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi, kullanicilar(kullanici_adi)').eq('tedarikci_id', tedarikci_id).order('taplanma_tarihi', desc=True).execute()
         yem_islemleri_res = supabase.table('yem_islemleri').select('*, kullanicilar(kullanici_adi), yem_urunleri(yem_adi)').eq('tedarikci_id', tedarikci_id).order('islem_tarihi', desc=True).execute()
         finansal_islemler_res = supabase.table('finansal_islemler').select('*, kullanicilar(kullanici_adi)').eq('tedarikci_id', tedarikci_id).order('islem_tarihi', desc=True).execute()
-        
         toplam_sut_alacagi = sum(Decimal(str(g.get('litre', 0))) * Decimal(str(g.get('fiyat', 0))) for g in sut_girdileri_res.data)
         toplam_yem_borcu = sum(Decimal(str(y.get('toplam_tutar', 0))) for y in yem_islemleri_res.data)
         toplam_odeme = sum(Decimal(str(f.get('tutar', 0))) for f in finansal_islemler_res.data)
-
         sonuc = {
             "isim": tedarikci_res.data['isim'],
             "sut_girdileri": sut_girdileri_res.data,
@@ -277,11 +228,8 @@ def get_tedarikci_detay(tedarikci_id):
         }
         return jsonify(sonuc)
     except Exception:
-        print(f"--- TEDARİKÇİ DETAY HATASI ---")
         traceback.print_exc()
         return jsonify({"error": "Veri alınırken sunucu hatası oluştu."}), 500
-
-# --- BURADAN SONRASI ESKİ KODLARIN TAMAMI ---
 
 @main_bp.route('/api/sut_girdileri', methods=['GET'])
 @login_required
@@ -292,26 +240,15 @@ def get_sut_girdileri():
         sayfa = int(request.args.get('sayfa', 1))
         limit = 6
         offset = (sayfa - 1) * limit
-
-        query = supabase.table('sut_girdileri').select(
-            'id,litre,fiyat,taplanma_tarihi,duzenlendi_mi,kullanicilar(kullanici_adi),tedarikciler(isim)',
-            count='exact'
-        ).eq('sirket_id', sirket_id)
-
+        query = supabase.table('sut_girdileri').select('id,litre,fiyat,taplanma_tarihi,duzenlendi_mi,kullanicilar(kullanici_adi),tedarikciler(isim)', count='exact').eq('sirket_id', sirket_id)
         if secilen_tarih_str:
             target_date = datetime.strptime(secilen_tarih_str, '%Y-%m-%d').date()
             start_utc = turkey_tz.localize(datetime.combine(target_date, datetime.min.time())).astimezone(pytz.utc).isoformat()
             end_utc = turkey_tz.localize(datetime.combine(target_date, datetime.max.time())).astimezone(pytz.utc).isoformat()
             query = query.gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc)
-        
         data = query.order('id', desc=True).range(offset, offset + limit - 1).execute()
-        
-        return jsonify({
-            "girdiler": data.data,
-            "toplam_girdi_sayisi": data.count
-        })
+        return jsonify({"girdiler": data.data, "toplam_girdi_sayisi": data.count})
     except Exception as e:
-        print(f"Süt girdileri hatası: {e}")
         return jsonify({"error": "Girdiler alınırken bir hata oluştu."}), 500
 
 @main_bp.route('/api/rapor/aylik_pdf')
@@ -334,9 +271,7 @@ def aylik_rapor_pdf():
         tedarikci_dokumu_dict = {}
         for girdi in girdiler:
             parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
-            if not parsed_date:
-                continue
-            
+            if not parsed_date: continue
             girdi_tarihi_tr = parsed_date.astimezone(turkey_tz)
             gun = girdi_tarihi_tr.day
             gunluk_dokum_dict[gun]['toplam_litre'] += girdi.get('litre', 0)
@@ -347,7 +282,6 @@ def aylik_rapor_pdf():
                     tedarikci_dokumu_dict[isim] = {'toplam_litre': 0, 'girdi_sayisi': 0}
                 tedarikci_dokumu_dict[isim]['toplam_litre'] += girdi.get('litre', 0)
                 tedarikci_dokumu_dict[isim]['girdi_sayisi'] += 1
-                
         gunluk_dokum = [{'tarih': f"{day:02d}.{ay:02d}.{yil}", **data} for day, data in gunluk_dokum_dict.items()]
         tedarikci_dokumu = sorted([{'isim': isim, **data} for isim, data in tedarikci_dokumu_dict.items()], key=lambda x: x['toplam_litre'], reverse=True)
         toplam_litre = sum(g.get('litre', 0) for g in girdiler)
@@ -355,13 +289,10 @@ def aylik_rapor_pdf():
         aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
         rapor_basligi = f"{aylar[ay-1]} {yil} Süt Toplama Raporu"
         html_out = render_template('aylik_rapor_pdf.html', rapor_basligi=rapor_basligi, sirket_adi=sirket_adi, olusturma_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y %H:%M'), ozet=ozet, tedarikci_dokumu=tedarikci_dokumu, gunluk_dokum=gunluk_dokum)
-        
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
-
         filename = f"{yil}_{ay:02d}_{sirket_adi.replace(' ', '_')}_raporu.pdf"
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception as e:
-        print(f"PDF Rapor Hatası: {e}")
         return "Rapor oluşturulurken bir hata oluştu.", 500
 
 @main_bp.route('/api/rapor/detayli_rapor', methods=['GET'])
@@ -400,7 +331,6 @@ def get_detayli_rapor():
         breakdown = sorted([{'name': isim, 'litre': round(totals['litre'], 2), 'entryCount': totals['entryCount']} for isim, totals in supplier_totals.items()], key=lambda x: x['litre'], reverse=True)
         return jsonify({'chartData': {'labels': labels, 'data': data}, 'summaryData': summary, 'supplierBreakdown': breakdown})
     except Exception as e:
-        print(f"Detaylı rapor hatası: {e}")
         return jsonify({"error": "Rapor verisi alınırken bir hata oluştu."}), 500
 
 @main_bp.route('/api/export_csv')
@@ -415,7 +345,6 @@ def export_csv():
             start_utc = turkey_tz.localize(datetime.combine(target_date, datetime.min.time())).astimezone(pytz.utc).isoformat()
             end_utc = turkey_tz.localize(datetime.combine(target_date, datetime.max.time())).astimezone(pytz.utc).isoformat()
             query = query.gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc)
-        
         data = query.order('id', desc=True).execute().data
         output = io.StringIO()
         writer = csv.writer(output, delimiter=';')
@@ -430,19 +359,15 @@ def export_csv():
         filename = f"{secilen_tarih_str}_sut_raporu.csv" if secilen_tarih_str else "sut_raporu.csv"
         return send_file(io.BytesIO(output.getvalue().encode('utf-8-sig')), mimetype='text/csv', as_attachment=True, download_name=filename)
     except Exception as e:
-        print(f"CSV Dışa Aktarma Hatası: {e}")
         return jsonify({"error": "Rapor oluşturulurken bir hata oluştu."}), 500
 
-# YENİ KODU EKLE
 @main_bp.route('/api/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
     try:
         sirket_id = session['user']['sirket_id']
-        # Değişiklik: Artık sadece id ve isim değil, tüm sütunları (*) çekiyoruz.
         tedarikciler_response = supabase.table('tedarikciler').select('*').eq('sirket_id', sirket_id).execute()
         tedarikciler = tedarikciler_response.data
-        
         girdiler_response = supabase.table('sut_girdileri').select('tedarikci_id, litre').eq('sirket_id', sirket_id).execute()
         girdiler_by_tedarikci = {}
         for girdi in girdiler_response.data:
@@ -451,21 +376,13 @@ def get_tedarikciler_liste():
                 girdiler_by_tedarikci[tid] = {'toplam_litre': 0, 'girdi_sayisi': 0}
             girdiler_by_tedarikci[tid]['toplam_litre'] += girdi.get('litre', 0)
             girdiler_by_tedarikci[tid]['girdi_sayisi'] += 1
-
         for t in tedarikciler:
             stats = girdiler_by_tedarikci.get(t['id'], {'toplam_litre': 0, 'girdi_sayisi': 0})
             t.update(stats)
-
         sonuc_sirali = sorted(tedarikciler, key=lambda x: x['isim'])
         return jsonify(sonuc_sirali)
     except Exception as e:
-        print(f"Tedarikçi liste hatası: {e}")
         return jsonify({"error": "Veri alınırken sunucu hatası oluştu."}), 500
-
-
-#yeni eklenenler#
-
-# YENİ FONKSİYONLARI BU KISMA EKLE
 
 @main_bp.route('/api/tedarikci_ekle', methods=['POST'])
 @login_required
@@ -475,20 +392,11 @@ def add_tedarikci():
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
-        
         if not data.get('isim'):
             return jsonify({"error": "Tedarikçi ismi zorunludur."}), 400
-
-        supabase.table('tedarikciler').insert({
-            'isim': data.get('isim'),
-            'sirket_id': sirket_id,
-            'tc_no': data.get('tc_no') or None,
-            'telefon_no': data.get('telefon_no') or None,
-            'adres': data.get('adres') or None
-        }).execute()
+        supabase.table('tedarikciler').insert({'isim': data.get('isim'), 'sirket_id': sirket_id, 'tc_no': data.get('tc_no') or None, 'telefon_no': data.get('telefon_no') or None, 'adres': data.get('adres') or None}).execute()
         return jsonify({"message": "Tedarikçi başarıyla eklendi."}), 201
     except Exception as e:
-        print(f"Tedarikçi ekleme hatası: {e}")
         return jsonify({"error": "Tedarikçi eklenirken bir hata oluştu."}), 500
 
 @main_bp.route('/api/tedarikci_duzenle/<int:id>', methods=['PUT'])
@@ -499,20 +407,12 @@ def update_tedarikci(id):
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
-
         tedarikci = supabase.table('tedarikciler').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
         if not tedarikci.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
-
-        supabase.table('tedarikciler').update({
-            'isim': data.get('isim'),
-            'tc_no': data.get('tc_no') or None,
-            'telefon_no': data.get('telefon_no') or None,
-            'adres': data.get('adres') or None
-        }).eq('id', id).execute()
+        supabase.table('tedarikciler').update({'isim': data.get('isim'), 'tc_no': data.get('tc_no') or None, 'telefon_no': data.get('telefon_no') or None, 'adres': data.get('adres') or None}).eq('id', id).execute()
         return jsonify({"message": "Tedarikçi bilgileri güncellendi."})
     except Exception as e:
-        print(f"Tedarikçi güncelleme hatası: {e}")
         return jsonify({"error": "Güncelleme sırasında bir hata oluştu."}), 500
 
 @main_bp.route('/api/tedarikci_sil/<int:id>', methods=['DELETE'])
@@ -525,16 +425,12 @@ def delete_tedarikci(id):
         tedarikci = supabase.table('tedarikciler').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
         if not tedarikci.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
-        
         supabase.table('tedarikciler').delete().eq('id', id).execute()
         return jsonify({"message": "Tedarikçi başarıyla silindi."})
     except Exception as e:
-        print(f"Tedarikçi silme hatası: {e}")
         if 'violates foreign key constraint' in str(e).lower():
             return jsonify({"error": "Bu tedarikçiye ait süt veya yem girdisi olduğu için silinemiyor."}), 409
         return jsonify({"error": "Silme işlemi sırasında bir hata oluştu."}), 500
-#yeni eklenenler#
-
 
 @main_bp.route('/api/gunluk_ozet')
 @login_required
@@ -554,7 +450,6 @@ def get_gunluk_ozet():
         toplam_litre = sum(item.get('litre', 0) for item in response.data)
         return jsonify({'toplam_litre': round(toplam_litre, 2)})
     except Exception as e:
-        print(f"Özet Hatası: {e}")
         return jsonify({"error": str(e)}), 500
 
 @main_bp.route('/api/rapor/haftalik_ozet')
@@ -575,7 +470,6 @@ def get_haftalik_ozet():
             data.append(round(sum(item.get('litre', 0) for item in response.data), 2))
         return jsonify({'labels': labels[::-1], 'data': data[::-1]})
     except Exception as e:
-        print(f"Haftalık özet hatası: {e}")
         return jsonify({"error": str(e)}), 500
 
 @main_bp.route('/api/rapor/tedarikci_dagilimi')
@@ -594,7 +488,6 @@ def get_tedarikci_dagilimi():
         sorted_dagilim = dict(sorted(dagilim.items(), key=lambda item: item[1], reverse=True))
         return jsonify({'labels': list(sorted_dagilim.keys()), 'data': [round(v, 2) for v in sorted_dagilim.values()]})
     except Exception as e:
-        print(f"Tedarikçi dağılım hatası: {e}")
         return jsonify({"error": str(e)}), 500
 
 @main_bp.route('/api/girdi_gecmisi/<int:girdi_id>')
@@ -607,10 +500,7 @@ def get_girdi_gecmisi(girdi_id):
         gecmis_data = supabase.table('girdi_gecmisi').select('*,duzenleyen_kullanici_id(kullanici_adi)').eq('orijinal_girdi_id', girdi_id).order('created_at', desc=True).execute()
         return jsonify(gecmis_data.data)
     except Exception as e:
-        print(f"Geçmiş Hatası: {e}")
         return jsonify({"error": str(e)}), 500
-
-# --- VERİ DEĞİŞTİRME API'LERİ ---
 
 @main_bp.route('/api/sut_girdisi_ekle', methods=['POST'])
 @login_required
@@ -618,13 +508,7 @@ def get_girdi_gecmisi(girdi_id):
 @modification_allowed
 def add_sut_girdisi():
     yeni_girdi = request.get_json()
-    data = supabase.table('sut_girdileri').insert({
-        'tedarikci_id': yeni_girdi['tedarikci_id'],
-        'litre': yeni_girdi['litre'],
-        'fiyat': yeni_girdi.get('fiyat'),
-        'kullanici_id': session['user']['id'],
-        'sirket_id': session['user']['sirket_id']
-    }).execute()
+    data = supabase.table('sut_girdileri').insert({'tedarikci_id': yeni_girdi['tedarikci_id'], 'litre': yeni_girdi['litre'], 'fiyat': yeni_girdi.get('fiyat'), 'kullanici_id': session['user']['id'], 'sirket_id': session['user']['sirket_id']}).execute()
     return jsonify({"status": "success", "data": data.data})
 
 @main_bp.route('/api/sut_girdisi_duzenle/<int:girdi_id>', methods=['PUT'])
@@ -637,18 +521,10 @@ def update_sut_girdisi(girdi_id):
         mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).single().execute()
         if not mevcut_girdi_res.data or mevcut_girdi_res.data['sirket_id'] != session['user']['sirket_id']:
              return jsonify({"error": "Girdi bulunamadı veya yetkiniz yok."}), 403
-        supabase.table('girdi_gecmisi').insert({
-            'orijinal_girdi_id': girdi_id,
-            'duzenleyen_kullanici_id': session['user']['id'],
-            'duzenleme_sebebi': data['duzenleme_sebebi'],
-            'eski_litre_degeri': mevcut_girdi_res.data['litre'],
-            'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'),
-            'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']
-        }).execute()
+        supabase.table('girdi_gecmisi').insert({'orijinal_girdi_id': girdi_id, 'duzenleyen_kullanici_id': session['user']['id'], 'duzenleme_sebebi': data['duzenleme_sebebi'], 'eski_litre_degeri': mevcut_girdi_res.data['litre'], 'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'), 'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']}).execute()
         guncel_girdi = supabase.table('sut_girdileri').update({'litre': data['yeni_litre'],'duzenlendi_mi': True}).eq('id', girdi_id).execute()
         return jsonify({"status": "success", "data": guncel_girdi.data})
     except Exception as e:
-        print(f"Düzenleme Hatası: {e}")
         return jsonify({"error": str(e)}), 500
 
 @main_bp.route('/api/sut_girdisi_sil/<int:girdi_id>', methods=['DELETE'])
@@ -660,18 +536,12 @@ def delete_sut_girdisi(girdi_id):
         mevcut_girdi_res = supabase.table('sut_girdileri').select('sirket_id').eq('id', girdi_id).single().execute()
         if not mevcut_girdi_res.data or mevcut_girdi_res.data['sirket_id'] != session['user']['sirket_id']:
              return jsonify({"error": "Girdi bulunamadı veya silme yetkiniz yok."}), 403
-        
-        # DÜZELTME: Ana girdiyi silmeden önce, bu girdiye ait tüm geçmiş kayıtlarını siliyoruz.
         supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
-
-        # Şimdi ana girdiyi güvenle silebiliriz.
         supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
         return jsonify({"message": "Girdi başarıyla silindi."}), 200
     except Exception as e:
-        print(f"Silme Hatası: {e}")
         return jsonify({"error": str(e)}), 500
 
-# --- KULLANICI İŞLEMLERİ ---
 @main_bp.route('/api/user/change_password', methods=['POST'])
 @login_required
 def change_password():
@@ -686,10 +556,9 @@ def change_password():
         supabase.table('kullanicilar').update({'sifre': hashed_yeni_sifre}).eq('id', session['user']['id']).execute()
         return jsonify({"message": "Şifreniz başarıyla güncellendi."})
     except Exception as e:
-        print(f"Kullanıcı şifre değiştirme hatası: {e}")
         return jsonify({"error": "Şifre değiştirilirken bir hata oluştu."}), 500
 
-# --- OFFLINE MODU ---
 @main_bp.route('/offline')
 def offline_page():
     return render_template('offline.html')
+
