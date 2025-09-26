@@ -52,39 +52,39 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// --- EN KARARLI FETCH STRATEJİSİ ---
+// --- GÜNCELLENMİŞ FETCH STRATEJİSİ ---
 self.addEventListener('fetch', event => {
+    // API çağrılarını ve GET olmayan istekleri yoksay
     if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
         return;
     }
 
+    // Gezinme istekleri için (sayfa yüklemeleri)
     if (event.request.mode === 'navigate') {
         event.respondWith(
-            (async () => {
-                try {
-                    // Önce internetten yüklemeyi dene.
-                    const networkResponse = await fetch(event.request);
-                    return networkResponse;
-                } catch (error) {
-                    // İnternet yoksa, önbellekten ana paneli sunmayı dene.
-                    console.log('Ağ hatası, önbellekten sunuluyor.', error);
-                    const cache = await caches.open(CACHE_NAME);
-                    const cachedResponse = await cache.match(APP_SHELL_URL);
-                    if (cachedResponse) {
-                        return cachedResponse;
-                    }
-                    // Son çare olarak offline sayfasını göster.
-                    return await cache.match(OFFLINE_URL);
-                }
-            })()
+            fetch(event.request).catch(async () => {
+                // Ağ hatası olduğunda (çevrimdışı olunduğunda) bu blok çalışır.
+                console.log('Ağ hatası, önbellekten sunuluyor.', event.request.url);
+                const cache = await caches.open(CACHE_NAME);
+                
+                // Hangi sayfaya gidilmeye çalışılırsa çalışılsın,
+                // çevrimdışıysak ana uygulama arayüzünü (index.html) sun.
+                // Bu, kullanıcının daha önce giriş yapmış olduğu varsayımıyla
+                // uygulamayı çevrimdışı modda açmasını sağlar.
+                const cachedResponse = await cache.match(APP_SHELL_URL);
+
+                // Eğer ana arayüz önbellekte varsa onu döndür, yoksa son çare olarak
+                // genel çevrimdışı sayfasını göster.
+                return cachedResponse || await cache.match(OFFLINE_URL);
+            })
         );
-    } else { // CSS, JS, resimler vb. için
+    } else {
+        // Diğer varlıklar için (CSS, JS, resimler vb.) "önbellek öncelikli" stratejisi
         event.respondWith(
-            caches.match(event.request)
-                .then(response => {
-                    // Varlık önbellekte varsa oradan, yoksa internetten yükle.
-                    return response || fetch(event.request);
-                })
+            caches.match(event.request).then(cachedResponse => {
+                // Önbellekte varsa hemen döndür, yoksa ağdan getirmeyi dene.
+                return cachedResponse || fetch(event.request);
+            })
         );
     }
 });
