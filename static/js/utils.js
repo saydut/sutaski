@@ -34,7 +34,19 @@ function gosterMesaj(mesaj, tip = 'info', sure = 5000) {
     }, sure);
 }
 
-// YENİ KOD BAŞLANGICI
+// --- YENİ EKLENEN FONKSİYON ---
+/**
+ * Hem yerel kullanıcı verisini siler hem de sunucudan çıkış yapar.
+ */
+function guvenliCikis() {
+    // Önce yerel depodaki kullanıcı bilgisini temizle
+    localStorage.removeItem('offlineUser');
+    // Sonra sunucudaki logout adresine yönlendir
+    window.location.href = '/logout';
+}
+// --- YENİ FONKSİYON SONU ---
+
+
 document.addEventListener('DOMContentLoaded', () => {
     yeniOzellikBildirimiKontrolEt();
 });
@@ -62,4 +74,3 @@ function yeniOzellikBildirimiKontrolEt() {
         localStorage.setItem('sutaski_app_version', mevcutVersiyon);
     }
 }
-// YENİ KOD BİTİŞİ

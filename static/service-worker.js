@@ -1,6 +1,6 @@
 // static/service-worker.js
-// Tarayıcının bu yeni dosyayı KESİNLİKLE kurmasını sağlamak için sürümü son kez artırıyoruz.
-const CACHE_NAME = 'sut-takip-cache-v10'; 
+// Tarayıcının bu yeni dosyayı KESİNLİKLE kurmasını sağlamak için sürümü artırıyoruz.
+const CACHE_NAME = 'sut-takip-cache-v11'; 
 const APP_SHELL_URL = '/';
 const LOGIN_URL = '/login';
 const REGISTER_URL = '/register';
@@ -29,12 +29,11 @@ const ASSETS_TO_CACHE = [
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css',
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js',
-    'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
     
-    // DÜZELTME BURADA: Hatalı URL'yi doğru dosya yoluyla değiştiriyoruz.
+    // --- DÜZELTME BURADA: flatpickr CDN adresleri birleştirildi ve düzeltildi ---
+    'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js', 
-    // Türkçe dil dosyasını da ekliyoruz.
-    'https://npmcdn.com/flatpickr/dist/l10n/tr.js',
+    'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/tr.js',
 
     'https://unpkg.com/dexie@3/dist/dexie.js',
     
@@ -78,31 +77,33 @@ self.addEventListener('activate', event => {
 
 // Bir kaynak talebi (fetch) olduğunda tetiklenir
 self.addEventListener('fetch', event => {
+    // Sadece GET isteklerini ve API dışı istekleri dikkate al
     if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
         return;
     }
 
+    // Sayfa navigasyonları için (yeni bir sayfa açıldığında)
     if (event.request.mode === 'navigate') {
         event.respondWith(
             (async () => {
                 try {
+                    // Önce internetten yüklemeyi dene
                     const networkResponse = await fetch(event.request);
                     return networkResponse;
                 } catch (error) {
-                    console.log('Navigasyon başarısız, önbellekten sunuluyor.', error);
+                    // İnternet yoksa veya sunucuya ulaşılamıyorsa
+                    console.log('Navigasyon başarısız, çevrimdışı sayfası sunuluyor.', error);
                     const cache = await caches.open(CACHE_NAME);
-                    const cachedResponse = await cache.match(event.request);
-                    if (cachedResponse) return cachedResponse;
-                    const loginPageResponse = await cache.match(LOGIN_URL);
-                    if (loginPageResponse) return loginPageResponse;
+                    // Doğrudan çevrimdışı sayfasını göster
                     return await cache.match(OFFLINE_URL);
                 }
             })()
         );
-    } else {
+    } else { // Diğer tüm varlıklar için (CSS, JS, resimler vb.)
         event.respondWith(
             caches.match(event.request)
                 .then(response => {
+                    // Varlık önbellekte varsa oradan, yoksa internetten yükle
                     return response || fetch(event.request);
                 })
         );

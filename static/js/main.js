@@ -339,7 +339,33 @@ async function sutGirdisiEkle() {
 
     // İnternet bağlantısını kontrol et
     if (!navigator.onLine) {
-        // Çevrimdışı kaydet
+        // --- YENİ EKLENEN LİSANS KONTROLÜ ---
+        const offlineUserString = localStorage.getItem('offlineUser');
+        if (offlineUserString) {
+            const offlineUser = JSON.parse(offlineUserString);
+            const lisansBitisStr = offlineUser.lisans_bitis_tarihi;
+
+            if (lisansBitisStr && lisansBitisStr !== 'None') {
+                const lisansBitisTarihi = new Date(lisansBitisStr);
+                const bugun = new Date();
+                // Sadece tarihleri karşılaştırmak için saati sıfırla
+                bugun.setHours(0, 0, 0, 0);
+
+                if (bugun > lisansBitisTarihi) {
+                    gosterMesaj('Lisansınızın süresi dolduğu için çevrimdışı kayıt yapamazsınız. Lütfen yöneticinizle iletişime geçin.', 'danger');
+                    return; // Fonksiyonu durdur ve kaydı engelle
+                }
+            } else {
+                 gosterMesaj('Geçerli bir lisans bulunamadığı için çevrimdışı kayıt yapamazsınız.', 'danger');
+                 return; // Fonksiyonu durdur
+            }
+        } else {
+            gosterMesaj('Çevrimdışı kayıt için kullanıcı bilgisi bulunamadı. Lütfen önce online giriş yapın.', 'danger');
+            return; // Fonksiyonu durdur
+        }
+        // --- LİSANS KONTROLÜ SONU ---
+
+        // Lisans geçerliyse çevrimdışı kaydet
         const basarili = await kaydetCevrimdisi(yeniGirdi);
         if (basarili) {
             // Formu temizle ve listeyi anında yenile
@@ -568,5 +594,3 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
-
-

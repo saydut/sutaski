@@ -23,6 +23,11 @@ async function girisYap() {
         const result = await response.json();
 
         if (response.ok) {
+            // --- YENİ EKLENEN SATIR ---
+            // Sunucudan gelen kullanıcı verisini tarayıcının deposuna kaydet
+            localStorage.setItem('offlineUser', JSON.stringify(result.user));
+            // --- DEĞİŞİKLİK SONU ---
+
             // Giriş başarılıysa ana sayfaya yönlendir
             window.location.href = '/';
         } else {
