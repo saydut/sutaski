@@ -73,7 +73,6 @@ def login():
         user = user_response.data[0]
         
         if bcrypt.check_password_hash(user['sifre'], sifre):
-            # Session verisini hazırla
             session_data = {
                 'id': user['id'],
                 'kullanici_adi': user['kullanici_adi'],
@@ -84,13 +83,11 @@ def login():
             }
             session['user'] = session_data
             
-            # --- YENİ EKLENEN KISIM ---
-            # Başarılı yanıta kullanıcı verisini de ekle
+            # Başarılı yanıta kullanıcı ve lisans verisini de ekliyoruz.
             return jsonify({
                 "message": "Giriş başarılı!",
                 "user": session_data 
             }), 200
-            # --- DEĞİŞİKLİK SONU ---
         else:
             return jsonify({"error": "Yanlış şifre."}), 401
     except Exception as e:

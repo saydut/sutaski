@@ -52,41 +52,37 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// --- DEĞİŞEN VE EN ÖNEMLİ KISIM ---
+// --- EN KARARLI FETCH STRATEJİSİ ---
 self.addEventListener('fetch', event => {
     if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
         return;
     }
 
-    // Sayfa navigasyonları için (yeni bir sayfa açıldığında)
     if (event.request.mode === 'navigate') {
         event.respondWith(
             (async () => {
                 try {
-                    // Önce internetten yüklemeyi dene. Bu, online iken en güncel sayfayı almamızı sağlar.
+                    // Önce internetten yüklemeyi dene.
                     const networkResponse = await fetch(event.request);
                     return networkResponse;
                 } catch (error) {
-                    // İnternet yoksa veya sunucuya ulaşılamıyorsa
+                    // İnternet yoksa, önbellekten ana paneli sunmayı dene.
                     console.log('Ağ hatası, önbellekten sunuluyor.', error);
                     const cache = await caches.open(CACHE_NAME);
-                    
-                    // Önbellekten ana paneli (APP_SHELL_URL yani '/') sunmayı dene.
                     const cachedResponse = await cache.match(APP_SHELL_URL);
                     if (cachedResponse) {
                         return cachedResponse;
                     }
-                    
-                    // Eğer ana panel bile önbellekte yoksa, son çare olarak offline sayfasını göster.
+                    // Son çare olarak offline sayfasını göster.
                     return await cache.match(OFFLINE_URL);
                 }
             })()
         );
-    } else { // Diğer tüm varlıklar için (CSS, JS, resimler vb.)
+    } else { // CSS, JS, resimler vb. için
         event.respondWith(
             caches.match(event.request)
                 .then(response => {
-                    // Varlık önbellekte varsa oradan, yoksa internetten yükle (Cache-First Stratejisi)
+                    // Varlık önbellekte varsa oradan, yoksa internetten yükle.
                     return response || fetch(event.request);
                 })
         );
