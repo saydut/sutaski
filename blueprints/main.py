@@ -39,13 +39,41 @@ main_bp = Blueprint(
 )
 
 # --- ARAYÜZ SAYFALARI ---
+# --- ARAYÜZ SAYFALARI ---
 @main_bp.route('/')
 def anasayfa():
-    # --- DEĞİŞİKLİK BURADA ---
-    # Artık bu fonksiyon giriş kontrolü veya yönlendirme yapmıyor.
-    # Her zaman ana uygulama "kabuğunu" (index.html) sunar.
-    # Giriş kontrolü ve yönlendirme, client-side JavaScript tarafından yapılacak.
-    # Bu, PWA'nın çevrimdışı modda doğru şekilde başlamasını sağlar.
+    # Service Worker'ın önbellekleme isteğini özel bir başlık ile anlıyoruz
+    if request.headers.get('X-Cache-Me') == 'true':
+        # Eğer istek Service Worker'dan geliyorsa, giriş kontrolü yapmadan
+        # temiz bir "uygulama kabuğu" gönderiyoruz.
+        return render_template('index.html', session={})
+
+    # Eğer normal bir kullanıcı isteğiyse, giriş kontrolü yapıyoruz
+    if 'user' not in session:
+        flash("Bu sayfayı görüntülemek için giriş yapmalısınız.", "warning")
+        return redirect(url_for('auth.login_page'))
+
+    # Lisans kontrolü mantığı (decorator'den buraya taşındı)
+    user_info = session.get('user')
+    if user_info and user_info.get('rol') != 'admin':
+        lisans_bitis = user_info.get('lisans_bitis_tarihi')
+        if lisans_bitis:
+            try:
+                lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis, '%Y-%m-%d').date()
+                if lisans_bitis_tarihi_obj < datetime.now().date():
+                    flash("Şirketinizin lisans süresi dolmuştur. Lütfen sistem yöneticinizle iletişime geçin.", "danger")
+                    session.pop('user', None)
+                    return redirect(url_for('auth.login_page'))
+            except (ValueError, TypeError):
+                 flash("Lisans tarihi formatı geçersiz.", "danger")
+                 session.pop('user', None)
+                 return redirect(url_for('auth.login_page'))
+        else:
+             flash("Şirketiniz için bir lisans tanımlanmamıştır.", "danger")
+             session.pop('user', None)
+             return redirect(url_for('auth.login_page'))
+            
+    # Tüm kontrollerden geçtiyse, kullanıcı verisiyle dolu normal sayfayı gönder
     return render_template('index.html', session=session)
 
 @main_bp.route('/raporlar')
