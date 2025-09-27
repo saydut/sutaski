@@ -122,7 +122,8 @@ def reset_password():
 def get_surum_notlari():
     """Tüm sürüm notlarını veritabanından çeker."""
     try:
-        notlar = supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).execute()
+        # --- DÜZELTME: Tarih eşitliği durumları için ID'ye göre ikincil sıralama eklendi ---
+        notlar = supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).order('id', desc=True).execute()
         return jsonify(notlar.data)
     except Exception as e:
         print(f"Sürüm notları alınırken hata: {e}")
