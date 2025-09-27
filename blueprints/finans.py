@@ -84,7 +84,7 @@ def add_finansal_islem():
 
     except Exception as e:
         logger.error(f"Finansal işlem eklenirken hata oluştu: {e}", exc_info=True)
-        return jsonify({"error": "İşlem sırasında bir sunucu hatası oluştu."}), 5000
+        return jsonify({"error": "İşlem sırasında bir sunucu hatası oluştu."}), 500
 
 @finans_bp.route('/api/islemler/<int:islem_id>', methods=['PUT'])
 @login_required

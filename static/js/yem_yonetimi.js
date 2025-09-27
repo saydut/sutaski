@@ -4,6 +4,7 @@ let allYemUrunleri = [];
 // Sıralama durumu için değişkenler
 let mevcutYemSiralamaSutunu = 'yem_adi';
 let mevcutYemSiralamaYonu = 'asc';
+const KRITIK_STOK_SEVIYESI = 500; // Stok bu değerin altına (kg) düştüğünde uyarı verilir.
 
 /**
  * Sayfa yüklendiğinde çalışacak ana fonksiyon.
@@ -129,13 +130,13 @@ function renderYemTable(urunler) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary p-4">Kayıtlı yem ürünü bulunamadı.</td></tr>';
     } else {
         // 1. Kritik stok seviyesini burada belirliyoruz. Bu değeri istediğin gibi değiştirebilirsin.
-        const kritikStokSeviyesi = 500; // Örneğin, 500 KG'nin altı kritik kabul edilsin.
+        
 
         urunler.forEach(urun => {
             const stokMiktari = parseFloat(urun.stok_miktari_kg);
 
             // 2. Yemin stoğunun kritik seviyede olup olmadığını kontrol ediyoruz.
-            const isKritik = stokMiktari <= kritikStokSeviyesi;
+            const isKritik = stokMiktari <= KRITIK_STOK_SEVIYESI;
 
             // 3. Kontrol sonucuna göre CSS sınıfı ve uyarı ikonunu hazırlıyoruz.
             const rowClass = isKritik ? 'table-warning' : ''; // Kritikse satırı sarı yap

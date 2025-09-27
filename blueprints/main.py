@@ -12,6 +12,7 @@ import calendar
 from weasyprint import HTML
 from decimal import Decimal, getcontext
 import traceback
+from decimal import Decimal, InvalidOperation # <-- BU SATIRI EKLE
 
 # Decimal hassasiyetini ayarla
 getcontext().prec = 10
@@ -89,39 +90,15 @@ main_bp = Blueprint(
 
 # --- ARAYÜZ SAYFALARI ---
 @main_bp.route('/')
+@login_required   # Giriş kontrolünü bu decorator'a devrettik.
+@lisans_kontrolu  # Lisans kontrolünü zaten bu decorator yapıyordu.
 def anasayfa():
-    # Service Worker'ın önbellekleme isteğini özel bir başlık ile anlıyoruz
+    # Service Worker'dan gelen özel istekler için bu kontrol kalmalı.
     if request.headers.get('X-Cache-Me') == 'true':
-        # Eğer istek Service Worker'dan geliyorsa, giriş kontrolü yapmadan
-        # temiz bir "uygulama kabuğu" gönderiyoruz.
         return render_template('index.html', session={})
 
-    # Eğer normal bir kullanıcı isteğiyse, giriş kontrolü yapıyoruz
-    if 'user' not in session:
-        flash("Bu sayfayı görüntülemek için giriş yapmalısınız.", "warning")
-        return redirect(url_for('auth.login_page'))
-
-    # Lisans kontrolü mantığı (decorator'den buraya taşındı)
-    user_info = session.get('user')
-    if user_info and user_info.get('rol') != 'admin':
-        lisans_bitis = user_info.get('lisans_bitis_tarihi')
-        if lisans_bitis:
-            try:
-                lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis, '%Y-%m-%d').date()
-                if lisans_bitis_tarihi_obj < datetime.now().date():
-                    flash("Şirketinizin lisans süresi dolmuştur. Lütfen sistem yöneticinizle iletişime geçin.", "danger")
-                    session.pop('user', None)
-                    return redirect(url_for('auth.login_page'))
-            except (ValueError, TypeError):
-                 flash("Lisans tarihi formatı geçersiz.", "danger")
-                 session.pop('user', None)
-                 return redirect(url_for('auth.login_page'))
-        else:
-             flash("Şirketiniz için bir lisans tanımlanmamıştır.", "danger")
-             session.pop('user', None)
-             return redirect(url_for('auth.login_page'))
-            
-    # Tüm kontrollerden geçtiyse, kullanıcı verisiyle dolu normal sayfayı gönder
+    # Yukarıdaki decorator'lar tüm kontrolleri yaptığı için
+    # fonksiyonun içinde başka bir koda ihtiyacımız yok.
     return render_template('index.html', session=session)
 
 @main_bp.route('/raporlar')
@@ -567,7 +544,30 @@ def get_girdi_gecmisi(girdi_id):
 @modification_allowed
 def add_sut_girdisi():
     yeni_girdi = request.get_json()
-    data = supabase.table('sut_girdileri').insert({'tedarikci_id': yeni_girdi['tedarikci_id'], 'litre': yeni_girdi['litre'], 'fiyat': yeni_girdi.get('fiyat'), 'kullanici_id': session['user']['id'], 'sirket_id': session['user']['sirket_id']}).execute()
+    
+    # --- YENİ EKLENEN GÜVENLİK DUVARI ---
+    try:
+        litre = Decimal(yeni_girdi.get('litre'))
+        fiyat = Decimal(yeni_girdi.get('fiyat'))
+        
+        # Gelen değerlerin pozitif olup olmadığını kontrol et
+        if litre <= 0 or fiyat <= 0:
+            return jsonify({"error": "Litre ve fiyat pozitif bir değer olmalıdır."}), 400
+            
+    except (InvalidOperation, TypeError, ValueError):
+        # Gelen değerler sayıya çevrilemiyorsa hata döndür
+        return jsonify({"error": "Lütfen geçerli bir litre ve fiyat değeri girin."}), 400
+    # --- GÜVENLİK DUVARI SONU ---
+
+    # Kontrollerden geçtiyse, veriyi güvenle veritabanına ekle
+    data = supabase.table('sut_girdileri').insert({
+        'tedarikci_id': yeni_girdi['tedarikci_id'], 
+        'litre': str(litre),  # Decimal tipini string'e çevirerek gönder
+        'fiyat': str(fiyat),  # Decimal tipini string'e çevirerek gönder
+        'kullanici_id': session['user']['id'], 
+        'sirket_id': session['user']['sirket_id']
+    }).execute()
+    
     return jsonify({"status": "success", "data": data.data})
 
 @main_bp.route('/api/sut_girdisi_duzenle/<int:girdi_id>', methods=['PUT'])

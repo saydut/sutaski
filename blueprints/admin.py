@@ -73,21 +73,16 @@ def delete_company():
         if not sirket_id:
             return jsonify({"error": "Şirket ID'si belirtilmedi."}), 400
         
-        kullanicilar = supabase.table('kullanicilar').select('id').eq('sirket_id', sirket_id).execute().data
-        kullanici_idler = [k['id'] for k in kullanicilar]
+        # TEK BİR SİLME İŞLEMİ YETERLİ!
+        # Veritabanındaki ON DELETE CASCADE kuralları geri kalan her şeyi
+        # atomik ve güvenli bir şekilde halledecektir.
+        response = supabase.table('sirketler').delete().eq('id', sirket_id).execute()
 
-        if kullanici_idler:
-            girdiler = supabase.table('sut_girdileri').select('id').in_('kullanici_id', kullanici_idler).execute().data
-            girdi_idler = [g['id'] for g in girdiler]
-            if girdi_idler:
-                supabase.table('girdi_gecmisi').delete().in_('orijinal_girdi_id', girdi_idler).execute()
-            supabase.table('sut_girdileri').delete().in_('kullanici_id', kullanici_idler).execute()
-        
-        supabase.table('tedarikciler').delete().eq('sirket_id', sirket_id).execute()
-        supabase.table('kullanicilar').delete().eq('sirket_id', sirket_id).execute()
-        supabase.table('sirketler').delete().eq('id', sirket_id).execute()
+        # Silinecek bir şey bulunamadıysa hata verelim.
+        if not response.data:
+            return jsonify({"error": "Silinecek şirket bulunamadı."}), 404
 
-        return jsonify({"message": f"Şirket ve tüm verileri başarıyla silindi."})
+        return jsonify({"message": "Şirket ve tüm bağlı verileri başarıyla silindi."})
 
     except Exception as e:
         print(f"Şirket silme hatası: {e}")
