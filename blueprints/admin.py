@@ -26,7 +26,7 @@ def get_admin_data():
         return jsonify({"sirketler": sirketler.data, "kullanicilar": kullanicilar.data})
     except Exception as e:
         print(f"Admin veri hatası: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Veri alınırken sunucuda bir hata oluştu."}), 500
 
 @admin_bp.route('/api/admin/update_lisans', methods=['POST'])
 @login_required
@@ -42,7 +42,7 @@ def update_lisans():
         return jsonify({"message": "Lisans tarihi başarıyla güncellendi!"})
     except Exception as e:
         print(f"Lisans güncelleme hatası: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
         
 @admin_bp.route('/api/admin/update_rol', methods=['POST'])
 @login_required
@@ -60,7 +60,7 @@ def update_rol():
         return jsonify({"message": "Kullanıcı rolü başarıyla güncellendi!"})
     except Exception as e:
         print(f"Rol güncelleme hatası: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @admin_bp.route('/api/admin/delete_company', methods=['POST'])
 @login_required
@@ -91,7 +91,7 @@ def delete_company():
 
     except Exception as e:
         print(f"Şirket silme hatası: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @admin_bp.route('/api/admin/reset_password', methods=['POST'])
 @login_required
@@ -112,4 +112,4 @@ def reset_password():
         return jsonify({"message": "Kullanıcı şifresi başarıyla güncellendi."})
     except Exception as e:
         print(f"Şifre sıfırlama hatası: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500

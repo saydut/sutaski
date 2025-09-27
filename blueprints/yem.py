@@ -24,7 +24,6 @@ def get_yem_urunleri():
         urunler = supabase.table('yem_urunleri').select('*').eq('sirket_id', sirket_id).order('yem_adi').execute()
         return jsonify(urunler.data)
     except Exception:
-        print("--- YEM ÜRÜNLERİ LİSTELEME HATASI ---")
         traceback.print_exc()
         return jsonify({"error": "Ürünler listelenirken bir sunucu hatası oluştu."}), 500
 
@@ -54,7 +53,6 @@ def add_yem_urunu():
     except (InvalidOperation, TypeError):
         return jsonify({"error": "Lütfen stok ve fiyat için geçerli sayılar girin."}), 400
     except Exception:
-        print("--- YEM ÜRÜNÜ EKLEME HATASI ---")
         traceback.print_exc()
         return jsonify({"error": "Ürün eklenirken bir sunucu hatası oluştu."}), 500
 
@@ -66,16 +64,18 @@ def update_yem_urunu(id):
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
         
-        urun = supabase.table('yem_urunleri').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
-        if not urun.data:
-            return jsonify({"error": "Yem ürünü bulunamadı veya yetkiniz yok."}), 404
-
         guncel_veri = {
             "yem_adi": data.get('yem_adi'),
             "stok_miktari_kg": str(Decimal(data.get('stok_miktari_kg'))),
             "birim_fiyat": str(Decimal(data.get('birim_fiyat')))
         }
-        supabase.table('yem_urunleri').update(guncel_veri).eq('id', id).execute()
+        
+        # --- GÜVENLİK GÜNCELLEMESİ ---
+        response = supabase.table('yem_urunleri').update(guncel_veri).eq('id', id).eq('sirket_id', sirket_id).execute()
+
+        if not response.data:
+            return jsonify({"error": "Yem ürünü bulunamadı veya bu işlem için yetkiniz yok."}), 404
+            
         return jsonify({"message": "Yem ürünü başarıyla güncellendi."})
     except (InvalidOperation, TypeError):
         return jsonify({"error": "Lütfen stok ve fiyat için geçerli sayılar girin."}), 400
@@ -89,11 +89,13 @@ def update_yem_urunu(id):
 def delete_yem_urunu(id):
     try:
         sirket_id = session['user']['sirket_id']
-        urun = supabase.table('yem_urunleri').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
-        if not urun.data:
-            return jsonify({"error": "Yem ürünü bulunamadı veya yetkiniz yok."}), 404
 
-        supabase.table('yem_urunleri').delete().eq('id', id).execute()
+        # --- GÜVENLİK GÜNCELLEMESİ ---
+        response = supabase.table('yem_urunleri').delete().eq('id', id).eq('sirket_id', sirket_id).execute()
+        
+        if not response.data:
+            return jsonify({"error": "Yem ürünü bulunamadı veya bu işlem için yetkiniz yok."}), 404
+
         return jsonify({"message": "Yem ürünü başarıyla silindi."})
     except Exception as e:
         if 'violates foreign key constraint' in str(e).lower():
@@ -146,7 +148,5 @@ def add_yem_islemi():
 
         return jsonify({"message": "Yem çıkışı başarıyla kaydedildi."}), 201
     except Exception:
-        print("--- YEM İŞLEMİ EKLEME HATASI ---")
         traceback.print_exc()
         return jsonify({"error": "İşlem sırasında bir hata oluştu."}), 500
-

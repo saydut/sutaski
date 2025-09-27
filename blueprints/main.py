@@ -39,7 +39,6 @@ main_bp = Blueprint(
 )
 
 # --- ARAYÜZ SAYFALARI ---
-# --- ARAYÜZ SAYFALARI ---
 @main_bp.route('/')
 def anasayfa():
     # Service Worker'ın önbellekleme isteğini özel bir başlık ile anlıyoruz
@@ -149,7 +148,7 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception:
         traceback.print_exc()
-        return jsonify({"error": "Müstahsil makbuzu oluşturulurken bir hata oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/tedarikci/<int:tedarikci_id>/hesap_ozeti_pdf')
 @login_required
@@ -199,7 +198,7 @@ def tedarikci_hesap_ozeti_pdf(tedarikci_id):
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception:
         traceback.print_exc()
-        return jsonify({"error": "Rapor oluşturulurken bir hata oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/tedarikci/<int:tedarikci_id>/detay')
 @login_required
@@ -230,7 +229,7 @@ def get_tedarikci_detay(tedarikci_id):
         return jsonify(sonuc)
     except Exception:
         traceback.print_exc()
-        return jsonify({"error": "Veri alınırken sunucu hatası oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/sut_girdileri', methods=['GET'])
 @login_required
@@ -250,7 +249,7 @@ def get_sut_girdileri():
         data = query.order('id', desc=True).range(offset, offset + limit - 1).execute()
         return jsonify({"girdiler": data.data, "toplam_girdi_sayisi": data.count})
     except Exception as e:
-        return jsonify({"error": "Girdiler alınırken bir hata oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/rapor/aylik_pdf')
 @login_required
@@ -294,7 +293,7 @@ def aylik_rapor_pdf():
         filename = f"{yil}_{ay:02d}_{sirket_adi.replace(' ', '_')}_raporu.pdf"
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception as e:
-        return "Rapor oluşturulurken bir hata oluştu.", 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/rapor/detayli_rapor', methods=['GET'])
 @login_required
@@ -332,7 +331,7 @@ def get_detayli_rapor():
         breakdown = sorted([{'name': isim, 'litre': round(totals['litre'], 2), 'entryCount': totals['entryCount']} for isim, totals in supplier_totals.items()], key=lambda x: x['litre'], reverse=True)
         return jsonify({'chartData': {'labels': labels, 'data': data}, 'summaryData': summary, 'supplierBreakdown': breakdown})
     except Exception as e:
-        return jsonify({"error": "Rapor verisi alınırken bir hata oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/export_csv')
 @login_required
@@ -360,7 +359,7 @@ def export_csv():
         filename = f"{secilen_tarih_str}_sut_raporu.csv" if secilen_tarih_str else "sut_raporu.csv"
         return send_file(io.BytesIO(output.getvalue().encode('utf-8-sig')), mimetype='text/csv', as_attachment=True, download_name=filename)
     except Exception as e:
-        return jsonify({"error": "Rapor oluşturulurken bir hata oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/tedarikciler_liste')
 @login_required
@@ -383,7 +382,7 @@ def get_tedarikciler_liste():
         sonuc_sirali = sorted(tedarikciler, key=lambda x: x['isim'])
         return jsonify(sonuc_sirali)
     except Exception as e:
-        return jsonify({"error": "Veri alınırken sunucu hatası oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/tedarikci_ekle', methods=['POST'])
 @login_required
@@ -398,7 +397,7 @@ def add_tedarikci():
         supabase.table('tedarikciler').insert({'isim': data.get('isim'), 'sirket_id': sirket_id, 'tc_no': data.get('tc_no') or None, 'telefon_no': data.get('telefon_no') or None, 'adres': data.get('adres') or None}).execute()
         return jsonify({"message": "Tedarikçi başarıyla eklendi."}), 201
     except Exception as e:
-        return jsonify({"error": "Tedarikçi eklenirken bir hata oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/tedarikci_duzenle/<int:id>', methods=['PUT'])
 @login_required
@@ -408,13 +407,24 @@ def update_tedarikci(id):
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
-        tedarikci = supabase.table('tedarikciler').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
-        if not tedarikci.data:
-            return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
-        supabase.table('tedarikciler').update({'isim': data.get('isim'), 'tc_no': data.get('tc_no') or None, 'telefon_no': data.get('telefon_no') or None, 'adres': data.get('adres') or None}).eq('id', id).execute()
+        
+        # --- GÜVENLİK GÜNCELLEMESİ ---
+        # Veritabanı sorgusuna sirket_id eklenerek sadece yetkili olunan tedarikçinin güncellenmesi garanti altına alındı.
+        guncellenecek_veri = {
+            'isim': data.get('isim'),
+            'tc_no': data.get('tc_no') or None,
+            'telefon_no': data.get('telefon_no') or None,
+            'adres': data.get('adres') or None
+        }
+        response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', id).eq('sirket_id', sirket_id).execute()
+
+        # Eğer response.data boş ise, ya böyle bir ID yok ya da ID başka bir şirkete ait demektir.
+        if not response.data:
+            return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
+        
         return jsonify({"message": "Tedarikçi bilgileri güncellendi."})
     except Exception as e:
-        return jsonify({"error": "Güncelleme sırasında bir hata oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/tedarikci_sil/<int:id>', methods=['DELETE'])
 @login_required
@@ -423,15 +433,20 @@ def update_tedarikci(id):
 def delete_tedarikci(id):
     try:
         sirket_id = session['user']['sirket_id']
-        tedarikci = supabase.table('tedarikciler').select('id').eq('id', id).eq('sirket_id', sirket_id).single().execute()
-        if not tedarikci.data:
-            return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
-        supabase.table('tedarikciler').delete().eq('id', id).execute()
+
+        # --- GÜVENLİK GÜNCELLEMESİ ---
+        # Veritabanı sorgusuna sirket_id eklenerek sadece yetkili olunan tedarikçinin silinmesi garanti altına alındı.
+        response = supabase.table('tedarikciler').delete().eq('id', id).eq('sirket_id', sirket_id).execute()
+
+        # Eğer response.data boş ise, ya böyle bir ID yok ya da ID başka bir şirkete ait demektir.
+        if not response.data:
+            return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
+
         return jsonify({"message": "Tedarikçi başarıyla silindi."})
     except Exception as e:
         if 'violates foreign key constraint' in str(e).lower():
             return jsonify({"error": "Bu tedarikçiye ait süt veya yem girdisi olduğu için silinemiyor."}), 409
-        return jsonify({"error": "Silme işlemi sırasında bir hata oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/gunluk_ozet')
 @login_required
@@ -451,7 +466,7 @@ def get_gunluk_ozet():
         toplam_litre = sum(item.get('litre', 0) for item in response.data)
         return jsonify({'toplam_litre': round(toplam_litre, 2)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/rapor/haftalik_ozet')
 @login_required
@@ -471,7 +486,7 @@ def get_haftalik_ozet():
             data.append(round(sum(item.get('litre', 0) for item in response.data), 2))
         return jsonify({'labels': labels[::-1], 'data': data[::-1]})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/rapor/tedarikci_dagilimi')
 @login_required
@@ -489,19 +504,22 @@ def get_tedarikci_dagilimi():
         sorted_dagilim = dict(sorted(dagilim.items(), key=lambda item: item[1], reverse=True))
         return jsonify({'labels': list(sorted_dagilim.keys()), 'data': [round(v, 2) for v in sorted_dagilim.values()]})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/girdi_gecmisi/<int:girdi_id>')
 @login_required
 def get_girdi_gecmisi(girdi_id):
     try:
-        original_girdi_response = supabase.table('sut_girdileri').select('sirket_id').eq('id', girdi_id).single().execute()
-        if not original_girdi_response.data or original_girdi_response.data['sirket_id'] != session['user']['sirket_id']:
-            return jsonify({"error": "Yetkisiz erişim."}), 403
+        # --- GÜVENLİK GÜNCELLEMESİ ---
+        # Sorguya sirket_id eklenerek sadece yetkili olunan girdinin geçmişi alınabilir.
+        original_girdi_response = supabase.table('sut_girdileri').select('sirket_id').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
+        if not original_girdi_response.data:
+            return jsonify({"error": "Yetkisiz erişim veya girdi bulunamadı."}), 403
+        
         gecmis_data = supabase.table('girdi_gecmisi').select('*,duzenleyen_kullanici_id(kullanici_adi)').eq('orijinal_girdi_id', girdi_id).order('created_at', desc=True).execute()
         return jsonify(gecmis_data.data)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/sut_girdisi_ekle', methods=['POST'])
 @login_required
@@ -519,14 +537,18 @@ def add_sut_girdisi():
 def update_sut_girdisi(girdi_id):
     try:
         data = request.get_json()
-        mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).single().execute()
-        if not mevcut_girdi_res.data or mevcut_girdi_res.data['sirket_id'] != session['user']['sirket_id']:
-             return jsonify({"error": "Girdi bulunamadı veya yetkiniz yok."}), 403
+        
+        # --- GÜVENLİK GÜNCELLEMESİ ---
+        # Sorguya sirket_id eklenerek sadece yetkili olunan girdi verisi çekilir.
+        mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
+        if not mevcut_girdi_res.data:
+             return jsonify({"error": "Girdi bulunamadı veya bu işlem için yetkiniz yok."}), 404
+
         supabase.table('girdi_gecmisi').insert({'orijinal_girdi_id': girdi_id, 'duzenleyen_kullanici_id': session['user']['id'], 'duzenleme_sebebi': data['duzenleme_sebebi'], 'eski_litre_degeri': mevcut_girdi_res.data['litre'], 'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'), 'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']}).execute()
         guncel_girdi = supabase.table('sut_girdileri').update({'litre': data['yeni_litre'],'duzenlendi_mi': True}).eq('id', girdi_id).execute()
         return jsonify({"status": "success", "data": guncel_girdi.data})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/sut_girdisi_sil/<int:girdi_id>', methods=['DELETE'])
 @login_required
@@ -534,14 +556,18 @@ def update_sut_girdisi(girdi_id):
 @modification_allowed
 def delete_sut_girdisi(girdi_id):
     try:
-        mevcut_girdi_res = supabase.table('sut_girdileri').select('sirket_id').eq('id', girdi_id).single().execute()
-        if not mevcut_girdi_res.data or mevcut_girdi_res.data['sirket_id'] != session['user']['sirket_id']:
-             return jsonify({"error": "Girdi bulunamadı veya silme yetkiniz yok."}), 403
+        # --- GÜVENLİK GÜNCELLEMESİ ---
+        # Önce girdinin bu şirkete ait olup olmadığını kontrol et
+        mevcut_girdi_res = supabase.table('sut_girdileri').select('sirket_id').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
+        if not mevcut_girdi_res.data:
+             return jsonify({"error": "Girdi bulunamadı veya silme yetkiniz yok."}), 404
+        
+        # Girdi bu şirkete aitse, güvenle silebiliriz.
         supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
         supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
         return jsonify({"message": "Girdi başarıyla silindi."}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/api/user/change_password', methods=['POST'])
 @login_required
@@ -557,9 +583,8 @@ def change_password():
         supabase.table('kullanicilar').update({'sifre': hashed_yeni_sifre}).eq('id', session['user']['id']).execute()
         return jsonify({"message": "Şifreniz başarıyla güncellendi."})
     except Exception as e:
-        return jsonify({"error": "Şifre değiştirilirken bir hata oluştu."}), 500
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @main_bp.route('/offline')
 def offline_page():
     return render_template('offline.html')
-

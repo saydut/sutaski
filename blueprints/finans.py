@@ -88,10 +88,6 @@ def update_finansal_islem(islem_id):
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
-
-        islem = supabase.table('finansal_islemler').select('id').eq('id', islem_id).eq('sirket_id', sirket_id).single().execute()
-        if not islem.data:
-            return jsonify({"error": "İşlem bulunamadı veya yetkiniz yok."}), 404
         
         guncellenecek_veri = {}
         if 'tutar' in data:
@@ -108,7 +104,13 @@ def update_finansal_islem(islem_id):
         if not guncellenecek_veri:
             return jsonify({"error": "Güncellenecek veri bulunamadı."}), 400
 
-        supabase.table('finansal_islemler').update(guncellenecek_veri).eq('id', islem_id).execute()
+        # Sorguya sirket_id eklenerek güvenlik artırıldı
+        response = supabase.table('finansal_islemler').update(guncellenecek_veri).eq('id', islem_id).eq('sirket_id', sirket_id).execute()
+        
+        # Eğer hiçbir kayıt güncellenmediyse, yetkisi veya kaydı yok demektir.
+        if not response.data:
+            return jsonify({"error": "İşlem bulunamadı veya bu işlem için yetkiniz yok."}), 404
+
         return jsonify({"message": "İşlem başarıyla güncellendi."})
 
     except Exception:
@@ -122,11 +124,14 @@ def delete_finansal_islem(islem_id):
     """Bir finansal işlemi siler."""
     try:
         sirket_id = session['user']['sirket_id']
-        islem = supabase.table('finansal_islemler').select('id').eq('id', islem_id).eq('sirket_id', sirket_id).single().execute()
-        if not islem.data:
-            return jsonify({"error": "İşlem bulunamadı veya yetkiniz yok."}), 404
+        
+        # Sorguya sirket_id eklenerek güvenlik artırıldı
+        response = supabase.table('finansal_islemler').delete().eq('id', islem_id).eq('sirket_id', sirket_id).execute()
 
-        supabase.table('finansal_islemler').delete().eq('id', islem_id).execute()
+        # Eğer hiçbir kayıt silinmediyse, yetkisi veya kaydı yok demektir.
+        if not response.data:
+            return jsonify({"error": "İşlem bulunamadı veya bu işlem için yetkiniz yok."}), 404
+
         return jsonify({"message": "İşlem başarıyla silindi."})
     except Exception:
         traceback.print_exc()
