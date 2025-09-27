@@ -128,11 +128,20 @@ function renderYemTable(urunler) {
     if (urunler.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary p-4">Kayıtlı yem ürünü bulunamadı.</td></tr>';
     } else {
+        const kritikStokSeviyesi = 500; // Uyarı verilecek seviye (KG)
+
         urunler.forEach(urun => {
+            const stokMiktari = parseFloat(urun.stok_miktari_kg);
+            const isKritik = stokMiktari <= kritikStokSeviyesi;
+
+            // Stok kritik seviyedeyse satırı renklendir ve uyarı ikonu ekle
+            const rowClass = isKritik ? 'table-warning' : '';
+            const uyariIconu = isKritik ? `<i class="bi bi-exclamation-triangle-fill text-danger me-2" title="Stok kritik seviyede: ${stokMiktari.toFixed(2)} KG"></i>` : '';
+
             const tr = `
-                <tr>
-                    <td><strong>${urun.yem_adi}</strong></td>
-                    <td class="text-end">${parseFloat(urun.stok_miktari_kg).toFixed(2)} KG</td>
+                <tr class="${rowClass}">
+                    <td>${uyariIconu}<strong>${urun.yem_adi}</strong></td>
+                    <td class="text-end">${stokMiktari.toFixed(2)} KG</td>
                     <td class="text-end">${parseFloat(urun.birim_fiyat).toFixed(2)} TL</td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="yemDuzenleAc(${urun.id})"><i class="bi bi-pencil"></i></button>
