@@ -4,6 +4,7 @@ from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from constants import FinansIslemTipi # <-- YENİ: Sabitleri içeri aktar
 
 # Logging yapılandırması
 logger = logging.getLogger(__name__)
@@ -52,7 +53,9 @@ def add_finansal_islem():
         if not all([islem_tipi, tedarikci_id, tutar]):
             return jsonify({"error": "Lütfen tüm zorunlu alanları doldurun."}), 400
         
-        if islem_tipi not in ['Ödeme', 'Avans']:
+        # DEĞİŞİKLİK: 'Ödeme' ve 'Avans' yerine FinansIslemTipi sabitlerini kullan
+        gecerli_tipler = [tip.value for tip in FinansIslemTipi]
+        if islem_tipi not in gecerli_tipler:
             return jsonify({"error": "Geçersiz işlem tipi."}), 400
 
         try:
@@ -81,7 +84,7 @@ def add_finansal_islem():
 
     except Exception as e:
         logger.error(f"Finansal işlem eklenirken hata oluştu: {e}", exc_info=True)
-        return jsonify({"error": "İşlem sırasında bir sunucu hatası oluştu."}), 500
+        return jsonify({"error": "İşlem sırasında bir sunucu hatası oluştu."}), 5000
 
 @finans_bp.route('/api/islemler/<int:islem_id>', methods=['PUT'])
 @login_required

@@ -321,9 +321,17 @@ async function sutGirdisiEkle() {
             document.getElementById('litre-input').value = '';
             document.getElementById('fiyat-input').value = '';
             tedarikciSecici.clear();
+            
+            // --- PERFORMANS İYİLEŞTİRMESİ ---
+            // Sadece ilgili listeyi ve özeti güncelliyoruz.
             const seciliTarih = tarihFiltreleyici.selectedDates[0];
             const formatliTarih = seciliTarih ? getLocalDateString(seciliTarih) : null;
-            await Promise.all([girdileriGoster(mevcutSayfa, formatliTarih), ozetVerileriniYukle(formatliTarih), haftalikGrafigiOlustur(), tedarikciGrafigiOlustur()]);
+            await Promise.all([
+                girdileriGoster(mevcutSayfa, formatliTarih),
+                ozetVerileriniYukle(formatliTarih)
+            ]);
+            // --- İYİLEŞTİRME SONU ---
+
         } else {
             gosterMesaj(`Süt girdisi eklenemedi: ${errorData.error || 'Bilinmeyen hata.'}`, "danger");
         }
@@ -435,9 +443,16 @@ async function sutGirdisiDuzenle() {
         if (response.ok) {
             gosterMesaj("Girdi başarıyla güncellendi.", "success");
             duzenleModal.hide();
+            
+            // --- PERFORMANS İYİLEŞTİRMESİ ---
             const seciliTarih = tarihFiltreleyici.selectedDates[0];
             const formatliTarih = seciliTarih ? getLocalDateString(seciliTarih) : null;
-            await Promise.all([girdileriGoster(mevcutSayfa, formatliTarih), ozetVerileriniYukle(formatliTarih), haftalikGrafigiOlustur(), tedarikciGrafigiOlustur()]);
+            await Promise.all([
+                girdileriGoster(mevcutSayfa, formatliTarih), 
+                ozetVerileriniYukle(formatliTarih)
+            ]);
+            // --- İYİLEŞTİRME SONU ---
+
         } else {
             gosterMesaj(`Girdi düzenlenemedi: ${errorData.error || 'Bilinmeyen hata.'}`, "danger");
         }
@@ -508,9 +523,16 @@ async function sutGirdisiSil() {
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             silmeOnayModal.hide();
+            
+            // --- PERFORMANS İYİLEŞTİRMESİ ---
             const seciliTarih = tarihFiltreleyici.selectedDates[0];
             const formatliTarih = seciliTarih ? getLocalDateString(seciliTarih) : null;
-            await Promise.all([girdileriGoster(mevcutSayfa, formatliTarih), ozetVerileriniYukle(formatliTarih), haftalikGrafigiOlustur(), tedarikciGrafigiOlustur()]);
+            await Promise.all([
+                girdileriGoster(mevcutSayfa, formatliTarih), 
+                ozetVerileriniYukle(formatliTarih)
+            ]);
+            // --- İYİLEŞTİRME SONU ---
+            
         } else { gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger'); }
     } catch (error) { console.error("Silme sırasında hata:", error); gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger'); }
 }

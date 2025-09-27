@@ -1,5 +1,6 @@
 from functools import wraps
 from flask import session, flash, redirect, url_for, jsonify
+from constants import UserRole # <-- YENİ: Sabitleri içeri aktar
 
 def login_required(f):
     @wraps(f)
@@ -13,7 +14,8 @@ def login_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if session.get('user', {}).get('rol') != 'admin':
+        # DEĞİŞİKLİK: 'admin' yerine UserRole sabitini kullan
+        if session.get('user', {}).get('rol') != UserRole.ADMIN.value:
             flash("Bu sayfaya erişim yetkiniz yok.", "danger")
             return redirect(url_for('main.anasayfa'))
         return f(*args, **kwargs)
@@ -23,7 +25,8 @@ def lisans_kontrolu(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         user_info = session.get('user')
-        if user_info and user_info.get('rol') == 'admin':
+        # DEĞİŞİKLİK: 'admin' yerine UserRole sabitini kullan
+        if user_info and user_info.get('rol') == UserRole.ADMIN.value:
             return f(*args, **kwargs)
 
         if not user_info:
@@ -51,7 +54,6 @@ def lisans_kontrolu(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# YENİ DECORATOR
 def modification_allowed(f):
     """
     Kullanıcının veri değiştirme (ekleme, silme, düzenleme) yetkisi olup olmadığını kontrol eder.
@@ -60,9 +62,9 @@ def modification_allowed(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         user_rol = session.get('user', {}).get('rol')
-        if user_rol == 'muhasebeci':
+        # DEĞİŞİKLİK: 'muhasebeci' yerine UserRole sabitini kullan
+        if user_rol == UserRole.MUHASEBECI.value:
             # Muhasebeci ise, 403 Forbidden (Yasak) hatası döndür.
             return jsonify({"error": "Bu işlemi yapma yetkiniz yok."}), 403
         return f(*args, **kwargs)
     return decorated_function
-
