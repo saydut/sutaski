@@ -3,7 +3,6 @@
 {% block title %}Tedarikçiler - Süt Takip Sistemi{% endblock %}
 
 {% block head_extra %}
-    <!-- Bu sayfa artık TomSelect kullandığı için CSS dosyasını ekliyoruz -->
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css" rel="stylesheet">
 {% endblock %}
 
@@ -14,7 +13,6 @@
         <h1 class="fw-bold">Tedarikçi Yönetimi</h1>
         <div class="d-flex align-items-center gap-2">
             <a href="{{ url_for('main.anasayfa') }}" class="btn btn-secondary btn-sm">Ana Panele Dön</a>
-            <!-- YENİ TEDARİKÇİ EKLEME BUTONU -->
             <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#tedarikciModal">
                 <i class="bi bi-plus-circle"></i> Yeni Tedarikçi Ekle
             </button>
@@ -37,15 +35,14 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Tedarikçi Adı</th>
+                            <th class="sortable" data-sort="isim">Tedarikçi Adı</th>
                             <th>Telefon No</th>
-                            <th class="text-end">Toplam Süt (Litre)</th>
+                            <th class="text-end sortable" data-sort="toplam_litre">Toplam Süt (Litre)</th>
                             <th class="text-center">İşlemler</th>
                         </tr>
                     </thead>
                     <tbody id="tedarikciler-tablosu">
-                        <!-- JS ile doldurulacak -->
-                    </tbody>
+                        </tbody>
                 </table>
                 <div id="veri-yok-mesaji" class="text-center p-4" style="display: none;">
                     <p class="text-secondary">Kayıtlı tedarikçi bulunamadı veya arama sonucuyla eşleşen kayıt yok.</p>
@@ -55,7 +52,6 @@
     </div>
 </div>
 
-<!-- Tedarikçi Ekleme/Düzenleme Modal'ı -->
 <div class="modal fade" id="tedarikciModal" tabindex="-1" aria-labelledby="tedarikciModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -86,23 +82,22 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="tedarikciKaydet()">Kaydet</button>
+                <button type="button" class="btn btn-primary btn-sm" id="kaydet-tedarikci-btn" onclick="tedarikciKaydet()">Kaydet</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Silme Onay Modal'ı -->
-<div class="modal fade" id="silmeOnayModal" tabindex="-1" aria-labelledby="silmeOnayModalLabel" aria-hidden="true">
+<div class="modal fade" id="silmeOnayModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title text-danger" id="silmeOnayModalLabel">Silme Onayı</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <h5 class="modal-title text-danger">Silme Onayı</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p><strong><span id="silinecek-tedarikci-adi"></span></strong> adlı tedarikçiyi ve bu tedarikçiye ait TÜM süt/yem girdilerini kalıcı olarak silmek istediğinize emin misiniz?</p>
-                <p class="text-danger small">Bu işlem geri alınamaz!</p>
+                <p><strong><span id="silinecek-tedarikci-adi"></span></strong> adlı tedarikçiyi silmek istediğinize emin misiniz?</p>
+                <p class="text-danger small">Bu tedarikçiye ait tüm veriler de silinecektir ve bu işlem geri alınamaz!</p>
                 <input type="hidden" id="silinecek-tedarikci-id">
             </div>
             <div class="modal-footer">
@@ -115,6 +110,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script src="{{ url_for('static', filename='js/tedarikciler.js') }}"></script>
 {% endblock %}

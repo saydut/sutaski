@@ -1,9 +1,12 @@
+import logging
 from flask import Blueprint, jsonify, render_template, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-import traceback
+
+# Logging yapılandırması
+logger = logging.getLogger(__name__)
 
 yem_bp = Blueprint('yem', __name__, url_prefix='/yem')
 
@@ -23,8 +26,8 @@ def get_yem_urunleri():
         sirket_id = session['user']['sirket_id']
         urunler = supabase.table('yem_urunleri').select('*').eq('sirket_id', sirket_id).order('yem_adi').execute()
         return jsonify(urunler.data)
-    except Exception:
-        traceback.print_exc()
+    except Exception as e:
+        logger.error(f"Yem ürünleri listelenirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "Ürünler listelenirken bir sunucu hatası oluştu."}), 500
 
 @yem_bp.route('/api/urunler', methods=['POST'])
@@ -52,8 +55,8 @@ def add_yem_urunu():
         return jsonify({"message": "Yeni yem ürünü başarıyla eklendi."}), 201
     except (InvalidOperation, TypeError):
         return jsonify({"error": "Lütfen stok ve fiyat için geçerli sayılar girin."}), 400
-    except Exception:
-        traceback.print_exc()
+    except Exception as e:
+        logger.error(f"Yem ürünü eklenirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "Ürün eklenirken bir sunucu hatası oluştu."}), 500
 
 @yem_bp.route('/api/urunler/<int:id>', methods=['PUT'])
@@ -79,8 +82,8 @@ def update_yem_urunu(id):
         return jsonify({"message": "Yem ürünü başarıyla güncellendi."})
     except (InvalidOperation, TypeError):
         return jsonify({"error": "Lütfen stok ve fiyat için geçerli sayılar girin."}), 400
-    except Exception:
-        traceback.print_exc()
+    except Exception as e:
+        logger.error(f"Yem ürünü güncellenirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "Güncelleme sırasında bir sunucu hatası oluştu."}), 500
 
 @yem_bp.route('/api/urunler/<int:id>', methods=['DELETE'])
@@ -100,7 +103,7 @@ def delete_yem_urunu(id):
     except Exception as e:
         if 'violates foreign key constraint' in str(e).lower():
             return jsonify({"error": "Bu yeme ait çıkış işlemleri olduğu için silinemiyor."}), 409
-        traceback.print_exc()
+        logger.error(f"Yem ürünü silinirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "Silme işlemi sırasında bir hata oluştu."}), 500
 
 @yem_bp.route('/api/islemler', methods=['POST'])
@@ -147,6 +150,6 @@ def add_yem_islemi():
         supabase.table('yem_urunleri').update({"stok_miktari_kg": str(yeni_stok)}).eq('id', yem_urun_id).execute()
 
         return jsonify({"message": "Yem çıkışı başarıyla kaydedildi."}), 201
-    except Exception:
-        traceback.print_exc()
+    except Exception as e:
+        logger.error(f"Yem işlemi eklenirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "İşlem sırasında bir hata oluştu."}), 500

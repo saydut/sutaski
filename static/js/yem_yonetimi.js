@@ -161,6 +161,8 @@ function yemBasliklariniGuncelle() {
  * "Çıkışı Kaydet" butonuna tıklandığında çalışır. Form verilerini sunucuya gönderir.
  */
 async function yemCikisiYap() {
+    const kaydetButton = document.querySelector('.card .btn-primary');
+    const originalButtonText = kaydetButton.innerHTML;
     const tedarikci_id = tedarikciSecici.getValue();
     const yem_urun_id = yemUrunSecici.getValue();
     const miktar_kg = document.getElementById('miktar-input').value;
@@ -170,6 +172,9 @@ async function yemCikisiYap() {
         gosterMesaj('Lütfen tedarikçi, yem ürünü seçin ve geçerli bir miktar girin.', 'warning');
         return;
     }
+
+    kaydetButton.disabled = true;
+    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
 
     try {
         const response = await fetch('/yem/api/islemler', {
@@ -190,6 +195,9 @@ async function yemCikisiYap() {
         }
     } catch (error) {
         gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+    } finally {
+        kaydetButton.disabled = false;
+        kaydetButton.innerHTML = originalButtonText;
     }
 }
 
@@ -223,6 +231,8 @@ function yemDuzenleAc(id) {
  * Ekleme/Düzenleme modal'ındaki kaydet butonuna basıldığında çalışır.
  */
 async function yemUrunuKaydet() {
+    const kaydetButton = document.querySelector('#yemUrunuModal .btn-primary');
+    const originalButtonText = kaydetButton.innerHTML;
     const id = document.getElementById('edit-yem-id').value;
     const veri = {
         yem_adi: document.getElementById('yem-adi-input').value.trim(),
@@ -234,6 +244,9 @@ async function yemUrunuKaydet() {
         gosterMesaj('Lütfen tüm zorunlu alanları doldurun.', 'warning');
         return;
     }
+
+    kaydetButton.disabled = true;
+    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
 
     const url = id ? `/yem/api/urunler/${id}` : '/yem/api/urunler';
     const method = id ? 'PUT' : 'POST';
@@ -255,6 +268,9 @@ async function yemUrunuKaydet() {
         }
     } catch (error) {
         gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+    } finally {
+        kaydetButton.disabled = false;
+        kaydetButton.innerHTML = originalButtonText;
     }
 }
 

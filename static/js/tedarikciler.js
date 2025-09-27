@@ -152,6 +152,8 @@ function renderTable(suppliers) {
  * Ekleme/Düzenleme modal'ındaki kaydet butonuna basıldığında çalışır.
  */
 async function tedarikciKaydet() {
+    const kaydetButton = document.querySelector('#tedarikciModal .btn-primary');
+    const originalButtonText = kaydetButton.innerHTML;
     const id = document.getElementById('edit-tedarikci-id').value;
     const veri = {
         isim: document.getElementById('tedarikci-isim-input').value.trim(),
@@ -164,6 +166,9 @@ async function tedarikciKaydet() {
         gosterMesaj("Tedarikçi ismi zorunludur.", "warning");
         return;
     }
+
+    kaydetButton.disabled = true;
+    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
 
     const url = id ? `/api/tedarikci_duzenle/${id}` : '/api/tedarikci_ekle';
     const method = id ? 'PUT' : 'POST';
@@ -184,6 +189,9 @@ async function tedarikciKaydet() {
         }
     } catch (error) {
         gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+    } finally {
+        kaydetButton.disabled = false;
+        kaydetButton.innerHTML = originalButtonText;
     }
 }
 

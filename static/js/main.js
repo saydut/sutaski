@@ -250,17 +250,26 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
 }
 
 async function sutGirdisiEkle() {
-    const tedarikciId = tedarikciSecici.getValue(); 
+    const kaydetButton = document.querySelector('#veri-giris-paneli button');
+    const originalButtonText = kaydetButton.innerHTML;
+    const tedarikciId = tedarikciSecici.getValue();
     const litre = document.getElementById('litre-input').value;
     const fiyat = document.getElementById('fiyat-input').value;
+
     if (!tedarikciId || !litre || isNaN(parseFloat(litre)) || !fiyat || isNaN(parseFloat(fiyat))) {
-        gosterMesaj("Lütfen tüm alanları doğru doldurun.", "warning"); return;
+        gosterMesaj("Lütfen tüm alanları doğru doldurun.", "warning");
+        return;
     }
+
     const yeniGirdi = {
         tedarikci_id: parseInt(tedarikciId),
         litre: parseFloat(litre),
         fiyat: parseFloat(fiyat)
     };
+
+    kaydetButton.disabled = true;
+    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
+
     if (!navigator.onLine) {
         const offlineUserString = localStorage.getItem('offlineUser');
         if (offlineUserString) {
@@ -272,14 +281,20 @@ async function sutGirdisiEkle() {
                 bugun.setHours(0, 0, 0, 0);
                 if (bugun > lisansBitisTarihi) {
                     gosterMesaj('Lisansınızın süresi dolduğu için çevrimdışı kayıt yapamazsınız.', 'danger');
+                    kaydetButton.disabled = false;
+                    kaydetButton.innerHTML = originalButtonText;
                     return;
                 }
             } else {
                  gosterMesaj('Geçerli bir lisans bulunamadığı için çevrimdışı kayıt yapamazsınız.', 'danger');
+                 kaydetButton.disabled = false;
+                 kaydetButton.innerHTML = originalButtonText;
                  return;
             }
         } else {
             gosterMesaj('Çevrimdışı kayıt için kullanıcı bilgisi bulunamadı. Lütfen önce online giriş yapın.', 'danger');
+            kaydetButton.disabled = false;
+            kaydetButton.innerHTML = originalButtonText;
             return;
         }
         const basarili = await kaydetCevrimdisi(yeniGirdi);
@@ -289,11 +304,15 @@ async function sutGirdisiEkle() {
             tedarikciSecici.clear();
             await girdileriGoster();
         }
+        kaydetButton.disabled = false;
+        kaydetButton.innerHTML = originalButtonText;
         return;
     }
+
     try {
         const response = await fetch('/api/sut_girdisi_ekle', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(yeniGirdi)
         });
         const errorData = await response.json();
@@ -308,7 +327,13 @@ async function sutGirdisiEkle() {
         } else {
             gosterMesaj(`Süt girdisi eklenemedi: ${errorData.error || 'Bilinmeyen hata.'}`, "danger");
         }
-    } catch (error) { console.error("Girdi eklenirken hata:", error); }
+    } catch (error) {
+        console.error("Girdi eklenirken hata:", error);
+        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+    } finally {
+        kaydetButton.disabled = false;
+        kaydetButton.innerHTML = originalButtonText;
+    }
 }
 
 async function tedarikciGrafigiOlustur() {

@@ -1,9 +1,12 @@
+import logging
 from flask import Blueprint, jsonify, render_template, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-import traceback
+
+# Logging yapılandırması
+logger = logging.getLogger(__name__)
 
 finans_bp = Blueprint('finans', __name__, url_prefix='/finans')
 
@@ -27,8 +30,8 @@ def get_finansal_islemler():
             '*, tedarikciler(isim)'
         ).eq('sirket_id', sirket_id).order('islem_tarihi', desc=True).execute()
         return jsonify(islemler.data)
-    except Exception:
-        traceback.print_exc()
+    except Exception as e:
+        logger.error(f"Finansal işlemler listelenirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "İşlemler listelenirken bir sunucu hatası oluştu."}), 500
 
 
@@ -76,8 +79,8 @@ def add_finansal_islem():
         
         return jsonify({"message": f"{islem_tipi} işlemi başarıyla kaydedildi."}), 201
 
-    except Exception:
-        traceback.print_exc()
+    except Exception as e:
+        logger.error(f"Finansal işlem eklenirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "İşlem sırasında bir sunucu hatası oluştu."}), 500
 
 @finans_bp.route('/api/islemler/<int:islem_id>', methods=['PUT'])
@@ -107,14 +110,13 @@ def update_finansal_islem(islem_id):
         # Sorguya sirket_id eklenerek güvenlik artırıldı
         response = supabase.table('finansal_islemler').update(guncellenecek_veri).eq('id', islem_id).eq('sirket_id', sirket_id).execute()
         
-        # Eğer hiçbir kayıt güncellenmediyse, yetkisi veya kaydı yok demektir.
         if not response.data:
             return jsonify({"error": "İşlem bulunamadı veya bu işlem için yetkiniz yok."}), 404
 
         return jsonify({"message": "İşlem başarıyla güncellendi."})
 
-    except Exception:
-        traceback.print_exc()
+    except Exception as e:
+        logger.error(f"Finansal işlem güncellenirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "Güncelleme sırasında bir sunucu hatası oluştu."}), 500
 
 @finans_bp.route('/api/islemler/<int:islem_id>', methods=['DELETE'])
@@ -125,14 +127,12 @@ def delete_finansal_islem(islem_id):
     try:
         sirket_id = session['user']['sirket_id']
         
-        # Sorguya sirket_id eklenerek güvenlik artırıldı
         response = supabase.table('finansal_islemler').delete().eq('id', islem_id).eq('sirket_id', sirket_id).execute()
 
-        # Eğer hiçbir kayıt silinmediyse, yetkisi veya kaydı yok demektir.
         if not response.data:
             return jsonify({"error": "İşlem bulunamadı veya bu işlem için yetkiniz yok."}), 404
 
         return jsonify({"message": "İşlem başarıyla silindi."})
-    except Exception:
-        traceback.print_exc()
+    except Exception as e:
+        logger.error(f"Finansal işlem silinirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "Silme işlemi sırasında bir hata oluştu."}), 500

@@ -21,7 +21,6 @@
     </div>
 
     <div class="row g-3">
-        <!-- Yem Çıkış Paneli -->
         <div class="col-lg-4 col-12 order-lg-1 order-2">
             <div class="card">
                 <div class="card-body p-3">
@@ -43,13 +42,12 @@
                         <textarea class="form-control form-control-sm" id="aciklama-input" rows="2" placeholder="Örn: Ay sonu mahsuplaşılacak"></textarea>
                     </div>
                     <div class="d-grid">
-                        <button class="btn btn-primary" onclick="yemCikisiYap()">Çıkışı Kaydet</button>
+                        <button class="btn btn-primary" id="yem-cikis-btn" onclick="yemCikisiYap()">Çıkışı Kaydet</button>
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- Yem Ürünleri Listesi Paneli -->
         <div class="col-lg-8 col-12 order-lg-2 order-1">
             <div class="card">
                 <div class="card-body p-3">
@@ -65,16 +63,14 @@
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th>Yem Adı</th>
-                                    <th class="text-end">Stok (KG)</th>
-                                    <th class="text-end">Birim Fiyat (TL)</th>
-                                    <!-- YENİ SÜTUN -->
+                                    <th class="sortable sortable-yem" data-sort="yem_adi">Yem Adı</th>
+                                    <th class="text-end sortable sortable-yem" data-sort="stok_miktari_kg">Stok (KG)</th>
+                                    <th class="text-end sortable sortable-yem" data-sort="birim_fiyat">Birim Fiyat (TL)</th>
                                     <th class="text-center">İşlemler</th>
                                 </tr>
                             </thead>
                             <tbody id="yem-urunleri-tablosu">
-                                <!-- JS ile doldurulacak -->
-                            </tbody>
+                                </tbody>
                         </table>
                     </div>
                 </div>
@@ -83,7 +79,6 @@
     </div>
 </div>
 
-<!-- Yeni Yem Ürünü Ekleme/Düzenleme Modal'ı -->
 <div class="modal fade" id="yemUrunuModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
@@ -110,13 +105,12 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="yemUrunuKaydet()">Kaydet</button>
+                <button type="button" class="btn btn-primary btn-sm" id="kaydet-yem-btn" onclick="yemUrunuKaydet()">Kaydet</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- YENİ: Yem Silme Onay Modal'ı -->
 <div class="modal fade" id="yemSilmeOnayModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
@@ -126,7 +120,6 @@
             </div>
             <div class="modal-body">
                 <p><strong><span id="silinecek-yem-adi"></span></strong> adlı yem ürününü silmek istediğinize emin misiniz?</p>
-                <p class="text-danger small">Bu ürüne ait tüm yem çıkış işlemleri de silinecektir ve bu işlem geri alınamaz!</p>
                 <input type="hidden" id="silinecek-yem-id">
             </div>
             <div class="modal-footer">
@@ -142,4 +135,3 @@
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script src="{{ url_for('static', filename='js/yem_yonetimi.js') }}"></script>
 {% endblock %}
-
