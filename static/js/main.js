@@ -56,6 +56,19 @@ function initOfflineState() {
 window.onload = async function() {
     initOfflineState(); // Sayfa yüklenir yüklenmez çevrimdışı durumunu kontrol et
 
+    // --- YENİ EKLENEN GİRİŞ KONTROLÜ ---
+    // Kullanıcının giriş yapıp yapmadığını hem sunucudan gelen veriyle (body.dataset) 
+    // hem de yerel depolamayla (localStorage) kontrol et.
+    const isUserLoggedIn = document.body.dataset.userRole || localStorage.getItem('offlineUser');
+
+    // Eğer internet var AMA kullanıcı giriş yapmamışsa, login sayfasına yönlendir.
+    if (navigator.onLine && !isUserLoggedIn) {
+        window.location.href = '/login';
+        return; // Yönlendirme sonrası scriptin devam etmesini engelle.
+    }
+    // --- KONTROL SONU ---
+
+
     duzenleModal = new bootstrap.Modal(document.getElementById('duzenleModal'));
     gecmisModal = new bootstrap.Modal(document.getElementById('gecmisModal'));
     silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
