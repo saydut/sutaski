@@ -19,14 +19,12 @@ def create_app():
     app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")
     app.config['JSON_AS_ASCII'] = False
 
-    # --- YENİ: Tarih formatlama için genel bir filtre ---
     @app.template_filter('format_tarih_str')
     def format_tarih_filter(value):
         """String formatındaki 'YYYY-MM-DD' tarihini 'DD.MM.YYYY' formatına çevirir."""
         if not value:
             return ''
         try:
-            # Gelen değerin string olduğunu varsayıyoruz
             dt_obj = datetime.strptime(value, '%Y-%m-%d')
             return dt_obj.strftime('%d.%m.%Y')
         except (ValueError, TypeError):
@@ -36,12 +34,12 @@ def create_app():
     @app.context_processor
     def inject_global_vars():
         try:
-            # --- GÜNCELLEME: .single() kaldırıldı, tablo boşken hata vermeyecek ---
-            latest_version_res = supabase.table('surum_notlari').select('surum_no').order('yayin_tarihi', desc=True).limit(1).execute()
+            # --- DÜZELTME BURADA: id'ye göre ikinci bir sıralama eklendi ---
+            latest_version_res = supabase.table('surum_notlari').select('surum_no').order('yayin_tarihi', desc=True).order('id', desc=True).limit(1).execute()
             
-            all_versions_res = supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).execute()
+            # --- DÜZELTME BURADA: Liste tutarlılığı için buraya da eklendi ---
+            all_versions_res = supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).order('id', desc=True).execute()
 
-            # Gelen veri bir liste, ilk elemanını alıyoruz
             app_version = latest_version_res.data[0]['surum_no'] if latest_version_res.data else "1.0.0"
             surum_notlari = all_versions_res.data if all_versions_res.data else []
             
