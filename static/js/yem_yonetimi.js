@@ -128,16 +128,22 @@ function renderYemTable(urunler) {
     if (urunler.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary p-4">Kayıtlı yem ürünü bulunamadı.</td></tr>';
     } else {
-        const kritikStokSeviyesi = 500; // Uyarı verilecek seviye (KG)
+        // 1. Kritik stok seviyesini burada belirliyoruz. Bu değeri istediğin gibi değiştirebilirsin.
+        const kritikStokSeviyesi = 500; // Örneğin, 500 KG'nin altı kritik kabul edilsin.
 
         urunler.forEach(urun => {
             const stokMiktari = parseFloat(urun.stok_miktari_kg);
+
+            // 2. Yemin stoğunun kritik seviyede olup olmadığını kontrol ediyoruz.
             const isKritik = stokMiktari <= kritikStokSeviyesi;
 
-            // Stok kritik seviyedeyse satırı renklendir ve uyarı ikonu ekle
-            const rowClass = isKritik ? 'table-warning' : '';
-            const uyariIconu = isKritik ? `<i class="bi bi-exclamation-triangle-fill text-danger me-2" title="Stok kritik seviyede: ${stokMiktari.toFixed(2)} KG"></i>` : '';
+            // 3. Kontrol sonucuna göre CSS sınıfı ve uyarı ikonunu hazırlıyoruz.
+            const rowClass = isKritik ? 'table-warning' : ''; // Kritikse satırı sarı yap
+            const uyariIconu = isKritik 
+                ? `<i class="bi bi-exclamation-triangle-fill text-danger me-2" title="Stok kritik seviyede: ${stokMiktari.toFixed(2)} KG"></i>` 
+                : ''; // Kritikse uyarı ikonu ekle
 
+            // 4. Hazırladığımız değişkenleri HTML çıktısına ekliyoruz.
             const tr = `
                 <tr class="${rowClass}">
                     <td>${uyariIconu}<strong>${urun.yem_adi}</strong></td>
