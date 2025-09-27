@@ -1,32 +1,58 @@
 import os
 from flask import Flask
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Eklentileri ve Blueprint'leri içe aktar
-from extensions import bcrypt
+from extensions import bcrypt, supabase
 from blueprints.auth import auth_bp
 from blueprints.main import main_bp
 from blueprints.admin import admin_bp
-from blueprints.yem import yem_bp # YEM BLUEPRINT'İNİ İÇE AKTAR
-from blueprints.finans import finans_bp # FİNANS BLUEPRINT'İNİ İÇE AKTAR
+from blueprints.yem import yem_bp
+from blueprints.finans import finans_bp
 
 def create_app():
     """Flask uygulama fabrikası."""
     load_dotenv()
     
-    # templates ve static klasörlerinin ana dizinde olduğunu belirtiyoruz
     app = Flask(__name__, template_folder='templates', static_folder='static')
     app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")
-    
-    # JSON cevaplarında Türkçe karakterlerin doğru gösterilmesini sağlar.
-    # Bu satırın burada olması testlerin doğru çalışması için kritiktir.
     app.config['JSON_AS_ASCII'] = False
+
+    # --- YENİ: Tarih formatlama için genel bir filtre ---
+    @app.template_filter('format_tarih_str')
+    def format_tarih_filter(value):
+        """String formatındaki 'YYYY-MM-DD' tarihini 'DD.MM.YYYY' formatına çevirir."""
+        if not value:
+            return ''
+        try:
+            # Gelen değerin string olduğunu varsayıyoruz
+            dt_obj = datetime.strptime(value, '%Y-%m-%d')
+            return dt_obj.strftime('%d.%m.%Y')
+        except (ValueError, TypeError):
+            return value
 
     # Uygulama genelinde kullanılacak değişkenleri context'e ekle
     @app.context_processor
     def inject_global_vars():
+        try:
+            # --- GÜNCELLEME: .single() kaldırıldı, tablo boşken hata vermeyecek ---
+            latest_version_res = supabase.table('surum_notlari').select('surum_no').order('yayin_tarihi', desc=True).limit(1).execute()
+            
+            all_versions_res = supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).execute()
+
+            # Gelen veri bir liste, ilk elemanını alıyoruz
+            app_version = latest_version_res.data[0]['surum_no'] if latest_version_res.data else "1.0.0"
+            surum_notlari = all_versions_res.data if all_versions_res.data else []
+            
+        except Exception as e:
+            print(f"Sürüm bilgileri çekilirken hata oluştu: {e}")
+            app_version = "N/A"
+            surum_notlari = []
+            
         return {
-            'APP_VERSION': '1.3.1' # Sürümü 1.3.1 olarak güncelledik
+            'APP_VERSION': app_version,
+            'SURUM_NOTLARI': surum_notlari
         }
 
     # Eklentileri başlat
@@ -36,8 +62,8 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
-    app.register_blueprint(yem_bp) # YEM BLUEPRINT'İNİ KAYDET
-    app.register_blueprint(finans_bp) # FİNANS BLUEPRINT'İNİ KAYDET
+    app.register_blueprint(yem_bp)
+    app.register_blueprint(finans_bp)
 
     return app
 
@@ -45,7 +71,6 @@ def create_app():
 if __name__ == '__main__':
     app = create_app()
     app.run(debug=True)
-
 
 ####3###
 #

@@ -113,3 +113,54 @@ def reset_password():
     except Exception as e:
         print(f"Şifre sıfırlama hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+
+# --- YENİ EKLENEN SÜRÜM YÖNETİMİ API'LARI ---
+
+@admin_bp.route('/api/admin/surum_notlari', methods=['GET'])
+@login_required
+@admin_required
+def get_surum_notlari():
+    """Tüm sürüm notlarını veritabanından çeker."""
+    try:
+        notlar = supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).execute()
+        return jsonify(notlar.data)
+    except Exception as e:
+        print(f"Sürüm notları alınırken hata: {e}")
+        return jsonify({"error": "Sürüm notları alınamadı."}), 500
+
+@admin_bp.route('/api/admin/surum_notlari', methods=['POST'])
+@login_required
+@admin_required
+def add_surum_notu():
+    """Yeni bir sürüm notu ekler."""
+    try:
+        data = request.get_json()
+        surum_no = data.get('surum_no')
+        yayin_tarihi = data.get('yayin_tarihi')
+        notlar = data.get('notlar')
+
+        if not all([surum_no, yayin_tarihi, notlar]):
+            return jsonify({"error": "Tüm alanlar zorunludur."}), 400
+
+        yeni_not = {
+            "surum_no": surum_no,
+            "yayin_tarihi": yayin_tarihi,
+            "notlar": notlar
+        }
+        supabase.table('surum_notlari').insert(yeni_not).execute()
+        return jsonify({"message": "Sürüm notu başarıyla eklendi."}), 201
+    except Exception as e:
+        print(f"Sürüm notu eklenirken hata: {e}")
+        return jsonify({"error": "Sürüm notu eklenemedi."}), 500
+
+@admin_bp.route('/api/admin/surum_notlari/<int:id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_surum_notu(id):
+    """Bir sürüm notunu siler."""
+    try:
+        supabase.table('surum_notlari').delete().eq('id', id).execute()
+        return jsonify({"message": "Sürüm notu başarıyla silindi."})
+    except Exception as e:
+        print(f"Sürüm notu silinirken hata: {e}")
+        return jsonify({"error": "Sürüm notu silinemedi."}), 500

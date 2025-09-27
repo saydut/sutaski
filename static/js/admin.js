@@ -3,33 +3,152 @@ let sirketSilmeOnayModal, sifreSifirlaModal;
 // Tarih seçicileri için global bir obje
 const tarihSeciciler = {};
 
+// --- YENİ EKLENEN YARDIMCI FONKSİYON ---
+/**
+ * JavaScript Date objesini 'YYYY-MM-DD' formatına çevirir.
+ * Timezone dönüşümü yapmaz, böylece saat farkı sorununu çözer.
+ * @param {Date} date - Formatlanacak tarih objesi.
+ * @returns {string} - 'YYYY-MM-DD' formatında tarih metni.
+ */
+function formatDateToYYYYMMDD(date) {
+    if (!date) return null;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0'); // aylar 0'dan başladığı için +1
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+// --- YENİ FONKSİYON SONU ---
+
 window.onload = function() {
     sirketSilmeOnayModal = new bootstrap.Modal(document.getElementById('sirketSilmeOnayModal'));
     sifreSifirlaModal = new bootstrap.Modal(document.getElementById('sifreSifirlaModal'));
+    
+    // Yeni sürüm notu için tarih seçiciyi başlat
+    flatpickr("#yayin-tarihi-input", {
+        dateFormat: "Y-m-d", // Veritabanına uygun format
+        altInput: true,     // Kullanıcıya gösterilecek format
+        altFormat: "d.m.Y", // GG.AA.YYYY
+        locale: "tr",
+        defaultDate: "today"
+    });
+    
+    // Sürüm formu için olay dinleyicisi ekle
+    document.getElementById('surum-formu').addEventListener('submit', surumNotuEkle);
+    
     adminVerileriniYukle();
 };
 
 async function adminVerileriniYukle() {
     try {
-        const response = await fetch('/api/admin/data');
-        const data = await response.json();
-        if (response.ok) {
-            sirketleriDoldur(data.sirketler);
-            kullanicilariDoldur(data.kullanicilar);
+        // Artık iki farklı API'den veri çekeceğiz
+        const [adminDataResponse, surumNotlariResponse] = await Promise.all([
+            fetch('/api/admin/data'),
+            fetch('/api/admin/surum_notlari')
+        ]);
+
+        const adminData = await adminDataResponse.json();
+        const surumNotlari = await surumNotlariResponse.json();
+
+        if (adminDataResponse.ok) {
+            sirketleriDoldur(adminData.sirketler);
+            kullanicilariDoldur(adminData.kullanicilar);
         } else {
-            gosterMesaj(data.error || "Veriler yüklenemedi.", "danger");
+            gosterMesaj(adminData.error || "Veriler yüklenemedi.", "danger");
         }
+        
+        if(surumNotlariResponse.ok){
+            surumNotlariniDoldur(surumNotlari);
+        } else {
+            gosterMesaj(surumNotlari.error || "Sürüm notları yüklenemedi.", "danger");
+        }
+
     } catch (error) {
         console.error("Admin verileri yüklenirken hata:", error);
         gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
     }
 }
 
+// --- SÜRÜM YÖNETİMİ FONKSİYONLARI ---
+
+async function surumNotuEkle(event) {
+    event.preventDefault(); // Formun sayfa yenilemesini engelle
+    
+    const selectedDate = document.getElementById('yayin-tarihi-input')._flatpickr.selectedDates[0];
+    
+    const veri = {
+        surum_no: document.getElementById('surum-no-input').value,
+        // --- DEĞİŞİKLİK BURADA: Artık yeni yardımcı fonksiyonumuzu kullanıyoruz ---
+        yayin_tarihi: formatDateToYYYYMMDD(selectedDate),
+        notlar: document.getElementById('notlar-input').value
+    };
+
+    try {
+        const response = await fetch('/api/admin/surum_notlari', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(veri)
+        });
+        const result = await response.json();
+        if (response.ok) {
+            gosterMesaj(result.message, 'success');
+            document.getElementById('surum-formu').reset();
+            document.getElementById('yayin-tarihi-input')._flatpickr.setDate(new Date());
+            adminVerileriniYukle(); // Listeyi yenile
+        } else {
+            gosterMesaj(result.error || "Ekleme hatası.", "danger");
+        }
+    } catch (error) {
+        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+    }
+}
+
+function surumNotlariniDoldur(notlar) {
+    const tbody = document.getElementById('surumler-tablosu');
+    tbody.innerHTML = '';
+    if (notlar.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center">Kayıtlı sürüm notu bulunamadı.</td></tr>';
+        return;
+    }
+    notlar.forEach(not => {
+        // Notları HTML liste elemanlarına çevir
+        const notlarHtml = '<ul>' + not.notlar.split('\n').map(line => `<li>${line.replace(/^- /, '')}</li>`).join('') + '</ul>';
+        const tr = `
+            <tr>
+                <td><strong>${not.surum_no}</strong></td>
+                <td>${new Date(not.yayin_tarihi + 'T00:00:00').toLocaleDateString('tr-TR')}</td>
+                <td>${notlarHtml}</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-danger" onclick="surumNotuSil(${not.id})" title="Bu sürüm notunu sil"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>
+        `;
+        tbody.innerHTML += tr;
+    });
+}
+
+async function surumNotuSil(id) {
+    if (!confirm("Bu sürüm notunu silmek istediğinizden emin misiniz?")) return;
+
+    try {
+        const response = await fetch(`/api/admin/surum_notlari/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (response.ok) {
+            gosterMesaj(result.message, 'success');
+            adminVerileriniYukle(); // Listeyi yenile
+        } else {
+            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
+        }
+    } catch (error) {
+        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+    }
+}
+
+// --- ŞİRKET VE KULLANICI YÖNETİMİ FONKSİYONLARI (DEĞİŞİKLİK YOK) ---
+
 function sirketleriDoldur(sirketler) {
     const tbody = document.getElementById('sirketler-tablosu');
     tbody.innerHTML = '';
 
-    // Önceki tarih seçicileri temizle
     for (const key in tarihSeciciler) {
         if (tarihSeciciler[key]) {
             tarihSeciciler[key].destroy();
@@ -46,7 +165,6 @@ function sirketleriDoldur(sirketler) {
         tr.innerHTML = `
             <td>${sirket.sirket_adi}</td>
             <td>
-                <!-- Input türünü text olarak değiştiriyoruz -->
                 <input type="text" class="form-control form-control-sm flatpickr-input" id="lisans-tarih-${sirket.id}" placeholder="GG.AA.YYYY">
             </td>
             <td class="d-flex gap-1">
@@ -56,12 +174,11 @@ function sirketleriDoldur(sirketler) {
         `;
         tbody.appendChild(tr);
 
-        // Her bir tarih inputu için Flatpickr'ı başlat
         const inputId = `lisans-tarih-${sirket.id}`;
         const inputElement = document.getElementById(inputId);
         tarihSeciciler[inputId] = flatpickr(inputElement, {
-            dateFormat: "d.m.Y", // GG.AA.YYYY formatı
-            locale: "tr", // Türkçe dil
+            dateFormat: "d.m.Y",
+            locale: "tr",
             defaultDate: sirket.lisans_bitis_tarihi ? new Date(sirket.lisans_bitis_tarihi) : null
         });
     });
@@ -100,9 +217,8 @@ function kullanicilariDoldur(kullanicilar) {
 
 async function lisansGuncelle(sirketId) {
     const fpInstance = tarihSeciciler[`lisans-tarih-${sirketId}`];
-    // Flatpickr'dan seçilen tarihi alıp YYYY-MM-DD formatına çeviriyoruz
     const secilenTarih = fpInstance.selectedDates[0];
-    const yeniTarih = secilenTarih ? `${secilenTarih.getFullYear()}-${String(secilenTarih.getMonth() + 1).padStart(2, '0')}-${String(secilenTarih.getDate()).padStart(2, '0')}` : null;
+    const yeniTarih = formatDateToYYYYMMDD(secilenTarih);
     
     try {
          const response = await fetch('/api/admin/update_lisans', {
@@ -197,4 +313,3 @@ async function sifreSifirla() {
         gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
     }
 }
-
