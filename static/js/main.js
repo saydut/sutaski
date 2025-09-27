@@ -187,10 +187,13 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
     }
     let tumGirdiler = sunucuVerisi.girdiler;
     let toplamGirdi = sunucuVerisi.toplam_girdi_sayisi;
-    const bugunTarihi = getLocalDateString(new Date());
-    if (tarih === bugunTarihi && sayfa === 1) {
-        try {
-            const bekleyenGirdiler = await bekleyenGirdileriGetir();
+    
+    // ÇEVRİMDIŞI MANTIĞI GÜNCELLEMESİ:
+    // Artık sadece sayfa 1'de değil, her zaman bekleyen girdileri göstermeyi deneriz.
+    // Çünkü bekleyen girdiler her zaman "bugün" içindir.
+    try {
+        const bekleyenGirdiler = await bekleyenGirdileriGetir();
+        if (bekleyenGirdiler.length > 0) {
             const islenmisBekleyenler = bekleyenGirdiler.map(girdi => {
                 const tedarikci = tumTedarikciler.find(t => t.id === girdi.tedarikci_id);
                 const tedarikciAdi = tedarikci ? tedarikci.isim : `Bilinmeyen (ID: ${girdi.tedarikci_id})`;
@@ -205,13 +208,17 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
                     tedarikciler: { isim: tedarikciAdi }
                 };
             });
-            tumGirdiler = [...islenmisBekleyenler.reverse(), ...tumGirdiler];
-            toplamGirdi += islenmisBekleyenler.length;
-        } catch (dbError) {
-            console.error("Yerel veritabanından okuma hatası:", dbError);
-            hataMesaji = (hataMesaji ? hataMesaji + "\n" : "") + "Yerel veriler okunamadı.";
+            // Eğer o anki görünüm bugüne aitse, bekleyenleri de ekle.
+            if (tarih === getLocalDateString(new Date())) {
+                tumGirdiler = [...islenmisBekleyenler.reverse(), ...tumGirdiler];
+                toplamGirdi += islenmisBekleyenler.length;
+            }
         }
+    } catch (dbError) {
+        console.error("Yerel veritabanından okuma hatası:", dbError);
+        hataMesaji = (hataMesaji ? hataMesaji + "\n" : "") + "Yerel veriler okunamadı.";
     }
+
     listeElementi.innerHTML = '';
     if (tumGirdiler.length === 0) {
         if (!navigator.onLine) {
@@ -566,4 +573,3 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
-
