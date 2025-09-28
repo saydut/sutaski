@@ -1,8 +1,10 @@
+# Dosya: blueprints/tedarikci.py (YENİ VE GÜVENİLİR VERSİYON)
+
 from flask import Blueprint, jsonify, request, session, render_template, current_app, send_file
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase, turkey_tz
-from utils import parse_supabase_timestamp # <-- DEĞİŞİKLİK BURADA
-from decimal import Decimal, InvalidOperation
+from utils import parse_supabase_timestamp
+from decimal import Decimal
 from datetime import datetime
 import pytz
 import calendar
@@ -10,6 +12,48 @@ from weasyprint import HTML
 import io
 
 tedarikci_bp = Blueprint('tedarikci', __name__, url_prefix='/api')
+
+@tedarikci_bp.route('/tedarikciler_liste')
+@login_required
+def get_tedarikciler_liste():
+    try:
+        sirket_id = session['user']['sirket_id']
+        
+        # Adım 1: Şirkete ait tüm tedarikçileri ve onlara bağlı süt girdilerini çekiyoruz.
+        response = supabase.table('tedarikciler').select(
+            'id, isim, telefon_no, tc_no, adres, sut_girdileri!left(litre)'
+        ).eq('sirket_id', sirket_id).execute()
+
+        if not response.data:
+            return jsonify([])
+
+        # Adım 2: Gelen veriyi Python'da işleyerek her tedarikçi için toplam litreyi hesaplıyoruz.
+        formatted_data = []
+        for r in response.data:
+            # Sadece 'litre' değeri olan girdileri topla
+            total_litre = sum(
+                Decimal(g['litre']) for g in r.get('sut_girdileri', []) if g.get('litre') is not None
+            )
+            
+            formatted_data.append({
+                'id': r['id'],
+                'isim': r['isim'],
+                'telefon_no': r['telefon_no'],
+                'tc_no': r['tc_no'],
+                'adres': r['adres'],
+                'toplam_litre': float(total_litre),
+                'girdi_sayisi': len(r.get('sut_girdileri', []))
+            })
+        
+        # Adım 3: Sonucu isme göre alfabetik olarak sıralıyoruz.
+        formatted_data.sort(key=lambda x: x['isim'].lower())
+
+        return jsonify(formatted_data)
+    except Exception as e:
+        print(f"Tedarikçi listesi hatası (Python tarafında): {e}")
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+
+# --- DİĞER FONKSİYONLAR OLDUĞU GİBİ KALIYOR ---
 
 def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
     _, ayin_son_gunu = calendar.monthrange(yil, ay)
@@ -153,40 +197,6 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception as e:
         print(f"Müstahsil PDF hatası: {e}")
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
-
-@tedarikci_bp.route('/tedarikciler_liste')
-@login_required
-def get_tedarikciler_liste():
-    try:
-        sirket_id = session['user']['sirket_id']
-        # DEĞİŞİKLİK: RPC yerine standart bir select sorgusu kullanıyoruz.
-        # Bu, "400 Bad Request" hatasını kesin olarak çözecektir.
-        response = supabase.table('tedarikciler').select(
-            'id, isim, telefon_no, tc_no, adres, sut_girdileri!left(litre)'
-        ).eq('sirket_id', sirket_id).execute()
-
-        # Gelen veriyi istemcinin beklediği formata dönüştürüyoruz.
-        formatted_data = []
-        for r in response.data:
-            total_litre = sum(g['litre'] for g in r.get('sut_girdileri', []) if g.get('litre') is not None)
-            formatted_data.append({
-                'id': r['id'],
-                'isim': r['isim'],
-                'telefon_no': r['telefon_no'],
-                'tc_no': r['tc_no'],
-                'adres': r['adres'],
-                'toplam_litre': float(total_litre),
-                'girdi_sayisi': len(r.get('sut_girdileri', []))
-            })
-        
-        # Sonucu isme göre sıralayalım.
-        formatted_data.sort(key=lambda x: x['isim'])
-
-        return jsonify(formatted_data)
-    except Exception as e:
-        # Hata mesajına daha fazla detay ekleyelim.
-        print(f"Tedarikçi listesi hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @tedarikci_bp.route('/tedarikci_ekle', methods=['POST'])
