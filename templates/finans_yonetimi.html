@@ -22,7 +22,6 @@
     </div>
 
     <div class="row g-3">
-        <!-- Yeni İşlem Ekleme Paneli -->
         <div class="col-lg-4 col-12">
             <div class="card">
                 <div class="card-body p-3">
@@ -57,35 +56,48 @@
             </div>
         </div>
         
-        <!-- Son İşlemler Listesi -->
         <div class="col-lg-8 col-12">
             <div class="card">
                 <div class="card-body p-3">
-                     <h5 class="card-title mb-2">Tüm Finansal İşlemler</h5>
-                     <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Tarih</th>
-                                    <th>Tedarikçi</th>
-                                    <th>İşlem Tipi</th>
-                                    <th class="text-end">Tutar (TL)</th>
-                                    <th>Açıklama</th>
-                                    <th class="text-center">İşlemler</th>
-                                </tr>
-                            </thead>
-                            <tbody id="finansal-islemler-tablosu">
-                                <!-- JS ile doldurulacak -->
-                            </tbody>
-                        </table>
+                     <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title mb-0">Tüm Finansal İşlemler</h5>
+                        <div class="btn-group" role="group">
+                            <button type="button" id="btn-view-table" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('tablo')"><i class="bi bi-list-task"></i> Liste</button>
+                            <button type="button" id="btn-view-card" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('kart')"><i class="bi bi-grid-3x2-gap-fill"></i> Kart</button>
+                        </div>
                      </div>
+
+                     <div id="tablo-gorunumu" class="gorunum-konteyneri" style="display: none;">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Tarih</th>
+                                        <th>Tedarikçi</th>
+                                        <th>İşlem Tipi</th>
+                                        <th class="text-end">Tutar (TL)</th>
+                                        <th>Açıklama</th>
+                                        <th class="text-center">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="finansal-islemler-tablosu"></tbody>
+                            </table>
+                        </div>
+                     </div>
+
+                     <div id="kart-gorunumu" class="gorunum-konteyneri" style="display: none;">
+                        <div class="row g-3" id="finansal-islemler-kart-listesi"></div>
+                     </div>
+                     
+                     <div id="veri-yok-mesaji" class="text-center p-4" style="display: none;">
+                        <p class="text-secondary">Kayıtlı finansal işlem bulunamadı.</p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Düzenleme Modal'ı -->
 <div class="modal fade" id="duzenleModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
@@ -112,7 +124,6 @@
     </div>
 </div>
 
-<!-- Silme Onay Modal'ı -->
 <div class="modal fade" id="silmeOnayModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
