@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from utils import parse_supabase_timestamp # <-- DEĞİŞİKLİK BURADA
 import logging
 from datetime import datetime
+import pytz # <-- EKLENEN SATIR
 
 sut_bp = Blueprint('sut', __name__, url_prefix='/api')
 logger = logging.getLogger(__name__)
