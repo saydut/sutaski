@@ -19,22 +19,39 @@ def get_gunluk_ozet():
     try:
         sirket_id = session['user']['sirket_id']
         tarih_str = request.args.get('tarih')
-        target_date_str = datetime.strptime(tarih_str, '%Y-%m-%d').date().isoformat() if tarih_str else datetime.now(turkey_tz).date().isoformat()
         
-        response = supabase.rpc('get_daily_summary_rpc', {
-            'target_sirket_id': sirket_id,
-            'target_date': target_date_str
-        }).execute()
-
-        if response.data:
-            summary = response.data[0]
-            summary['toplam_litre'] = round(float(summary.get('toplam_litre', 0)), 2)
+        if tarih_str:
+            target_date = datetime.strptime(tarih_str, '%Y-%m-%d').date()
         else:
-            summary = {'toplam_litre': 0, 'girdi_sayisi': 0}
+            target_date = datetime.now(turkey_tz).date()
 
+        # DEĞİŞİKLİK: RPC yerine standart ve güvenilir bir sorgu kullanıyoruz.
+        # Bu, saat dilimi sorunlarını ve "Hata" yazısını kesin olarak çözecektir.
+        start_utc = turkey_tz.localize(datetime.combine(target_date, datetime.min.time())).astimezone(pytz.utc).isoformat()
+        end_utc = turkey_tz.localize(datetime.combine(target_date, datetime.max.time())).astimezone(pytz.utc).isoformat()
+
+        response = supabase.table('sut_girdileri').select(
+            'litre', count='exact'
+        ).eq('sirket_id', sirket_id).gte(
+            'taplanma_tarihi', start_utc
+        ).lte(
+            'taplanma_tarihi', end_utc
+        ).execute()
+
+        if not hasattr(response, 'data'):
+             raise Exception("Supabase'den geçerli bir yanıt alınamadı.")
+
+        toplam_litre = sum(Decimal(item.get('litre', '0')) for item in response.data)
+        girdi_sayisi = response.count
+
+        summary = {
+            'toplam_litre': round(float(toplam_litre), 2),
+            'girdi_sayisi': girdi_sayisi
+        }
         return jsonify(summary)
+
     except Exception as e:
-        print(f"Günlük özet hatası: {e}")
+        print(f"Günlük özet hatası (Python tarafında): {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
         
 # ... (dosyanın geri kalanı değişmeden aynı kalıyor) ...
