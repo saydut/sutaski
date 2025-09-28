@@ -1,4 +1,4 @@
-# Dosya: blueprints/tedarikci.py (DÜZELTİLMİŞ VERSİYON)
+# Dosya: blueprints/tedarikci.py (TAM VE DÜZELTİLMİŞ VERSİYON)
 
 from flask import Blueprint, jsonify, request, session, render_template, current_app, send_file
 from decorators import login_required, lisans_kontrolu, modification_allowed
@@ -10,9 +10,95 @@ import pytz
 import calendar
 from weasyprint import HTML
 import io
+from postgrest import APIError # Hata yakalama için eklendi
 
 tedarikci_bp = Blueprint('tedarikci', __name__, url_prefix='/api')
 
+# --- TEDARİKÇİ EKLEME (YENİ VE GÜVENİLİR KOD) ---
+@tedarikci_bp.route('/tedarikci_ekle', methods=['POST'])
+@login_required
+@lisans_kontrolu
+@modification_allowed
+def add_tedarikci():
+    try:
+        data = request.get_json()
+        sirket_id = session['user']['sirket_id']
+        
+        isim = data.get('isim')
+        if not isim:
+            return jsonify({"error": "Tedarikçi ismi zorunludur."}), 400
+
+        # Sadece zorunlu alanlarla başla
+        yeni_veri = {
+            'isim': isim,
+            'sirket_id': sirket_id,
+        }
+
+        # İsteğe bağlı alanları SADECE doluysa ekle
+        if data.get('tc_no'):
+            yeni_veri['tc_no'] = data.get('tc_no')
+        if data.get('telefon_no'):
+            yeni_veri['telefon_no'] = data.get('telefon_no')
+        if data.get('adres'):
+            yeni_veri['adres'] = data.get('adres')
+
+        supabase.table('tedarikciler').insert(yeni_veri).execute()
+        
+        return jsonify({"message": "Tedarikçi başarıyla eklendi."}), 201
+
+    except APIError as e:
+        # Supabase'den gelen spesifik hatayı logla ve kullanıcıya göster
+        print(f"Tedarikçi Ekleme - Supabase API Hatası: {e.message}")
+        return jsonify({"error": f"Veritabanı hatası: {e.message}"}), 500
+    except Exception as e:
+        print(f"Tedarikçi Ekleme - Genel Hata: {e}")
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+
+# --- TEDARİKÇİ DÜZENLEME (YENİ VE GÜVENİLİR KOD) ---
+@tedarikci_bp.route('/tedarikci_duzenle/<int:id>', methods=['PUT'])
+@login_required
+@lisans_kontrolu
+@modification_allowed
+def update_tedarikci(id):
+    try:
+        data = request.get_json()
+        sirket_id = session['user']['sirket_id']
+
+        # Başlangıçta boş bir sözlük oluştur
+        guncellenecek_veri = {}
+
+        # Gelen veride hangi alanlar varsa, onları güncelleme listesine ekle
+        if 'isim' in data and data.get('isim'):
+            guncellenecek_veri['isim'] = data.get('isim')
+        else:
+             return jsonify({"error": "Tedarikçi ismi boş bırakılamaz."}), 400
+
+        # İsteğe bağlı alanları, dolu veya boş olarak gönderildiyse ekle
+        if 'tc_no' in data:
+            guncellenecek_veri['tc_no'] = data.get('tc_no')
+        if 'telefon_no' in data:
+            guncellenecek_veri['telefon_no'] = data.get('telefon_no')
+        if 'adres' in data:
+            guncellenecek_veri['adres'] = data.get('adres')
+        
+        if not guncellenecek_veri:
+            return jsonify({"error": "Güncellenecek veri bulunamadı."}), 400
+
+        response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', id).eq('sirket_id', sirket_id).execute()
+        
+        if not response.data:
+            return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
+            
+        return jsonify({"message": "Tedarikçi bilgileri güncellendi."})
+
+    except APIError as e:
+        print(f"Tedarikçi Güncelleme - Supabase API Hatası: {e.message}")
+        return jsonify({"error": f"Veritabanı hatası: {e.message}"}), 500
+    except Exception as e:
+        print(f"Tedarikçi Güncelleme - Genel Hata: {e}")
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+
+# --- DİĞER FONKSİYONLAR (DEĞİŞİKLİK YOK) ---
 @tedarikci_bp.route('/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
@@ -42,13 +128,10 @@ def get_tedarikciler_liste():
             })
         
         formatted_data.sort(key=lambda x: x['isim'].lower())
-
         return jsonify(formatted_data)
     except Exception as e:
         print(f"Tedarikçi listesi hatası (Python tarafında): {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
-
-# --- DİĞER FONKSİYONLAR OLDUĞU GİBİ KALIYOR ---
 
 def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
     _, ayin_son_gunu = calendar.monthrange(yil, ay)
@@ -192,57 +275,6 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception as e:
         print(f"Müstahsil PDF hatası: {e}")
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
-
-@tedarikci_bp.route('/tedarikci_ekle', methods=['POST'])
-@login_required
-@lisans_kontrolu
-@modification_allowed
-def add_tedarikci():
-    try:
-        data = request.get_json()
-        sirket_id = session['user']['sirket_id']
-        if not data.get('isim'):
-            return jsonify({"error": "Tedarikçi ismi zorunludur."}), 400
-        
-        # --- DEĞİŞİKLİK BURADA ---
-        # 'or None' kaldırıldı. Artık boş bırakılan alanlar veritabanına NULL yerine "" olarak gidecek.
-        yeni_veri = {
-            'isim': data.get('isim'),
-            'sirket_id': sirket_id,
-            'tc_no': data.get('tc_no'), 
-            'telefon_no': data.get('telefon_no'),
-            'adres': data.get('adres')
-        }
-        supabase.table('tedarikciler').insert(yeni_veri).execute()
-        return jsonify({"message": "Tedarikçi başarıyla eklendi."}), 201
-    except Exception as e:
-        print(f"Tedarikçi Ekleme Hatası: {e}") # Loglamayı daha bilgilendirici hale getirelim
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
-
-@tedarikci_bp.route('/tedarikci_duzenle/<int:id>', methods=['PUT'])
-@login_required
-@lisans_kontrolu
-@modification_allowed
-def update_tedarikci(id):
-    try:
-        data = request.get_json()
-        sirket_id = session['user']['sirket_id']
-        
-        # --- DEĞİŞİKLİK BURADA ---
-        # 'or None' kaldırıldı.
-        guncellenecek_veri = {
-            'isim': data.get('isim'),
-            'tc_no': data.get('tc_no'),
-            'telefon_no': data.get('telefon_no'),
-            'adres': data.get('adres')
-        }
-        response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', id).eq('sirket_id', sirket_id).execute()
-        if not response.data:
-            return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
-        return jsonify({"message": "Tedarikçi bilgileri güncellendi."})
-    except Exception as e:
-        print(f"Tedarikçi Güncelleme Hatası: {e}") # Loglamayı daha bilgilendirici hale getirelim
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @tedarikci_bp.route('/tedarikci_sil/<int:id>', methods=['DELETE'])
