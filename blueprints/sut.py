@@ -2,10 +2,10 @@ from flask import Blueprint, jsonify, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase, turkey_tz
 from decimal import Decimal, InvalidOperation
-from utils import parse_supabase_timestamp # <-- DEĞİŞİKLİK BURADA
+from utils import parse_supabase_timestamp
 import logging
 from datetime import datetime
-import pytz # <-- EKLENEN SATIR
+import pytz # <-- BU SATIRI EKLEYİN
 
 sut_bp = Blueprint('sut', __name__, url_prefix='/api')
 logger = logging.getLogger(__name__)

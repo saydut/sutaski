@@ -1,5 +1,4 @@
--- DEĞİŞİKLİK: Parametre adını 'p_sirket_id' olarak güncelledik.
-CREATE OR REPLACE FUNCTION get_tedarikciler_with_stats(p_sirket_id integer)
+CREATE OR REPLACE FUNCTION get_tedarikciler_with_stats(sirket_id_param integer)
 RETURNS TABLE(
     id integer,
     isim text,
@@ -24,8 +23,7 @@ BEGIN
     LEFT JOIN
         sut_girdileri sg ON t.id = sg.tedarikci_id AND t.sirket_id = sg.sirket_id
     WHERE
-        -- DEĞİŞİKLİK: WHERE koşulunu yeni parametre adıyla güncelledik.
-        t.sirket_id = p_sirket_id
+        t.sirket_id = sirket_id_param
     GROUP BY
         t.id
     ORDER BY

@@ -160,8 +160,8 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
 def get_tedarikciler_liste():
     try:
         sirket_id = session['user']['sirket_id']
-        # DEĞİŞİKLİK: RPC parametresinin adını 'p_sirket_id' olarak değiştirdik.
-        response = supabase.rpc('get_tedarikciler_with_stats', {'p_sirket_id': sirket_id}).execute()
+        # Parametre adının SQL fonksiyonuyla tam eşleştiğinden emin oluyoruz.
+        response = supabase.rpc('get_tedarikciler_with_stats', {'sirket_id_param': sirket_id}).execute()
         return jsonify(response.data)
     except Exception as e:
         print(f"Tedarikçi listesi hatası: {e}")
