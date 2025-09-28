@@ -2,7 +2,7 @@
 
 from flask import Blueprint, jsonify, request, session, send_file, current_app, render_template
 from decorators import login_required, lisans_kontrolu
-from extensions import supabase, turkey_tz
+from extensions import supabase, turkey_tz, parse_supabase_timestamp
 from datetime import datetime, timedelta
 import pytz
 import io

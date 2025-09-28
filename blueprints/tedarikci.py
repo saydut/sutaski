@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request, session, render_template, current_app, send_file
 from decorators import login_required, lisans_kontrolu, modification_allowed
-from extensions import supabase, turkey_tz
+from extensions import supabase, turkey_tz, parse_supabase_timestamp
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 import pytz
