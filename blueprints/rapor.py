@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, session, send_file, current_app, render_template
 from decorators import login_required, lisans_kontrolu
 from extensions import supabase, turkey_tz
-from ..utils import parse_supabase_timestamp
+from utils import parse_supabase_timestamp # <-- DEĞİŞİKLİK BURADA
 from datetime import datetime, timedelta
 import pytz
 import io

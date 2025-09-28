@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase, turkey_tz
 from decimal import Decimal, InvalidOperation
-from ..utils import parse_supabase_timestamp
+from utils import parse_supabase_timestamp # <-- DEĞİŞİKLİK BURADA
 import logging
 from datetime import datetime
 
