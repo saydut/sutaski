@@ -5,6 +5,52 @@
 // api.js, ui.js ve charts.js fonksiyonlarını çağırır.
 // ====================================================================================
 
+/**
+ * Uygulama kabuğu yüklendiğinde çalışır.
+ * Tarayıcıda kayıtlı kullanıcı varsa bilgileri ekrana basar.
+ * Yoksa ve internet de yoksa, giriş sayfasına yönlendirir.
+ */
+function initOfflineState() {
+    const offlineUserString = localStorage.getItem('offlineUser');
+    
+    // Eğer body etiketinde sunucudan gelen bir kullanıcı rolü yoksa 
+    // (yani sayfa önbellekten yüklenmişse)
+    if (!document.body.dataset.userRole) {
+        if (offlineUserString) {
+            const user = JSON.parse(offlineUserString);
+            
+            // Placeholder'ları ve data-* özelliklerini doldur
+            document.body.dataset.userRole = user.rol;
+            document.body.dataset.lisansBitis = user.lisans_bitis_tarihi;
+
+            const userNameEl = document.getElementById('user-name-placeholder');
+            const companyNameEl = document.getElementById('company-name-placeholder');
+            const adminLinkContainer = document.getElementById('admin-panel-link-container');
+            const veriGirisPaneli = document.getElementById('veri-giris-paneli');
+            
+            if (userNameEl) userNameEl.textContent = user.kullanici_adi;
+            if (companyNameEl) companyNameEl.textContent = user.sirket_adi;
+
+            // Rol bazlı arayüz elemanlarını göster/gizle
+            if (user.rol === 'admin' && adminLinkContainer) {
+                adminLinkContainer.style.display = 'block';
+            } else if (adminLinkContainer) {
+                adminLinkContainer.style.display = 'none';
+            }
+            
+            if (user.rol === 'muhasebeci' && veriGirisPaneli) {
+                veriGirisPaneli.style.display = 'none';
+            } else if (veriGirisPaneli) {
+                 veriGirisPaneli.style.display = 'block';
+            }
+
+        } else if (!navigator.onLine) {
+            // Hem yerel kayıt yok hem de internet yoksa, giriş sayfasına git
+            window.location.href = '/login';
+        }
+    }
+}
+
 let mevcutSayfa = 1;
 const girdilerSayfaBasi = 6;
 
@@ -57,8 +103,6 @@ async function ozetVerileriniYukle(tarih = null) {
     } catch (error) {
         console.error("Özet yüklenirken hata:", error);
         ui.updateOzetPanels(null, effectiveDate, true); // Hata durumunu UI'a bildir
-    } finally {
-        ui.toggleOzetPanelsLoading(false); // Yükleniyor animasyonunu gizle
     }
 }
 
@@ -299,3 +343,4 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
+
