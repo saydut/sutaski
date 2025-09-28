@@ -19,42 +19,44 @@ def get_gunluk_ozet():
     try:
         sirket_id = session['user']['sirket_id']
         tarih_str = request.args.get('tarih')
-        
-        if tarih_str:
-            target_date = datetime.strptime(tarih_str, '%Y-%m-%d').date()
-        else:
-            target_date = datetime.now(turkey_tz).date()
 
-        # DEĞİŞİKLİK: RPC yerine standart ve güvenilir bir sorgu kullanıyoruz.
-        # Bu, saat dilimi sorunlarını ve "Hata" yazısını kesin olarak çözecektir.
-        start_utc = turkey_tz.localize(datetime.combine(target_date, datetime.min.time())).astimezone(pytz.utc).isoformat()
-        end_utc = turkey_tz.localize(datetime.combine(target_date, datetime.max.time())).astimezone(pytz.utc).isoformat()
+        # Hangi tarihin istendiğini belirle
+        target_date = datetime.strptime(tarih_str, '%Y-%m-%d').date() if tarih_str else datetime.now(turkey_tz).date()
 
+        # Türkiye saatine göre günün başlangıç ve bitişini UTC'ye çevir (En güvenilir yöntem)
+        start_utc = turkey_tz.localize(datetime.combine(target_date, datetime.min.time())).astimezone(pytz.utc)
+        end_utc = turkey_tz.localize(datetime.combine(target_date, datetime.max.time())).astimezone(pytz.utc)
+
+        # Veriyi çek
         response = supabase.table('sut_girdileri').select(
             'litre', count='exact'
         ).eq('sirket_id', sirket_id).gte(
-            'taplanma_tarihi', start_utc
+            'taplanma_tarihi', start_utc.isoformat()
         ).lte(
-            'taplanma_tarihi', end_utc
+            'taplanma_tarihi', end_utc.isoformat()
         ).execute()
 
-        if not hasattr(response, 'data'):
-             raise Exception("Supabase'den geçerli bir yanıt alınamadı.")
-
-        toplam_litre = sum(Decimal(item.get('litre', '0')) for item in response.data)
-        girdi_sayisi = response.count
+        # Supabase'den gelen yanıtı dikkatlice kontrol et
+        if response.data is None:
+            # Eğer 'data' alanı yoksa veya None ise, hata olarak kabul etme, boş olarak kabul et.
+            toplam_litre = 0.0
+            girdi_sayisi = 0
+        else:
+            # Hesaplamayı basit float'lar ile yap, olası Decimal hatalarını önle
+            toplam_litre = sum(float(item.get('litre', 0)) for item in response.data)
+            girdi_sayisi = response.count if response.count is not None else 0
 
         summary = {
-            'toplam_litre': round(float(toplam_litre), 2),
+            'toplam_litre': round(toplam_litre, 2),
             'girdi_sayisi': girdi_sayisi
         }
         return jsonify(summary)
 
     except Exception as e:
-        print(f"Günlük özet hatası (Python tarafında): {e}")
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
-        
-# ... (dosyanın geri kalanı değişmeden aynı kalıyor) ...
+        # Hata olursa, loglara detaylı yazdır
+        print(f"!!! GÜNLÜK ÖZET KRİTİK HATA: {e}", exc_info=True)
+        return jsonify({"error": "Özet hesaplanırken sunucuda bir hata oluştu."}), 500
+    
 @rapor_bp.route('/haftalik_ozet')
 @login_required
 def get_haftalik_ozet():
