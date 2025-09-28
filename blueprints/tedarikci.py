@@ -1,4 +1,4 @@
-# Dosya: blueprints/tedarikci.py (YENİ VE GÜVENİLİR VERSİYON)
+# Dosya: blueprints/tedarikci.py (DÜZELTİLMİŞ VERSİYON)
 
 from flask import Blueprint, jsonify, request, session, render_template, current_app, send_file
 from decorators import login_required, lisans_kontrolu, modification_allowed
@@ -18,8 +18,6 @@ tedarikci_bp = Blueprint('tedarikci', __name__, url_prefix='/api')
 def get_tedarikciler_liste():
     try:
         sirket_id = session['user']['sirket_id']
-        
-        # Adım 1: Şirkete ait tüm tedarikçileri ve onlara bağlı süt girdilerini çekiyoruz.
         response = supabase.table('tedarikciler').select(
             'id, isim, telefon_no, tc_no, adres, sut_girdileri!left(litre)'
         ).eq('sirket_id', sirket_id).execute()
@@ -27,10 +25,8 @@ def get_tedarikciler_liste():
         if not response.data:
             return jsonify([])
 
-        # Adım 2: Gelen veriyi Python'da işleyerek her tedarikçi için toplam litreyi hesaplıyoruz.
         formatted_data = []
         for r in response.data:
-            # Sadece 'litre' değeri olan girdileri topla
             total_litre = sum(
                 Decimal(g['litre']) for g in r.get('sut_girdileri', []) if g.get('litre') is not None
             )
@@ -45,7 +41,6 @@ def get_tedarikciler_liste():
                 'girdi_sayisi': len(r.get('sut_girdileri', []))
             })
         
-        # Adım 3: Sonucu isme göre alfabetik olarak sıralıyoruz.
         formatted_data.sort(key=lambda x: x['isim'].lower())
 
         return jsonify(formatted_data)
@@ -209,10 +204,20 @@ def add_tedarikci():
         sirket_id = session['user']['sirket_id']
         if not data.get('isim'):
             return jsonify({"error": "Tedarikçi ismi zorunludur."}), 400
-        yeni_veri = {'isim': data.get('isim'), 'sirket_id': sirket_id, 'tc_no': data.get('tc_no') or None, 'telefon_no': data.get('telefon_no') or None, 'adres': data.get('adres') or None}
+        
+        # --- DEĞİŞİKLİK BURADA ---
+        # 'or None' kaldırıldı. Artık boş bırakılan alanlar veritabanına NULL yerine "" olarak gidecek.
+        yeni_veri = {
+            'isim': data.get('isim'),
+            'sirket_id': sirket_id,
+            'tc_no': data.get('tc_no'), 
+            'telefon_no': data.get('telefon_no'),
+            'adres': data.get('adres')
+        }
         supabase.table('tedarikciler').insert(yeni_veri).execute()
         return jsonify({"message": "Tedarikçi başarıyla eklendi."}), 201
     except Exception as e:
+        print(f"Tedarikçi Ekleme Hatası: {e}") # Loglamayı daha bilgilendirici hale getirelim
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @tedarikci_bp.route('/tedarikci_duzenle/<int:id>', methods=['PUT'])
@@ -223,12 +228,21 @@ def update_tedarikci(id):
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
-        guncellenecek_veri = {'isim': data.get('isim'), 'tc_no': data.get('tc_no') or None, 'telefon_no': data.get('telefon_no') or None, 'adres': data.get('adres') or None}
+        
+        # --- DEĞİŞİKLİK BURADA ---
+        # 'or None' kaldırıldı.
+        guncellenecek_veri = {
+            'isim': data.get('isim'),
+            'tc_no': data.get('tc_no'),
+            'telefon_no': data.get('telefon_no'),
+            'adres': data.get('adres')
+        }
         response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', id).eq('sirket_id', sirket_id).execute()
         if not response.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
         return jsonify({"message": "Tedarikçi bilgileri güncellendi."})
     except Exception as e:
+        print(f"Tedarikçi Güncelleme Hatası: {e}") # Loglamayı daha bilgilendirici hale getirelim
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @tedarikci_bp.route('/tedarikci_sil/<int:id>', methods=['DELETE'])
