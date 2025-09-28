@@ -103,6 +103,9 @@ async function ozetVerileriniYukle(tarih = null) {
     } catch (error) {
         console.error("Özet yüklenirken hata:", error);
         ui.updateOzetPanels(null, effectiveDate, true); // Hata durumunu UI'a bildir
+    } finally {
+        // Hata olsa da olmasa da yükleniyor animasyonunu kaldır
+        ui.toggleOzetPanelsLoading(false); 
     }
 }
 
