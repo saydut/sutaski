@@ -1,6 +1,9 @@
+# saydut/sutaski/sutaski-d4c14652ae02986a0df842cb72d63c1496d5951d/blueprints/auth.py
+
 from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session, flash
 from extensions import supabase, bcrypt
 from decorators import login_required
+from datetime import datetime # <-- Tarih kontrolü için eklendi
 
 # Blueprint'i oluşturuyoruz. url_prefix kullanmıyoruz çünkü /login gibi kök yolları kullanacağız.
 auth_bp = Blueprint('auth', __name__)
@@ -72,6 +75,22 @@ def login():
 
         user = user_response.data[0]
         
+        # --- YENİ EKLENEN LİSANS KONTROLÜ ---
+        # Kullanıcı 'admin' değilse lisansını kontrol et
+        if user.get('rol') != 'admin':
+            lisans_bilgisi = user.get('sirketler')
+            if not lisans_bilgisi or not lisans_bilgisi.get('lisans_bitis_tarihi'):
+                return jsonify({"error": "Şirketiniz için bir lisans tanımlanmamıştır."}), 403
+            
+            try:
+                lisans_bitis_tarihi_str = lisans_bilgisi['lisans_bitis_tarihi']
+                lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis_tarihi_str, '%Y-%m-%d').date()
+                if lisans_bitis_tarihi_obj < datetime.now().date():
+                    return jsonify({"error": "Şirketinizin lisans süresi dolmuştur. Lütfen sistem yöneticinizle iletişime geçin."}), 403
+            except (ValueError, TypeError):
+                return jsonify({"error": "Lisans tarihi formatı geçersiz. Yöneticinizle iletişime geçin."}), 500
+        # --- LİSANS KONTROLÜ SONU ---
+
         if bcrypt.check_password_hash(user['sifre'], sifre):
             session_data = {
                 'id': user['id'],
