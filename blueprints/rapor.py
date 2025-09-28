@@ -46,12 +46,13 @@ def calculate_daily_summary(sirket_id, target_date):
 
         # Girdi sayısını almak için hala bir sorgu yapmamız gerekiyor,
         # ancak bu sorgu çok daha hafiftir çünkü sadece sayım yapar, veri çekmez.
-        start_time_tr = turkey_tz.localize(datetime.combine(target_date, datetime.min.time()))
-        end_time_tr = turkey_tz.localize(datetime.combine(target_date, datetime.max.time()))
-        start_time_utc = start_time_tr.astimezone(pytz.utc).isoformat()
-        end_time_utc = end_time_tr.astimezone(pytz.utc).isoformat()
-        
-        count_response = supabase.table('sut_girdileri').select('id', count='exact').eq('sirket_id', sirket_id).gte('taplanma_tarihi', start_time_utc).lte('taplanma_tarihi', end_time_utc).execute()
+        # DÜZELTME: Zaman dilimi dönüşümü burada da RPC ile tutarlı hale getirildi.
+        # Artık günün başlangıç ve bitiş saatlerini manuel hesaplamak yerine
+        # doğrudan veritabanına hangi gün olduğunu söylüyoruz.
+        count_response = supabase.table('sut_girdileri').select('id', count='exact').eq('sirket_id', sirket_id).eq(
+            supabase.raw("(taplanma_tarihi AT TIME ZONE 'utc' AT TIME ZONE 'Europe/Istanbul')::date"), 
+            target_date.strftime('%Y-%m-%d')
+        ).execute()
         
         return {
             'toplam_litre': round(float(toplam_litre), 2),
