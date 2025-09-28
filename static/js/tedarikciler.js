@@ -1,4 +1,4 @@
-// static/js/tedarikciler.js (DÜZELTİLMİŞ VERSİYON)
+// static/js/tedarikciler.js (TAM VE KESİN ÇÖZÜM)
 
 let tedarikciModal, silmeOnayModal;
 let mevcutSiralamaSutunu = 'isim';
@@ -8,27 +8,15 @@ let mevcutSiralamaYonu = 'asc';
  * Sayfa yüklendiğinde çalışacak ana fonksiyon.
  */
 window.onload = async () => {
+    // Bootstrap Modal instance'larını sadece bir kez oluştur
     tedarikciModal = new bootstrap.Modal(document.getElementById('tedarikciModal'));
     silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
 
-    // Modal açıldığında, eğer "Yeni Tedarikçi Ekle" butonuyla açıldıysa formu temizle
-    document.getElementById('tedarikciModal').addEventListener('show.bs.modal', (event) => {
-        const triggerButton = event.relatedTarget;
-        // Eğer modal bir butonla tetiklendiyse VE bu buton "düzenle" butonu DEĞİLSE, formu sıfırla.
-        // Bu, sadece "Yeni Tedarikçi Ekle" butonuna basıldığında formun temizlenmesini sağlar.
-        if (triggerButton && !triggerButton.classList.contains('btn-outline-primary')) {
-            document.getElementById('tedarikciModalLabel').innerText = 'Yeni Tedarikçi Ekle';
-            document.getElementById('edit-tedarikci-id').value = '';
-            document.getElementById('tedarikci-form').reset();
-        }
-    });
-    
+    // Tedarikçi verilerini yükle ve olay dinleyicilerini ayarla
     await tedarikcileriYukle();
 
     const aramaInput = document.getElementById('arama-input');
-    aramaInput.addEventListener('keyup', () => {
-        filtreleVeSirala();
-    });
+    aramaInput.addEventListener('keyup', filtreleVeSirala);
 
     document.querySelectorAll('.sortable').forEach(header => {
         header.addEventListener('click', () => {
@@ -44,19 +32,57 @@ window.onload = async () => {
     });
 };
 
+/**
+ * "Yeni Tedarikçi Ekle" butonu için modalı açar ve formu temizler.
+ */
+function yeniTedarikciAc() {
+    document.getElementById('tedarikciModalLabel').innerText = 'Yeni Tedarikçi Ekle';
+    document.getElementById('edit-tedarikci-id').value = ''; // ID'yi temizle
+    document.getElementById('tedarikci-form').reset(); // Formu sıfırla
+    tedarikciModal.show();
+}
+
+/**
+ * "Düzenle" butonu için modalı açar ve formu ilgili tedarikçinin bilgileriyle doldurur.
+ * @param {number} id - Düzenlenecek tedarikçinin ID'si.
+ */
+function tedarikciDuzenleAc(id) {
+    const supplier = store.tedarikciler.find(s => s.id === id);
+    if (supplier) {
+        document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
+        document.getElementById('edit-tedarikci-id').value = supplier.id; // ID'yi ayarla
+        document.getElementById('tedarikci-isim-input').value = supplier.isim;
+        document.getElementById('tedarikci-tc-input').value = supplier.tc_no || '';
+        document.getElementById('tedarikci-tel-input').value = supplier.telefon_no || '';
+        document.getElementById('tedarikci-adres-input').value = supplier.adres || '';
+        tedarikciModal.show();
+    }
+}
+
+// --- Geri Kalan Fonksiyonlar (Değişiklik Yok) ---
+
+async function tedarikcileriYukle() {
+    const tbody = document.getElementById('tedarikciler-tablosu');
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
+    try {
+        await store.getTedarikciler();
+        filtreleVeSirala();
+    } catch (error) {
+        console.error("Hata:", error);
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-4">${error.message}</td></tr>`;
+    }
+}
+
 function filtreleVeSirala() {
     const aramaInput = document.getElementById('arama-input');
     const searchTerm = aramaInput.value.toLowerCase();
-    
-    let gosterilecekTedarikciler = store.tedarikciler.filter(supplier => 
+    let gosterilecekTedarikciler = store.tedarikciler.filter(supplier =>
         supplier.isim.toLowerCase().includes(searchTerm) ||
         (supplier.telefon_no && supplier.telefon_no.toLowerCase().includes(searchTerm))
     );
-
     gosterilecekTedarikciler.sort((a, b) => {
         let valA = a[mevcutSiralamaSutunu];
         let valB = b[mevcutSiralamaSutunu];
-
         if (typeof valA === 'string') {
             valA = valA.toLowerCase();
             valB = (valB || '').toLowerCase();
@@ -64,12 +90,10 @@ function filtreleVeSirala() {
             valA = valA || 0;
             valB = valB || 0;
         }
-
         if (valA < valB) return mevcutSiralamaYonu === 'asc' ? -1 : 1;
         if (valA > valB) return mevcutSiralamaYonu === 'asc' ? 1 : -1;
         return 0;
     });
-
     renderTable(gosterilecekTedarikciler);
     basliklariGuncelle();
 }
@@ -84,24 +108,10 @@ function basliklariGuncelle() {
     });
 }
 
-async function tedarikcileriYukle() {
-    const tbody = document.getElementById('tedarikciler-tablosu');
-    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
-    
-    try {
-        await store.getTedarikciler();
-        filtreleVeSirala();
-    } catch (error) {
-        console.error("Hata:", error);
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger p-4">${error.message}</td></tr>`;
-    }
-}
-
 function renderTable(suppliers) {
     const tbody = document.getElementById('tedarikciler-tablosu');
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
     tbody.innerHTML = '';
-
     if (suppliers.length === 0) {
         veriYokMesaji.style.display = 'block';
     } else {
@@ -134,18 +144,14 @@ async function tedarikciKaydet() {
         telefon_no: document.getElementById('tedarikci-tel-input').value.trim(),
         adres: document.getElementById('tedarikci-adres-input').value.trim()
     };
-
     if (!veri.isim) {
         gosterMesaj("Tedarikçi ismi zorunludur.", "warning");
         return;
     }
-
     kaydetButton.disabled = true;
     kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
-
     const url = id ? `/api/tedarikci_duzenle/${id}` : '/api/tedarikci_ekle';
     const method = id ? 'PUT' : 'POST';
-
     try {
         const response = await fetch(url, {
             method: method,
@@ -166,19 +172,6 @@ async function tedarikciKaydet() {
     } finally {
         kaydetButton.disabled = false;
         kaydetButton.innerHTML = originalButtonText;
-    }
-}
-
-function tedarikciDuzenleAc(id) {
-    const supplier = store.tedarikciler.find(s => s.id === id);
-    if (supplier) {
-        document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
-        document.getElementById('edit-tedarikci-id').value = supplier.id;
-        document.getElementById('tedarikci-isim-input').value = supplier.isim;
-        document.getElementById('tedarikci-tc-input').value = supplier.tc_no || '';
-        document.getElementById('tedarikci-tel-input').value = supplier.telefon_no || '';
-        document.getElementById('tedarikci-adres-input').value = supplier.adres || '';
-        tedarikciModal.show();
     }
 }
 

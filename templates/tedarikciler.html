@@ -13,7 +13,7 @@
         <h1 class="fw-bold">Tedarikçi Yönetimi</h1>
         <div class="d-flex align-items-center gap-2">
             <a href="{{ url_for('main.anasayfa') }}" class="btn btn-secondary btn-sm">Ana Panele Dön</a>
-            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#tedarikciModal">
+            <button class="btn btn-success btn-sm" onclick="yeniTedarikciAc()">
                 <i class="bi bi-plus-circle"></i> Yeni Tedarikçi Ekle
             </button>
             <button id="theme-toggle" class="btn btn-sm">
