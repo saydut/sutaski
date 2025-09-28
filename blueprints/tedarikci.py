@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request, session, render_template, current_app, send_file
 from decorators import login_required, lisans_kontrolu, modification_allowed
-from extensions import supabase, turkey_tz, parse_supabase_timestamp
+from extensions import supabase, turkey_tz
+from ..utils import parse_supabase_timestamp
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 import pytz
@@ -9,20 +10,6 @@ from weasyprint import HTML
 import io
 
 tedarikci_bp = Blueprint('tedarikci', __name__, url_prefix='/api')
-
-# --- YARDIMCI FONKSİYONLAR ---
-def parse_supabase_timestamp(timestamp_str):
-    if not timestamp_str: return None
-    if '+' in timestamp_str:
-        timestamp_str = timestamp_str.split('+')[0]
-    try:
-        dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S.%f')
-    except ValueError:
-        try:
-            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S')
-        except ValueError:
-            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%d')
-    return pytz.utc.localize(dt_obj)
 
 def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
     _, ayin_son_gunu = calendar.monthrange(yil, ay)
@@ -57,8 +44,6 @@ def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
         "finansal_islemler": finans_response.data,
         "ozet": { "toplam_sut_tutari": toplam_sut_tutari, "toplam_yem_borcu": toplam_yem_borcu, "toplam_odeme": toplam_odeme }
     }
-
-# --- TEDARİKÇİ API'LARI ---
 
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/detay')
 @login_required
@@ -175,27 +160,8 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
 def get_tedarikciler_liste():
     try:
         sirket_id = session['user']['sirket_id']
-        tedarikciler_response = supabase.table('tedarikciler').select('*').eq('sirket_id', sirket_id).execute()
-        tedarikciler = tedarikciler_response.data
-        girdiler_response = supabase.table('sut_girdileri').select('tedarikci_id, litre').eq('sirket_id', sirket_id).execute()
-        girdiler_by_tedarikci = {}
-        for girdi in girdiler_response.data:
-            tid = girdi.get('tedarikci_id')
-            litre_str = str(girdi.get('litre', '0'))
-            if tid is not None:
-                if tid not in girdiler_by_tedarikci:
-                    girdiler_by_tedarikci[tid] = {'toplam_litre': Decimal('0'), 'girdi_sayisi': 0}
-                try:
-                    girdiler_by_tedarikci[tid]['toplam_litre'] += Decimal(litre_str)
-                    girdiler_by_tedarikci[tid]['girdi_sayisi'] += 1
-                except InvalidOperation:
-                    print(f"Uyarı: Tedarikçi listesi için geçersiz litre değeri atlanıyor: {litre_str}")
-        for t in tedarikciler:
-            stats = girdiler_by_tedarikci.get(t['id'], {'toplam_litre': Decimal('0'), 'girdi_sayisi': 0})
-            t['toplam_litre'] = float(stats['toplam_litre'])
-            t['girdi_sayisi'] = stats['girdi_sayisi']
-        sonuc_sirali = sorted(tedarikciler, key=lambda x: x['isim'])
-        return jsonify(sonuc_sirali)
+        response = supabase.rpc('get_tedarikciler_with_stats', {'sirket_id_param': sirket_id}).execute()
+        return jsonify(response.data)
     except Exception as e:
         print(f"Tedarikçi listesi hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500

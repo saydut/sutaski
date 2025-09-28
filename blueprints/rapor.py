@@ -1,8 +1,7 @@
-# blueprints/rapor.py
-
 from flask import Blueprint, jsonify, request, session, send_file, current_app, render_template
 from decorators import login_required, lisans_kontrolu
-from extensions import supabase, turkey_tz, parse_supabase_timestamp
+from extensions import supabase, turkey_tz
+from ..utils import parse_supabase_timestamp
 from datetime import datetime, timedelta
 import pytz
 import io
@@ -14,36 +13,31 @@ from decimal import Decimal, getcontext, InvalidOperation
 rapor_bp = Blueprint('rapor', __name__, url_prefix='/api/rapor')
 getcontext().prec = 10
 
-# --- YARDIMCI FONKSİYONLAR ---
-def parse_supabase_timestamp(timestamp_str):
-    if not timestamp_str: return None
-    if '+' in timestamp_str:
-        timestamp_str = timestamp_str.split('+')[0]
-    try:
-        dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S.%f')
-    except ValueError:
-        try:
-            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S')
-        except ValueError:
-            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%d')
-    return pytz.utc.localize(dt_obj)
-
-
-# --- RAPOR API'LARI ---
 @rapor_bp.route('/gunluk_ozet')
 @login_required
 def get_gunluk_ozet():
     try:
         sirket_id = session['user']['sirket_id']
         tarih_str = request.args.get('tarih')
-        target_date = datetime.strptime(tarih_str, '%Y-%m-%d').date() if tarih_str else datetime.now(turkey_tz).date()
+        target_date_str = datetime.strptime(tarih_str, '%Y-%m-%d').date().isoformat() if tarih_str else datetime.now(turkey_tz).date().isoformat()
         
-        summary = calculate_daily_summary(sirket_id, target_date)
+        response = supabase.rpc('get_daily_summary_rpc', {
+            'target_sirket_id': sirket_id,
+            'target_date': target_date_str
+        }).execute()
+
+        if response.data:
+            summary = response.data[0]
+            summary['toplam_litre'] = round(float(summary.get('toplam_litre', 0)), 2)
+        else:
+            summary = {'toplam_litre': 0, 'girdi_sayisi': 0}
+
         return jsonify(summary)
     except Exception as e:
         print(f"Günlük özet hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
-
+        
+# ... (dosyanın geri kalanı değişmeden aynı kalıyor) ...
 @rapor_bp.route('/haftalik_ozet')
 @login_required
 def get_haftalik_ozet():

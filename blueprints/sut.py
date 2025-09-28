@@ -2,20 +2,14 @@ from flask import Blueprint, jsonify, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase, turkey_tz
 from decimal import Decimal, InvalidOperation
+from ..utils import parse_supabase_timestamp
+import logging
 from datetime import datetime
-import pytz
-# YENİ: Rapor blueprint'inden hesaplama fonksiyonunu import ediyoruz.
-from blueprints.rapor import calculate_daily_summary
 
 sut_bp = Blueprint('sut', __name__, url_prefix='/api')
 logger = logging.getLogger(__name__)
 
-# --- YENİ YARDIMCI FONKSİYON ---
 def get_guncel_ozet(sirket_id, tarih_str):
-    """
-    Belirtilen tarih için güncel özet verisini RPC ile çeker.
-    Bu, kod tekrarını önler ve tüm özetlerin tek bir yerden gelmesini sağlar.
-    """
     try:
         response = supabase.rpc('get_daily_summary_rpc', {
             'target_sirket_id': sirket_id,
@@ -77,7 +71,6 @@ def add_sut_girdisi():
             'sirket_id': session['user']['sirket_id']
         }).execute()
         
-        # GÜNCELLEME: İşlem sonrası güncel özeti RPC ile çekiyoruz.
         bugun_str = datetime.now(turkey_tz).date().isoformat()
         yeni_ozet = get_guncel_ozet(session['user']['sirket_id'], bugun_str)
         
@@ -99,7 +92,6 @@ def update_sut_girdisi(girdi_id):
         if not mevcut_girdi_res.data:
              return jsonify({"error": "Girdi bulunamadı veya bu işlem için yetkiniz yok."}), 404
         
-        # GÜNCELLEME: İşlemin yapıldığı girdinin tarihini alıyoruz.
         girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
         girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
 
@@ -117,7 +109,6 @@ def update_sut_girdisi(girdi_id):
             'duzenlendi_mi': True
         }).eq('id', girdi_id).execute()
         
-        # GÜNCELLEME: Güncel özeti RPC ile çekiyoruz.
         yeni_ozet = get_guncel_ozet(session['user']['sirket_id'], girdi_tarihi_str)
         
         return jsonify({"status": "success", "data": guncel_girdi.data, "yeni_ozet": yeni_ozet})
@@ -135,14 +126,12 @@ def delete_sut_girdisi(girdi_id):
         if not mevcut_girdi_res.data:
              return jsonify({"error": "Girdi bulunamadı veya silme yetkiniz yok."}), 404
         
-        # GÜNCELLEME: İşlemin yapıldığı girdinin tarihini alıyoruz.
         girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
         girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
 
         supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
         supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
         
-        # GÜNCELLEME: Güncel özeti RPC ile çekiyoruz.
         yeni_ozet = get_guncel_ozet(session['user']['sirket_id'], girdi_tarihi_str)
         
         return jsonify({"message": "Girdi başarıyla silindi.", "yeni_ozet": yeni_ozet}), 200
@@ -163,4 +152,3 @@ def get_girdi_gecmisi(girdi_id):
     except Exception as e:
         logger.error(f"Girdi geçmişi hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
-
