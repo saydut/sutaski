@@ -2,25 +2,31 @@ from flask import Blueprint, jsonify, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase, turkey_tz
 from decimal import Decimal, InvalidOperation
+from utils import parse_supabase_timestamp
+import logging
 from datetime import datetime
-import pytz
-# YENİ: Rapor blueprint'inden hesaplama fonksiyonunu import ediyoruz.
-from blueprints.rapor import calculate_daily_summary
 
 sut_bp = Blueprint('sut', __name__, url_prefix='/api')
+logger = logging.getLogger(__name__)
 
-def parse_supabase_timestamp(timestamp_str):
-    if not timestamp_str: return None
-    if '+' in timestamp_str:
-        timestamp_str = timestamp_str.split('+')[0]
+# --- YENİ YARDIMCI FONKSİYON ---
+def get_guncel_ozet(sirket_id, tarih_str):
+    """
+    Belirtilen tarih için güncel özet verisini RPC ile çeker.
+    Bu, kod tekrarını önler ve tüm özetlerin tek bir yerden gelmesini sağlar.
+    """
     try:
-        dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S.%f')
-    except ValueError:
-        try:
-            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S')
-        except ValueError:
-            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%d')
-    return pytz.utc.localize(dt_obj)
+        response = supabase.rpc('get_daily_summary_rpc', {
+            'target_sirket_id': sirket_id,
+            'target_date': tarih_str
+        }).execute()
+        if response.data:
+            summary = response.data[0]
+            summary['toplam_litre'] = round(float(summary.get('toplam_litre', 0)), 2)
+            return summary
+    except Exception as e:
+        logger.error(f"RPC ile özet çekilirken hata: {e}", exc_info=True)
+    return {'toplam_litre': 0, 'girdi_sayisi': 0}
 
 @sut_bp.route('/sut_girdileri', methods=['GET'])
 @login_required
@@ -46,7 +52,7 @@ def get_sut_girdileri():
         data = query.order('id', desc=True).range(offset, offset + limit - 1).execute()
         return jsonify({"girdiler": data.data, "toplam_girdi_sayisi": data.count})
     except Exception as e:
-        print(f"Süt girdileri listeleme hatası: {e}")
+        logger.error(f"Süt girdileri listeleme hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @sut_bp.route('/sut_girdisi_ekle', methods=['POST'])
@@ -69,18 +75,16 @@ def add_sut_girdisi():
             'kullanici_id': session['user']['id'], 
             'sirket_id': session['user']['sirket_id']
         }).execute()
-
-        # YENİ: Girdi eklendikten sonra, güncel özet bilgisini hesapla.
-        sirket_id = session['user']['sirket_id']
-        bugun = datetime.now(turkey_tz).date()
-        yeni_ozet = calculate_daily_summary(sirket_id, bugun)
         
-        # YENİ: Güncel özeti yanıta ekle.
+        # GÜNCELLEME: İşlem sonrası güncel özeti RPC ile çekiyoruz.
+        bugun_str = datetime.now(turkey_tz).date().isoformat()
+        yeni_ozet = get_guncel_ozet(session['user']['sirket_id'], bugun_str)
+        
         return jsonify({"status": "success", "data": data.data, "yeni_ozet": yeni_ozet})
     except (InvalidOperation, TypeError, ValueError):
         return jsonify({"error": "Lütfen geçerli bir litre ve fiyat değeri girin."}), 400
     except Exception as e:
-        print(f"Süt girdisi ekleme hatası: {e}")
+        logger.error(f"Süt girdisi ekleme hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda bir hata oluştu."}), 500
 
 @sut_bp.route('/sut_girdisi_duzenle/<int:girdi_id>', methods=['PUT'])
@@ -90,10 +94,13 @@ def add_sut_girdisi():
 def update_sut_girdisi(girdi_id):
     try:
         data = request.get_json()
-        sirket_id = session['user']['sirket_id']
-        mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
+        mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
         if not mevcut_girdi_res.data:
              return jsonify({"error": "Girdi bulunamadı veya bu işlem için yetkiniz yok."}), 404
+        
+        # GÜNCELLEME: İşlemin yapıldığı girdinin tarihini alıyoruz.
+        girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
+        girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
 
         supabase.table('girdi_gecmisi').insert({
             'orijinal_girdi_id': girdi_id, 
@@ -109,14 +116,12 @@ def update_sut_girdisi(girdi_id):
             'duzenlendi_mi': True
         }).eq('id', girdi_id).execute()
         
-        # YENİ: Girdi güncellendikten sonra, güncel özet bilgisini hesapla.
-        girdi_tarihi_obj = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
-        girdi_tarihi = girdi_tarihi_obj.astimezone(turkey_tz).date() if girdi_tarihi_obj else datetime.now(turkey_tz).date()
-        yeni_ozet = calculate_daily_summary(sirket_id, girdi_tarihi)
-
+        # GÜNCELLEME: Güncel özeti RPC ile çekiyoruz.
+        yeni_ozet = get_guncel_ozet(session['user']['sirket_id'], girdi_tarihi_str)
+        
         return jsonify({"status": "success", "data": guncel_girdi.data, "yeni_ozet": yeni_ozet})
     except Exception as e:
-        print(f"Süt girdisi düzenleme hatası: {e}")
+        logger.error(f"Süt girdisi düzenleme hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @sut_bp.route('/sut_girdisi_sil/<int:girdi_id>', methods=['DELETE'])
@@ -125,24 +130,23 @@ def update_sut_girdisi(girdi_id):
 @modification_allowed
 def delete_sut_girdisi(girdi_id):
     try:
-        sirket_id = session['user']['sirket_id']
-        mevcut_girdi_res = supabase.table('sut_girdileri').select('sirket_id, taplanma_tarihi').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
+        mevcut_girdi_res = supabase.table('sut_girdileri').select('sirket_id, taplanma_tarihi').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
         if not mevcut_girdi_res.data:
              return jsonify({"error": "Girdi bulunamadı veya silme yetkiniz yok."}), 404
         
-        # YENİ: Girdinin tarihini silmeden önce alıyoruz.
-        girdi_tarihi_obj = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
-        girdi_tarihi = girdi_tarihi_obj.astimezone(turkey_tz).date() if girdi_tarihi_obj else datetime.now(turkey_tz).date()
-        
+        # GÜNCELLEME: İşlemin yapıldığı girdinin tarihini alıyoruz.
+        girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
+        girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
+
         supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
         supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
-
-        # YENİ: Girdi silindikten sonra, güncel özet bilgisini hesapla.
-        yeni_ozet = calculate_daily_summary(sirket_id, girdi_tarihi)
-
-        return jsonify({"message": "Girdi başarıyla silindi.", "yeni_ozet": yeni_ozet})
+        
+        # GÜNCELLEME: Güncel özeti RPC ile çekiyoruz.
+        yeni_ozet = get_guncel_ozet(session['user']['sirket_id'], girdi_tarihi_str)
+        
+        return jsonify({"message": "Girdi başarıyla silindi.", "yeni_ozet": yeni_ozet}), 200
     except Exception as e:
-        print(f"Süt girdisi silme hatası: {e}")
+        logger.error(f"Süt girdisi silme hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @sut_bp.route('/girdi_gecmisi/<int:girdi_id>')
@@ -156,5 +160,6 @@ def get_girdi_gecmisi(girdi_id):
         gecmis_data = supabase.table('girdi_gecmisi').select('*,duzenleyen_kullanici_id(kullanici_adi)').eq('orijinal_girdi_id', girdi_id).order('created_at', desc=True).execute()
         return jsonify(gecmis_data.data)
     except Exception as e:
-        print(f"Girdi geçmişi hatası: {e}")
+        logger.error(f"Girdi geçmişi hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+
