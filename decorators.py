@@ -1,6 +1,8 @@
 from functools import wraps
 from flask import session, flash, redirect, url_for, jsonify
-from constants import UserRole # <-- YENİ: Sabitleri içeri aktar
+from constants import UserRole 
+from extensions import turkey_tz
+from datetime import datetime
 
 def login_required(f):
     @wraps(f)
@@ -14,7 +16,6 @@ def login_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # DEĞİŞİKLİK: 'admin' yerine UserRole sabitini kullan
         if session.get('user', {}).get('rol') != UserRole.ADMIN.value:
             flash("Bu sayfaya erişim yetkiniz yok.", "danger")
             return redirect(url_for('main.anasayfa'))
@@ -25,32 +26,40 @@ def lisans_kontrolu(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         user_info = session.get('user')
-        # DEĞİŞİKLİK: 'admin' yerine UserRole sabitini kullan
+        # Admin rolündeki kullanıcıları lisans kontrolünden muaf tut
         if user_info and user_info.get('rol') == UserRole.ADMIN.value:
             return f(*args, **kwargs)
 
+        # Oturumda kullanıcı bilgisi yoksa giriş sayfasına yönlendir
         if not user_info:
             return redirect(url_for('auth.login_page'))
 
         lisans_bitis = user_info.get('lisans_bitis_tarihi')
         
         if lisans_bitis:
-            from datetime import datetime
             try:
                 lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis, '%Y-%m-%d').date()
-                if lisans_bitis_tarihi_obj < datetime.now().date():
+                
+                # Zaman dilimi fark etmeksizin Türkiye saatine göre bugünün tarihini al
+                bugun_tr = datetime.now(turkey_tz).date()
+
+                # *** MANTIKSAL DÜZELTME: Lisansın son günü dahil edilmeyecek şekilde kontrol ***
+                # Eğer bugün, lisansın bittiği güne eşit veya ondan sonraysa kullanıcıyı at.
+                if bugun_tr >= lisans_bitis_tarihi_obj:
                     flash("Şirketinizin lisans süresi dolmuştur. Lütfen sistem yöneticinizle iletişime geçin.", "danger")
-                    session.pop('user', None)
+                    session.pop('user', None) # Güvenlik için oturumu sonlandır
                     return redirect(url_for('auth.login_page'))
             except (ValueError, TypeError):
                  flash("Lisans tarihi formatı geçersiz.", "danger")
                  session.pop('user', None)
                  return redirect(url_for('auth.login_page'))
         else:
+             # Lisans tarihi hiç tanımlanmamışsa kullanıcıyı at
              flash("Şirketiniz için bir lisans tanımlanmamıştır.", "danger")
              session.pop('user', None)
              return redirect(url_for('auth.login_page'))
             
+        # Tüm kontrollerden geçtiyse, istenen sayfayı göster
         return f(*args, **kwargs)
     return decorated_function
 
@@ -62,9 +71,9 @@ def modification_allowed(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         user_rol = session.get('user', {}).get('rol')
-        # DEĞİŞİKLİK: 'muhasebeci' yerine UserRole sabitini kullan
         if user_rol == UserRole.MUHASEBECI.value:
-            # Muhasebeci ise, 403 Forbidden (Yasak) hatası döndür.
+            # API isteği ise JSON, değilse HTML sayfası için farklı yanıtlar verilebilir.
+            # Şimdilik API odaklı olduğu için JSON dönüyoruz.
             return jsonify({"error": "Bu işlemi yapma yetkiniz yok."}), 403
         return f(*args, **kwargs)
     return decorated_function
