@@ -1,14 +1,18 @@
 // Bu dosya, login.html sayfasının tüm JavaScript mantığını içerir.
 
-// Giriş formundaki butona tıklandığında veya Enter'a basıldığında tetiklenir
 async function girisYap() {
     const kullaniciAdi = document.getElementById('kullanici-input').value;
     const sifre = document.getElementById('sifre-input').value;
+    const girisButton = document.querySelector('.btn-primary');
+    const originalButtonText = girisButton.innerHTML;
 
     if (!kullaniciAdi || !sifre) {
         gosterMesaj("Lütfen tüm alanları doldurun.", "danger");
         return;
     }
+
+    girisButton.disabled = true;
+    girisButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Giriş Yapılıyor...`;
 
     try {
         const response = await fetch('/api/login', {
@@ -23,20 +27,18 @@ async function girisYap() {
         const result = await response.json();
 
         if (response.ok) {
-            // --- YENİ EKLENEN SATIR ---
-            // Sunucudan gelen kullanıcı verisini tarayıcının deposuna kaydet
             localStorage.setItem('offlineUser', JSON.stringify(result.user));
-            // --- DEĞİŞİKLİK SONU ---
-
-            // Giriş başarılıysa ana sayfaya yönlendir
             window.location.href = '/';
         } else {
-            // Başarısızsa hatayı göster
             gosterMesaj(result.error || "Bir hata oluştu.", "danger");
+            girisButton.disabled = false;
+            girisButton.innerHTML = originalButtonText;
         }
     } catch (error) {
         console.error("Giriş yaparken hata oluştu:", error);
         gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+        girisButton.disabled = false;
+        girisButton.innerHTML = originalButtonText;
     }
 }
 

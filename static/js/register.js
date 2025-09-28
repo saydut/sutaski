@@ -4,11 +4,16 @@ async function kayitOl() {
     const kullaniciAdi = document.getElementById('kullanici-input').value;
     const sifre = document.getElementById('sifre-input').value;
     const sirketAdi = document.getElementById('sirket-input').value;
+    const kayitButton = document.querySelector('.btn-primary');
+    const originalButtonText = kayitButton.innerHTML;
 
     if (!kullaniciAdi || !sifre || !sirketAdi) {
         gosterMesaj("Lütfen tüm alanları doldurun.", "danger");
         return;
     }
+
+    kayitButton.disabled = true;
+    kayitButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kayıt Olunuyor...`;
 
     try {
         const response = await fetch('/api/register', {
@@ -25,16 +30,19 @@ async function kayitOl() {
 
         if (response.ok) {
             gosterMesaj("Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz...", "success");
-            // 2 saniye sonra giriş sayfasına yönlendir
             setTimeout(() => {
                 window.location.href = '/login';
             }, 2000);
         } else {
             gosterMesaj(result.error || "Bir hata oluştu.", "danger");
+            kayitButton.disabled = false;
+            kayitButton.innerHTML = originalButtonText;
         }
     } catch (error) {
         console.error("Kayıt olurken hata oluştu:", error);
         gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+        kayitButton.disabled = false;
+        kayitButton.innerHTML = originalButtonText;
     }
 }
 
