@@ -153,8 +153,8 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
 async function tedarikcileriYukle() {
     if (!ui.tedarikciSecici) return;
     try {
-        const tedarikciler = await api.fetchTedarikciler();
-        ui.tumTedarikciler = tedarikciler; // UI modülünün de bu listeye erişmesi için
+        const tedarikciler = await store.getTedarikciler();
+        ui.tumTedarikciler = tedarikciler; 
         ui.doldurTedarikciSecici(tedarikciler);
     } catch (error) {
         console.error("Tedarikçiler yüklenirken hata:", error);
@@ -205,38 +205,36 @@ async function sutGirdisiEkle() {
         fiyat: parseFloat(fiyat)
     };
 
-    ui.toggleGirdiKaydetButton(true); // Butonu "kaydediliyor" durumuna getir
+    ui.toggleGirdiKaydetButton(true);
 
     try {
-        // Çevrimdışı ise yerel veritabanına kaydet
         if (!navigator.onLine) {
             const isOfflineUserValid = await ui.checkOfflineUserLicense();
-            if (!isOfflineUserValid) return; // Lisans kontrolü başarısızsa çık
+            if (!isOfflineUserValid) return; 
             
             const basarili = await kaydetCevrimdisi(yeniGirdi);
             if (basarili) {
                 ui.resetGirdiFormu();
-                await girdileriGoster(); // Listeyi yenile
+                await girdileriGoster();
             }
             return;
         }
 
-        // Çevrimiçi ise API'ye gönder
-        await api.postSutGirdisi(yeniGirdi);
+        const result = await api.postSutGirdisi(yeniGirdi);
         gosterMesaj("Süt girdisi başarıyla kaydedildi.", "success");
         ui.resetGirdiFormu();
         
-        // Sadece ilgili verileri yeniden çekerek performansı artır
-        const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
-        await Promise.all([
-            girdileriGoster(mevcutSayfa, formatliTarih),
-            ozetVerileriniYukle(formatliTarih)
-        ]);
+        const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : utils.getLocalDateString(new Date());
+        
+        // DEĞİŞİKLİK: Özet verisini API yanıtından al, tekrar istek atma.
+        ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
+        // Sadece girdi listesini yeniden çek.
+        await girdileriGoster(mevcutSayfa, formatliTarih);
 
     } catch (error) {
         gosterMesaj(`Süt girdisi eklenemedi: ${error.message || 'Bilinmeyen hata.'}`, "danger");
     } finally {
-        ui.toggleGirdiKaydetButton(false); // Butonu eski haline getir
+        ui.toggleGirdiKaydetButton(false);
     }
 }
 
@@ -251,15 +249,16 @@ async function sutGirdisiDuzenle() {
     }
     
     try {
-        await api.updateSutGirdisi(girdiId, { yeni_litre: parseFloat(yeniLitre), duzenleme_sebebi: duzenlemeSebebi });
+        const result = await api.updateSutGirdisi(girdiId, { yeni_litre: parseFloat(yeniLitre), duzenleme_sebebi: duzenlemeSebebi });
         gosterMesaj("Girdi başarıyla güncellendi.", "success");
         ui.duzenleModal.hide();
         
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
-        await Promise.all([
-            girdileriGoster(mevcutSayfa, formatliTarih), 
-            ozetVerileriniYukle(formatliTarih)
-        ]);
+        
+        // DEĞİŞİKLİK: Özet verisini API yanıtından al, tekrar istek atma.
+        ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
+        await girdileriGoster(mevcutSayfa, formatliTarih);
+
     } catch (error) {
         gosterMesaj(`Girdi düzenlenemedi: ${error.message || 'Bilinmeyen hata.'}`, "danger");
     }
@@ -271,15 +270,16 @@ async function sutGirdisiDuzenle() {
 async function sutGirdisiSil() {
     const girdiId = ui.getSilinecekGirdiId();
     try {
-        await api.deleteSutGirdisi(girdiId);
-        gosterMesaj("Girdi başarıyla silindi.", 'success');
+        const result = await api.deleteSutGirdisi(girdiId);
+        gosterMesaj(result.message, 'success');
         ui.silmeOnayModal.hide();
         
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
-        await Promise.all([
-            girdileriGoster(mevcutSayfa, formatliTarih), 
-            ozetVerileriniYukle(formatliTarih)
-        ]);
+
+        // DEĞİŞİKLİK: Özet verisini API yanıtından al, tekrar istek atma.
+        ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
+        await girdileriGoster(mevcutSayfa, formatliTarih);
+
     } catch (error) {
         gosterMesaj(error.message || 'Silme işlemi başarısız.', 'danger');
     }
@@ -291,12 +291,12 @@ async function sutGirdisiSil() {
  */
 async function gecmisiGoster(girdiId) {
     ui.gecmisModal.show();
-    ui.renderGecmisModalContent(null, true); // Yükleniyor durumunu göster
+    ui.renderGecmisModalContent(null, true); 
     try {
         const gecmisKayitlari = await api.fetchGirdiGecmisi(girdiId);
         ui.renderGecmisModalContent(gecmisKayitlari);
     } catch (error) {
-        ui.renderGecmisModalContent(null, false, error.message); // Hata durumunu göster
+        ui.renderGecmisModalContent(null, false, error.message);
     }
 }
 
@@ -328,7 +328,6 @@ async function verileriDisaAktar() {
     try {
         const { filename, blob } = await api.fetchCsvExport(formatliTarih);
         
-        // Blob'dan bir URL oluştur ve indirme linki tetikle
         const objectUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.style.display = 'none';
@@ -337,7 +336,6 @@ async function verileriDisaAktar() {
         document.body.appendChild(a);
         a.click();
         
-        // Temizlik
         window.URL.revokeObjectURL(objectUrl);
         a.remove();
         

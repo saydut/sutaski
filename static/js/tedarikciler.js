@@ -1,5 +1,5 @@
 // Global değişkenler
-let allSuppliers = [];
+// DEĞİŞİKLİK: allSuppliers kaldırıldı, veri artık store'dan gelecek.
 let tedarikciModal, silmeOnayModal;
 // Sıralama durumu için değişkenler
 let mevcutSiralamaSutunu = 'isim';
@@ -54,7 +54,8 @@ function filtreleVeSirala() {
     const aramaInput = document.getElementById('arama-input');
     const searchTerm = aramaInput.value.toLowerCase();
     
-    let gosterilecekTedarikciler = allSuppliers.filter(supplier => 
+    // DEĞİŞİKLİK: Veriyi allSuppliers yerine store'dan al
+    let gosterilecekTedarikciler = store.tedarikciler.filter(supplier => 
         supplier.isim.toLowerCase().includes(searchTerm) ||
         (supplier.telefon_no && supplier.telefon_no.toLowerCase().includes(searchTerm))
     );
@@ -106,10 +107,8 @@ async function tedarikcileriYukle() {
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
     
     try {
-        const response = await fetch('/api/tedarikciler_liste');
-        if (!response.ok) throw new Error('Tedarikçi verileri çekilemedi.');
-        
-        allSuppliers = await response.json();
+        // DEĞİŞİKLİK: Veriyi fetch yerine store'dan istiyoruz.
+        await store.getTedarikciler();
         filtreleVeSirala(); // Veri yüklendiğinde varsayılan sıralama ile göster
     } catch (error) {
         console.error("Hata:", error);
@@ -183,6 +182,8 @@ async function tedarikciKaydet() {
         if (response.ok) {
             gosterMesaj(result.message, "success");
             tedarikciModal.hide();
+            // DEĞİŞİKLİK: Önbelleği temizle ve veriyi yeniden yükle
+            store.invalidateTedarikciler();
             await tedarikcileriYukle();
         } else {
             gosterMesaj(result.error || "Bir hata oluştu.", "danger");
@@ -200,7 +201,8 @@ async function tedarikciKaydet() {
  * @param {number} id - Düzenlenecek tedarikçinin ID'si.
  */
 function tedarikciDuzenleAc(id) {
-    const supplier = allSuppliers.find(s => s.id === id);
+    // DEĞİŞİKLİK: Veriyi allSuppliers yerine store'dan bul
+    const supplier = store.tedarikciler.find(s => s.id === id);
     if (supplier) {
         document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
         document.getElementById('edit-tedarikci-id').value = supplier.id;
@@ -234,6 +236,8 @@ async function tedarikciSil() {
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             silmeOnayModal.hide();
+            // DEĞİŞİKLİK: Önbelleği temizle ve veriyi yeniden yükle
+            store.invalidateTedarikciler();
             await tedarikcileriYukle();
         } else {
             gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
@@ -242,4 +246,3 @@ async function tedarikciSil() {
         gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
     }
 }
-

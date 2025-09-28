@@ -29,8 +29,8 @@ async function verileriYukle() {
 
 async function tedarikcileriDoldur() {
     try {
-        const response = await fetch('/api/tedarikciler_liste');
-        const tedarikciler = await response.json();
+        // DEĞİŞİKLİK: Veriyi store'dan al
+        const tedarikciler = await store.getTedarikciler();
         const options = tedarikciler.map(t => ({ value: t.id, text: t.isim }));
         tedarikciSecici.addOptions(options);
     } catch (error) {

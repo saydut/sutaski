@@ -1,6 +1,6 @@
 let tedarikciSecici, yemUrunSecici;
 let yemUrunuModal, yemSilmeOnayModal;
-let allYemUrunleri = [];
+// DEĞİŞİKLİK: allYemUrunleri kaldırıldı.
 // Sıralama durumu için değişkenler
 let mevcutYemSiralamaSutunu = 'yem_adi';
 let mevcutYemSiralamaYonu = 'asc';
@@ -51,10 +51,8 @@ async function verileriYukle() {
  */
 async function tedarikcileriDoldur() {
     try {
-        const response = await fetch('/api/tedarikciler_liste');
-        if (!response.ok) throw new Error('Tedarikçiler yüklenemedi.');
-        
-        const tedarikciler = await response.json();
+        // DEĞİŞİKLİK: Veriyi store'dan al
+        const tedarikciler = await store.getTedarikciler();
         tedarikciSecici.clear();
         tedarikciSecici.clearOptions();
         const options = tedarikciler.map(t => ({ value: t.id, text: t.isim }));
@@ -70,16 +68,14 @@ async function tedarikcileriDoldur() {
  */
 async function yemUrunleriniDoldur() {
     try {
-        const response = await fetch('/yem/api/urunler');
-        if (!response.ok) throw new Error('Yem ürünleri yüklenemedi.');
-        allYemUrunleri = await response.json();
-        
+        // DEĞİŞİKLİK: Veriyi store'dan al
+        await store.getYemUrunleri();
         yemleriSiralaVeGoster(); // Direkt render etmek yerine sıralama fonksiyonunu çağır
 
         // Seçim kutusunu doldur
         yemUrunSecici.clear();
         yemUrunSecici.clearOptions();
-        const options = allYemUrunleri.map(u => ({ 
+        const options = store.yemUrunleri.map(u => ({ 
             value: u.id, 
             text: `${u.yem_adi} (Stok: ${parseFloat(u.stok_miktari_kg).toFixed(2)} kg)` 
         }));
@@ -96,7 +92,8 @@ async function yemUrunleriniDoldur() {
  * Yemleri mevcut sıralama durumuna göre sıralar ve tabloyu günceller.
  */
 function yemleriSiralaVeGoster() {
-    let siraliYemler = [...allYemUrunleri]; // Orijinal diziyi bozmamak için kopyasını oluştur
+    // DEĞİŞİKLİK: Veriyi store'dan al
+    let siraliYemler = [...store.yemUrunleri]; // Orijinal diziyi bozmamak için kopyasını oluştur
 
     siraliYemler.sort((a, b) => {
         let valA = a[mevcutYemSiralamaSutunu];
@@ -129,22 +126,13 @@ function renderYemTable(urunler) {
     if (urunler.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary p-4">Kayıtlı yem ürünü bulunamadı.</td></tr>';
     } else {
-        // 1. Kritik stok seviyesini burada belirliyoruz. Bu değeri istediğin gibi değiştirebilirsin.
-        
-
         urunler.forEach(urun => {
             const stokMiktari = parseFloat(urun.stok_miktari_kg);
-
-            // 2. Yemin stoğunun kritik seviyede olup olmadığını kontrol ediyoruz.
             const isKritik = stokMiktari <= KRITIK_STOK_SEVIYESI;
-
-            // 3. Kontrol sonucuna göre CSS sınıfı ve uyarı ikonunu hazırlıyoruz.
-            const rowClass = isKritik ? 'table-warning' : ''; // Kritikse satırı sarı yap
+            const rowClass = isKritik ? 'table-warning' : ''; 
             const uyariIconu = isKritik 
                 ? `<i class="bi bi-exclamation-triangle-fill text-danger me-2" title="Stok kritik seviyede: ${stokMiktari.toFixed(2)} KG"></i>` 
-                : ''; // Kritikse uyarı ikonu ekle
-
-            // 4. Hazırladığımız değişkenleri HTML çıktısına ekliyoruz.
+                : '';
             const tr = `
                 <tr class="${rowClass}">
                     <td>${uyariIconu}<strong>${urun.yem_adi}</strong></td>
@@ -205,6 +193,8 @@ async function yemCikisiYap() {
             tedarikciSecici.clear();
             document.getElementById('miktar-input').value = '';
             document.getElementById('aciklama-input').value = '';
+            // DEĞİŞİKLİK: Önbelleği temizle ve veriyi yeniden yükle
+            store.invalidateYemUrunleri();
             await yemUrunleriniDoldur();
         } else {
             gosterMesaj(result.error || 'Bir hata oluştu.', 'danger');
@@ -232,7 +222,8 @@ function yeniYemModaliniAc() {
  * @param {number} id - Düzenlenecek yem ürününün ID'si.
  */
 function yemDuzenleAc(id) {
-    const urun = allYemUrunleri.find(y => y.id === id);
+    // DEĞİŞİKLİK: Veriyi store'dan al
+    const urun = store.yemUrunleri.find(y => y.id === id);
     if (urun) {
         document.getElementById('yemUrunuModalLabel').innerText = 'Yem Ürününü Düzenle';
         document.getElementById('edit-yem-id').value = urun.id;
@@ -278,6 +269,8 @@ async function yemUrunuKaydet() {
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             yemUrunuModal.hide();
+            // DEĞİŞİKLİK: Önbelleği temizle ve veriyi yeniden yükle
+            store.invalidateYemUrunleri();
             await yemUrunleriniDoldur();
         } else {
             gosterMesaj(result.error || 'İşlem sırasında bir hata oluştu.', 'danger');
@@ -312,6 +305,8 @@ async function yemUrunuSil() {
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             yemSilmeOnayModal.hide();
+            // DEĞİŞİKLİK: Önbelleği temizle ve veriyi yeniden yükle
+            store.invalidateYemUrunleri();
             await yemUrunleriniDoldur();
         } else {
             gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
@@ -320,4 +315,3 @@ async function yemUrunuSil() {
         gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
     }
 }
-

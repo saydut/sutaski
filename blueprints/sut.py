@@ -4,6 +4,8 @@ from extensions import supabase, turkey_tz
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 import pytz
+# YENİ: Rapor blueprint'inden hesaplama fonksiyonunu import ediyoruz.
+from blueprints.rapor import calculate_daily_summary
 
 sut_bp = Blueprint('sut', __name__, url_prefix='/api')
 
@@ -67,8 +69,14 @@ def add_sut_girdisi():
             'kullanici_id': session['user']['id'], 
             'sirket_id': session['user']['sirket_id']
         }).execute()
+
+        # YENİ: Girdi eklendikten sonra, güncel özet bilgisini hesapla.
+        sirket_id = session['user']['sirket_id']
+        bugun = datetime.now(turkey_tz).date()
+        yeni_ozet = calculate_daily_summary(sirket_id, bugun)
         
-        return jsonify({"status": "success", "data": data.data})
+        # YENİ: Güncel özeti yanıta ekle.
+        return jsonify({"status": "success", "data": data.data, "yeni_ozet": yeni_ozet})
     except (InvalidOperation, TypeError, ValueError):
         return jsonify({"error": "Lütfen geçerli bir litre ve fiyat değeri girin."}), 400
     except Exception as e:
@@ -82,7 +90,8 @@ def add_sut_girdisi():
 def update_sut_girdisi(girdi_id):
     try:
         data = request.get_json()
-        mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
+        sirket_id = session['user']['sirket_id']
+        mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
         if not mevcut_girdi_res.data:
              return jsonify({"error": "Girdi bulunamadı veya bu işlem için yetkiniz yok."}), 404
 
@@ -100,7 +109,12 @@ def update_sut_girdisi(girdi_id):
             'duzenlendi_mi': True
         }).eq('id', girdi_id).execute()
         
-        return jsonify({"status": "success", "data": guncel_girdi.data})
+        # YENİ: Girdi güncellendikten sonra, güncel özet bilgisini hesapla.
+        girdi_tarihi_obj = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
+        girdi_tarihi = girdi_tarihi_obj.astimezone(turkey_tz).date() if girdi_tarihi_obj else datetime.now(turkey_tz).date()
+        yeni_ozet = calculate_daily_summary(sirket_id, girdi_tarihi)
+
+        return jsonify({"status": "success", "data": guncel_girdi.data, "yeni_ozet": yeni_ozet})
     except Exception as e:
         print(f"Süt girdisi düzenleme hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
@@ -111,13 +125,22 @@ def update_sut_girdisi(girdi_id):
 @modification_allowed
 def delete_sut_girdisi(girdi_id):
     try:
-        mevcut_girdi_res = supabase.table('sut_girdileri').select('sirket_id').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
+        sirket_id = session['user']['sirket_id']
+        mevcut_girdi_res = supabase.table('sut_girdileri').select('sirket_id, taplanma_tarihi').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
         if not mevcut_girdi_res.data:
              return jsonify({"error": "Girdi bulunamadı veya silme yetkiniz yok."}), 404
         
+        # YENİ: Girdinin tarihini silmeden önce alıyoruz.
+        girdi_tarihi_obj = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
+        girdi_tarihi = girdi_tarihi_obj.astimezone(turkey_tz).date() if girdi_tarihi_obj else datetime.now(turkey_tz).date()
+        
         supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
         supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
-        return jsonify({"message": "Girdi başarıyla silindi."}), 200
+
+        # YENİ: Girdi silindikten sonra, güncel özet bilgisini hesapla.
+        yeni_ozet = calculate_daily_summary(sirket_id, girdi_tarihi)
+
+        return jsonify({"message": "Girdi başarıyla silindi.", "yeni_ozet": yeni_ozet})
     except Exception as e:
         print(f"Süt girdisi silme hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
