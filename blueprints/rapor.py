@@ -14,7 +14,7 @@ from decimal import Decimal, getcontext, InvalidOperation
 rapor_bp = Blueprint('rapor', __name__, url_prefix='/api/rapor')
 getcontext().prec = 10
 
-# --- YARDIMCI FONKSİYON ---
+# --- YARDIMCI FONKSİYONLAR ---
 def parse_supabase_timestamp(timestamp_str):
     if not timestamp_str: return None
     if '+' in timestamp_str:
@@ -28,35 +28,35 @@ def parse_supabase_timestamp(timestamp_str):
             dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%d')
     return pytz.utc.localize(dt_obj)
 
-
 def calculate_daily_summary(sirket_id, target_date):
     """
     Belirtilen bir şirket ve tarih için toplam süt litresi ve girdi sayısını hesaplar.
     Bu fonksiyon, kod tekrarını önlemek için merkezi bir hesaplama noktasıdır.
     """
     try:
-        # DEĞİŞİKLİK: Artık hesaplamayı veritabanı fonksiyonu (RPC) ile yapıyoruz.
-        # Bu, Python'a tüm listeyi çekmek yerine doğrudan sonucu alır.
-        total_litre_response = supabase.rpc('get_daily_total', {
-            'target_sirket_id': sirket_id,
-            'target_date': target_date.strftime('%Y-%m-%d')
-        }).execute()
+        # Zaman dilimine uygun gün başlangıç ve bitişini UTC'ye çevirerek sorgu aralığı oluşturuyoruz.
+        # Bu yöntem, gece yarısı girilen verilerin doğru güne dahil edilmesini garantiler.
+        start_time_tr = turkey_tz.localize(datetime.combine(target_date, datetime.min.time()))
+        end_time_tr = turkey_tz.localize(datetime.combine(target_date, datetime.max.time()))
+        start_time_utc = start_time_tr.astimezone(pytz.utc).isoformat()
+        end_time_utc = end_time_tr.astimezone(pytz.utc).isoformat()
         
-        toplam_litre = total_litre_response.data if total_litre_response.data is not None else 0
-
-        # Girdi sayısını almak için hala bir sorgu yapmamız gerekiyor,
-        # ancak bu sorgu çok daha hafiftir çünkü sadece sayım yapar, veri çekmez.
-        # DÜZELTME: Zaman dilimi dönüşümü burada da RPC ile tutarlı hale getirildi.
-        # Artık günün başlangıç ve bitiş saatlerini manuel hesaplamak yerine
-        # doğrudan veritabanına hangi gün olduğunu söylüyoruz.
-        count_response = supabase.table('sut_girdileri').select('id', count='exact').eq('sirket_id', sirket_id).eq(
-            supabase.raw("(taplanma_tarihi AT TIME ZONE 'utc' AT TIME ZONE 'Europe/Istanbul')::date"), 
-            target_date.strftime('%Y-%m-%d')
+        # Tek bir sorgu ile hem sayımı (count) hem de veriyi (litre) çekiyoruz.
+        response = supabase.table('sut_girdileri').select(
+            'litre', count='exact'
+        ).eq('sirket_id', sirket_id).gte(
+            'taplanma_tarihi', start_time_utc
+        ).lte(
+            'taplanma_tarihi', end_time_utc
         ).execute()
         
+        # Gelen veriler üzerinden toplam litreyi Python'da güvenli bir şekilde hesaplıyoruz.
+        toplam_litre = sum(Decimal(str(item.get('litre', '0'))) for item in response.data)
+        girdi_sayisi = response.count
+
         return {
             'toplam_litre': round(float(toplam_litre), 2),
-            'girdi_sayisi': count_response.count
+            'girdi_sayisi': girdi_sayisi
         }
     except Exception as e:
         print(f"Günlük özet hesaplama hatası: {e}")
