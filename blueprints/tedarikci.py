@@ -160,11 +160,33 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
 def get_tedarikciler_liste():
     try:
         sirket_id = session['user']['sirket_id']
-        # BU SATIRIN AYNEN AŞAĞIDAKİ GİBİ OLDUĞUNU TEYİT ET:
-        response = supabase.rpc('get_tedarikciler_with_stats', {'p_sirket_id': sirket_id}).execute()
-        return jsonify(response.data)
+        # DEĞİŞİKLİK: RPC yerine standart bir select sorgusu kullanıyoruz.
+        # Bu, "400 Bad Request" hatasını kesin olarak çözecektir.
+        response = supabase.table('tedarikciler').select(
+            'id, isim, telefon_no, tc_no, adres, sut_girdileri!left(litre)'
+        ).eq('sirket_id', sirket_id).execute()
+
+        # Gelen veriyi istemcinin beklediği formata dönüştürüyoruz.
+        formatted_data = []
+        for r in response.data:
+            total_litre = sum(g['litre'] for g in r.get('sut_girdileri', []) if g.get('litre') is not None)
+            formatted_data.append({
+                'id': r['id'],
+                'isim': r['isim'],
+                'telefon_no': r['telefon_no'],
+                'tc_no': r['tc_no'],
+                'adres': r['adres'],
+                'toplam_litre': float(total_litre),
+                'girdi_sayisi': len(r.get('sut_girdileri', []))
+            })
+        
+        # Sonucu isme göre sıralayalım.
+        formatted_data.sort(key=lambda x: x['isim'])
+
+        return jsonify(formatted_data)
     except Exception as e:
-        print(f"Tedarikçi listesi hatası: {e}")
+        # Hata mesajına daha fazla detay ekleyelim.
+        print(f"Tedarikçi listesi hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @tedarikci_bp.route('/tedarikci_ekle', methods=['POST'])
