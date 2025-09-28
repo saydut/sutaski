@@ -1,6 +1,6 @@
 // static/service-worker.js
 // Önbellek adını son kez güncelleyerek tarayıcının bu dosyayı yenilemesini garantiliyoruz.
-const CACHE_NAME = 'sut-takip-cache-v13'; 
+const CACHE_NAME = 'sut-takip-cache-v14'; 
 const APP_SHELL_URL = '/';
 const LOGIN_URL = '/login';
 const OFFLINE_URL = '/offline';

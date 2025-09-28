@@ -16,6 +16,11 @@
     --info: #4299E1;
     --danger: #F56565;
     --shadow: rgba(0, 0, 0, 0.4);
+
+    /* Bootstrap Değişkenlerini de burada tanımlayalım */
+    --bs-body-bg: var(--background);
+    --bs-body-color: var(--text-primary);
+    --bs-border-color: var(--border);
 }
 
 :root[data-theme='light'] {
@@ -35,6 +40,11 @@
     --info: #0EA5E9;
     --danger: #EF4444;
     --shadow: rgba(0, 0, 0, 0.08);
+
+    /* Bootstrap Değişkenleri */
+    --bs-body-bg: var(--background);
+    --bs-body-color: var(--text-primary);
+    --bs-border-color: var(--border);
 }
 
 /* Genel Stiller ve Bootstrap Override */
@@ -186,31 +196,31 @@ h5 { font-size: 0.95rem; }
 
 #rapor-sonuc-mesaji { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--text-secondary); display: block; text-align: center; font-size: 1.2rem; }
 
-/* --- YENİ EKLENEN STİLLER --- */
-.accordion-item {
-    background-color: var(--background);
-    border: 1px solid var(--border);
+/* --- TEMA UYUMLULUĞU İÇİN ÖZEL BOOTSTRAP OVERRIDE'LARI --- */
+.accordion {
+    --bs-accordion-color: var(--text-primary);
+    --bs-accordion-bg: var(--background);
+    --bs-accordion-border-color: var(--border);
+    --bs-accordion-button-active-bg: var(--input-bg);
+    --bs-accordion-button-active-color: var(--text-primary);
+    --bs-accordion-btn-focus-box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--primary) 25%, transparent);
 }
 .accordion-button {
     background-color: var(--surface);
     color: var(--text-primary);
 }
-.accordion-button:not(.collapsed) {
-    background-color: var(--input-bg);
-    color: var(--text-primary);
-    box-shadow: inset 0 -1px 0 var(--border);
-}
-.accordion-button:focus {
-    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--primary) 25%, transparent);
-}
-.accordion-body {
-    background-color: var(--background);
-    color: var(--text-primary);
-}
 .accordion-button::after {
-    filter: var(--is-dark, 0) invert(100%);
+    filter: var(--is-dark, 0) invert(100%) brightness(150%);
 }
-/* --- YENİ EKLENEN STİLLER SONU --- */
+.nav-tabs {
+    --bs-nav-tabs-border-color: var(--border);
+    --bs-nav-link-color: var(--text-secondary);
+    --bs-nav-tabs-link-hover-border-color: var(--input-border);
+    --bs-nav-tabs-link-active-color: var(--text-primary);
+    --bs-nav-tabs-link-active-bg: var(--surface);
+    --bs-nav-tabs-link-active-border-color: var(--border);
+}
+/* --- OVERRIDE SONU --- */
 
 @media (max-width: 768px) {
     .main-wrapper { padding: 1rem; }
@@ -244,3 +254,4 @@ h5 { font-size: 0.95rem; }
     content: ' \25BC'; /* aşağı ok */
     opacity: 1;
 }
+
