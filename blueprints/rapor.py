@@ -28,41 +28,6 @@ def parse_supabase_timestamp(timestamp_str):
             dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%d')
     return pytz.utc.localize(dt_obj)
 
-def calculate_daily_summary(sirket_id, target_date):
-    """
-    Belirtilen bir şirket ve tarih için toplam süt litresi ve girdi sayısını hesaplar.
-    Bu fonksiyon, kod tekrarını önlemek için merkezi bir hesaplama noktasıdır.
-    """
-    try:
-        # Zaman dilimine uygun gün başlangıç ve bitişini UTC'ye çevirerek sorgu aralığı oluşturuyoruz.
-        # Bu yöntem, gece yarısı girilen verilerin doğru güne dahil edilmesini garantiler.
-        start_time_tr = turkey_tz.localize(datetime.combine(target_date, datetime.min.time()))
-        end_time_tr = turkey_tz.localize(datetime.combine(target_date, datetime.max.time()))
-        start_time_utc = start_time_tr.astimezone(pytz.utc).isoformat()
-        end_time_utc = end_time_tr.astimezone(pytz.utc).isoformat()
-        
-        # Tek bir sorgu ile hem sayımı (count) hem de veriyi (litre) çekiyoruz.
-        response = supabase.table('sut_girdileri').select(
-            'litre', count='exact'
-        ).eq('sirket_id', sirket_id).gte(
-            'taplanma_tarihi', start_time_utc
-        ).lte(
-            'taplanma_tarihi', end_time_utc
-        ).execute()
-        
-        # Gelen veriler üzerinden toplam litreyi Python'da güvenli bir şekilde hesaplıyoruz.
-        toplam_litre = sum(Decimal(str(item.get('litre', '0'))) for item in response.data)
-        girdi_sayisi = response.count
-
-        return {
-            'toplam_litre': round(float(toplam_litre), 2),
-            'girdi_sayisi': girdi_sayisi
-        }
-    except Exception as e:
-        print(f"Günlük özet hesaplama hatası: {e}")
-        return {'toplam_litre': 0, 'girdi_sayisi': 0}
-
-
 
 # --- RAPOR API'LARI ---
 @rapor_bp.route('/gunluk_ozet')

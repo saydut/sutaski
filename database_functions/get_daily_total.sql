@@ -1,16 +1,19 @@
 -- Bu fonksiyon, belirtilen bir şirket ve tarih için
--- o güne ait toplam süt litresini tek bir sayı olarak döndürür.
--- Zaman dilimi dönüşümünü doğru bir şekilde yaparak
--- Türkiye saatine göre günün toplamını hesaplar.
+-- hem toplam süt litresini hem de toplam girdi sayısını
+-- tek bir veritabanı sorgusu ile hesaplar ve döndürür.
+-- Bu yöntem en yüksek performansı ve doğruluğu sağlar.
 
-SELECT COALESCE(SUM(litre), 0)
-from public.sut_girdileri
-where
-  sirket_id = target_sirket_id and
-  -- taplanma_tarihi (utc) -> istanbul saatine çevir -> sadece tarih kısmını al
-  (taplanma_tarihi AT TIME ZONE 'utc' AT TIME ZONE 'Europe/Istanbul')::date = 
-    -- Eğer fonksiyona bir tarih verildiyse onu kullan, verilmediyse bugünün tarihini kullan
-    CASE 
-        WHEN target_date IS NOT NULL THEN target_date
-        ELSE (NOW() AT TIME ZONE 'Europe/Istanbul')::date
-    END;
+CREATE OR REPLACE FUNCTION get_daily_summary_rpc(target_sirket_id integer, target_date date)
+RETURNS TABLE(toplam_litre numeric, girdi_sayisi bigint) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        COALESCE(SUM(sut_girdileri.litre), 0) as toplam_litre,
+        COUNT(sut_girdileri.id) as girdi_sayisi
+    FROM
+        sut_girdileri
+    WHERE
+        sut_girdileri.sirket_id = target_sirket_id AND
+        (sut_girdileri.taplanma_tarihi AT TIME ZONE 'utc' AT TIME ZONE 'Europe/Istanbul')::date = target_date;
+END;
+$$ LANGUAGE plpgsql;
