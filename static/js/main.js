@@ -113,12 +113,15 @@ async function ozetVerileriniYukle(tarih = null) {
     const girdiSayisiPanel = document.getElementById('bugunku-girdi-sayisi');
     const ozetBaslik = document.getElementById('ozet-panel-baslik');
     const girdiSayisiBaslik = document.getElementById('girdi-sayisi-baslik');
+
+    // Yükleniyor animasyonunu göster
     toplamLitrePanel.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
     girdiSayisiPanel.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
+    
     const effectiveDate = tarih || getLocalDateString(new Date());
-    let url = `/api/gunluk_ozet?tarih=${effectiveDate}`;
-    let girdiSayisiUrl = `/api/sut_girdileri?tarih=${effectiveDate}`;
     const bugun = getLocalDateString();
+    
+    // Seçilen tarihe göre panel başlıklarını güncelle
     if (tarih && tarih !== bugun) {
         const [yil, ay, gun] = tarih.split('-');
         ozetBaslik.textContent = `${gun}.${ay}.${yil} TOPLAMI`;
@@ -127,15 +130,25 @@ async function ozetVerileriniYukle(tarih = null) {
         ozetBaslik.textContent = 'BUGÜNKÜ TOPLAM SÜT';
         girdiSayisiBaslik.textContent = 'BUGÜNKÜ TOPLAM GİRDİ';
     }
+
+    // Hem toplam litreyi hem de girdi sayısını almak için tek bir API çağrısı yap
+    const url = `/api/rapor/gunluk_ozet?tarih=${effectiveDate}`;
+
     try {
-        const [toplamLitreResponse, girdiSayisiResponse] = await Promise.all([fetch(url), fetch(girdiSayisiUrl)]);
-        const toplamLitreData = await toplamLitreResponse.json();
-        const girdiSayisiData = await girdiSayisiResponse.json();
-        if (!toplamLitreResponse.ok) throw new Error(toplamLitreData.error || 'Özet verisi alınamadı');
-        if (!girdiSayisiResponse.ok) throw new Error(girdiSayisiData.error ||'Girdi sayısı alınamadı');
-        toplamLitrePanel.textContent = `${toplamLitreData.toplam_litre} L`;
-        girdiSayisiPanel.textContent = girdiSayisiData.toplam_girdi_sayisi;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (!response.ok) {
+            // Sunucu bir hata döndürürse, bir istisna fırlat
+            throw new Error(data.error || 'Özet verisi alınamadı');
+        }
+        
+        // Panelleri tek API çağrısından gelen verilerle güncelle
+        toplamLitrePanel.textContent = `${data.toplam_litre} L`;
+        girdiSayisiPanel.textContent = data.girdi_sayisi;
+
     } catch (error) {
+        // Herhangi bir sorun olursa, panellerde 'Hata' göster
         console.error("Özet yüklenirken hata:", error);
         toplamLitrePanel.textContent = 'Hata';
         girdiSayisiPanel.textContent = 'Hata';
@@ -606,3 +619,4 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
+

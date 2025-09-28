@@ -36,22 +36,40 @@ def get_gunluk_ozet():
         sirket_id = session['user']['sirket_id']
         tarih_str = request.args.get('tarih')
         target_date = datetime.strptime(tarih_str, '%Y-%m-%d').date() if tarih_str else datetime.now(turkey_tz).date()
+        
+        # Günün başlangıç ve bitiş zamanlarını UTC formatında al
         start_time_tr = turkey_tz.localize(datetime.combine(target_date, datetime.min.time()))
         end_time_tr = turkey_tz.localize(datetime.combine(target_date, datetime.max.time()))
         start_time_utc = start_time_tr.astimezone(pytz.utc).isoformat()
         end_time_utc = end_time_tr.astimezone(pytz.utc).isoformat()
+        
+        # Belirtilen gün için tüm 'litre' girdilerini çek
         response = supabase.table('sut_girdileri').select('litre').eq('sirket_id', sirket_id).gte('taplanma_tarihi', start_time_utc).lte('taplanma_tarihi', end_time_utc).execute()
         
         toplam_litre = Decimal('0')
+        # response.data, sözlüklerden oluşan bir listedir, örn: [{'litre': '50.5'}, {'litre': '23.0'}]
         for item in response.data:
             try:
-                litre_str = str(item.get('litre', '0'))
-                toplam_litre += Decimal(litre_str)
+                # Güvenli erişim için .get() kullan ve varsayılan değer olarak '0' ver
+                litre_degeri = item.get('litre', '0')
+                # Değerin None olmadığından emin ol
+                if litre_degeri is not None:
+                    toplam_litre += Decimal(str(litre_degeri))
             except InvalidOperation:
+                # Bir değer Decimal'e çevrilemezse logla, ama programı durdurma
                 print(f"Uyarı: Günlük özette geçersiz litre değeri atlanıyor: {item.get('litre')}")
 
-        return jsonify({'toplam_litre': round(float(toplam_litre), 2)})
+        # Toplam girdi sayısı, dönen veri listesinin uzunluğudur
+        girdi_sayisi = len(response.data)
+
+        # Hem toplam litreyi hem de girdi sayısını döndür
+        return jsonify({
+            'toplam_litre': round(float(toplam_litre), 2),
+            'girdi_sayisi': girdi_sayisi
+        })
+
     except Exception as e:
+        # Diğer tüm hataları yakala ve genel bir sunucu hatası mesajı döndür
         print(f"Günlük özet hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
