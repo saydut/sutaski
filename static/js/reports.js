@@ -2,24 +2,7 @@ let detayliChart = null;
 let baslangicTarihiSecici = null; // Flatpickr instance'ları
 let bitisTarihiSecici = null;
 
-function updateChartThemes() {
-    if (detayliChart) {
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        const textColor = isDark ? '#E2E8F0' : '#333333';
-        const gridColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-        const lineBgColor = isDark ? 'rgba(76, 125, 255, 0.3)' : 'rgba(74, 144, 226, 0.3)';
-        const lineBorderColor = isDark ? 'rgba(76, 125, 255, 1)' : 'rgba(74, 144, 226, 1)';
-        
-        detayliChart.options.scales.y.ticks.color = textColor;
-        detayliChart.options.scales.x.ticks.color = textColor;
-        detayliChart.options.scales.y.grid.color = gridColor;
-        detayliChart.options.scales.x.grid.color = gridColor;
-        detayliChart.data.datasets[0].backgroundColor = lineBgColor;
-        detayliChart.data.datasets[0].borderColor = lineBorderColor;
-        
-        detayliChart.update();
-    }
-}
+// SİLİNDİ: updateChartThemes fonksiyonu buradan kaldırıldı.
 
 function formatDateToYYYYMMDD(date) {
     if (!date) return null;
@@ -197,6 +180,7 @@ async function raporOlustur() {
         ozetVerileriniDoldur(veri.summaryData);
         tedarikciTablosunuDoldur(veri.supplierBreakdown);
         
+        // DEĞİŞİKLİK: Chart'ı oluşturduktan sonra yöneticiye kaydet
         detayliChart = new Chart(ctx, {
             type: 'line',
             data: {
@@ -221,7 +205,9 @@ async function raporOlustur() {
                 }
             }
         });
-        updateChartThemes(); // Temayı uygula
+        registerChart(detayliChart);
+
+        if (typeof updateAllChartThemes === 'function') updateAllChartThemes();
     } catch (error) {
         console.error("Detaylı rapor oluşturulurken hata:", error);
         mesajElementi.textContent = `Hata: ${error.message}`;

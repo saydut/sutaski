@@ -33,8 +33,9 @@ function setTheme(theme) {
             moonIcon.style.display = 'inline-block';
         }
     }
-
-    if (typeof updateChartThemes === 'function') {
-        updateChartThemes();
+    
+    // DEĞİŞİKLİK: Merkezi grafik yöneticisini çağırır
+    if (typeof updateAllChartThemes === 'function') {
+        updateAllChartThemes();
     }
 }

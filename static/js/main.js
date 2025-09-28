@@ -78,29 +78,7 @@ window.onload = async function() {
     await baslangicVerileriniYukle(); 
 };
 
-function updateChartThemes() {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const textColor = isDark ? '#E2E8F0' : '#333333';
-    const gridColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-    const legendColor = isDark ? '#E2E8F0' : '#333333';
-    const borderColor = isDark ? '#1E293B' : '#FFFFFF';
-    const barBgColor = isDark ? 'rgba(76, 125, 255, 0.8)' : 'rgba(74, 144, 226, 0.8)';
-    const barBorderColor = isDark ? 'rgba(76, 125, 255, 1)' : 'rgba(74, 144, 226, 1)';
-    
-    if (haftalikChart) {
-        haftalikChart.options.scales.y.ticks.color = textColor;
-        haftalikChart.options.scales.x.ticks.color = textColor;
-        haftalikChart.options.scales.y.grid.color = gridColor;
-        haftalikChart.data.datasets[0].backgroundColor = barBgColor;
-        haftalikChart.data.datasets[0].borderColor = barBorderColor;
-        haftalikChart.update();
-    }
-    if (tedarikciChart) {
-        tedarikciChart.options.plugins.legend.labels.color = legendColor;
-        tedarikciChart.data.datasets[0].borderColor = borderColor;
-        tedarikciChart.update();
-    }
-}
+// SİLİNDİ: updateChartThemes fonksiyonu buradan kaldırıldı.
 
 function lisansUyarisiKontrolEt() {
     const lisansBitisStr = document.body.dataset.lisansBitis;
@@ -358,6 +336,8 @@ async function tedarikciGrafigiOlustur() {
             return;
         }
         veriYokMesaji.style.display = 'none';
+        
+        // DEĞİŞİKLİK: Chart'ı oluşturduktan sonra yöneticiye kaydet
         tedarikciChart = new Chart(ctx, {
             type: 'doughnut', 
             data: { labels: veri.labels, datasets: [{
@@ -367,7 +347,9 @@ async function tedarikciGrafigiOlustur() {
             }]},
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 12 } } } } }
         });
-        updateChartThemes();
+        registerChart(tedarikciChart);
+        
+        if (typeof updateAllChartThemes === 'function') updateAllChartThemes();
     } catch (error) {
         console.error("Tedarikçi grafiği oluşturulurken hata:", error);
         veriYokMesaji.textContent = 'Grafik yüklenemedi.';
@@ -382,6 +364,8 @@ async function haftalikGrafigiOlustur() {
         if (!response.ok) throw new Error(veri.error || 'Grafik verisi alınamadı.');
         const ctx = document.getElementById('haftalikRaporGrafigi').getContext('2d');
         if(haftalikChart) haftalikChart.destroy();
+        
+        // DEĞİŞİKLİK: Chart'ı oluşturduktan sonra yöneticiye kaydet
         haftalikChart = new Chart(ctx, {
             type: 'bar',
             data: { labels: veri.labels, datasets: [{
@@ -394,7 +378,9 @@ async function haftalikGrafigiOlustur() {
                 plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` Toplam: ${c.parsed.y} Litre` } } }
             }
         });
-        updateChartThemes();
+        registerChart(haftalikChart);
+        
+        if (typeof updateAllChartThemes === 'function') updateAllChartThemes();
     } catch (error) {
         console.error("Haftalık grafik oluşturulurken hata:", error);
     }

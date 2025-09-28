@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, render_template, request, session
 from extensions import supabase, bcrypt
 from decorators import login_required, admin_required
+from constants import UserRole # <-- YENİ: Sabiti import et
 
 # Admin blueprint'ini oluşturuyoruz.
 admin_bp = Blueprint('admin', __name__)
@@ -53,7 +54,9 @@ def update_rol():
         kullanici_id = data['kullanici_id']
         yeni_rol = data.get('yeni_rol')
         
-        if yeni_rol not in ['user', 'admin', 'muhasebeci']:
+        # DEĞİŞİKLİK: Rolleri hard-code yazmak yerine Enum'dan dinamik olarak alıyoruz.
+        gecerli_roller = [rol.value for rol in UserRole]
+        if yeni_rol not in gecerli_roller:
             return jsonify({"error": "Geçersiz rol."}), 400
             
         supabase.table('kullanicilar').update({'rol': yeni_rol}).eq('id', kullanici_id).execute()

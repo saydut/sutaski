@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 # .env dosyasındaki bilgileri yükle
 load_dotenv()
 
-# Supabase Client
+# Supabase Client (Güncel ve Doğru Hali)
 url: str = os.environ.get("SUPABASE_URL")
 key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
