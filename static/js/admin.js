@@ -68,6 +68,8 @@ async function adminVerileriniYukle() {
         } else {
             gosterMesaj(surumNotlari.error || "Sürüm notları yüklenemedi.", "danger");
         }
+        // BU SATIRI EKLEYİN
+        mevcutOnbellekSurumunuYukle();
 
     } catch (error) {
         console.error("Admin verileri yüklenirken hata:", error);
@@ -314,6 +316,52 @@ function sirketSilmeOnayiAc(sirketId, sirketAdi) {
     document.getElementById('silinecek-sirket-adi').textContent = sirketAdi;
     sirketSilmeOnayModal.show();
 }
+
+// --- DİNAMİK ÖNBELLEK YÖNETİMİ FONKSİYONLARI ---
+
+/**
+ * Mevcut önbellek sürümünü sunucudan alır ve ekranda gösterir.
+ */
+async function mevcutOnbellekSurumunuYukle() {
+    const displayElement = document.getElementById('cache-version-display');
+    try {
+        const response = await fetch('/api/admin/cache_version');
+        const data = await response.json();
+        if (response.ok) {
+            displayElement.textContent = `v${data.version}`;
+        } else {
+            displayElement.textContent = 'Hata';
+            gosterMesaj(data.error || 'Sürüm alınamadı.', 'danger');
+        }
+    } catch (error) {
+        displayElement.textContent = 'Hata';
+        gosterMesaj('Önbellek sürümü alınırken sunucu hatası.', 'danger');
+    }
+}
+
+/**
+ * Sürüm artırma butonuna tıklandığında çalışır.
+ */
+async function onbellekSurumunuArtir() {
+    if (!confirm("Önbellek sürümünü bir artırmak istediğinizden emin misiniz? Bu işlem, tüm kullanıcıların bir sonraki ziyaretlerinde uygulamayı yeniden indirmesine neden olur.")) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/admin/increment_cache_version', { method: 'POST' });
+        const data = await response.json();
+        if (response.ok) {
+            gosterMesaj(data.message, 'success');
+            document.getElementById('cache-version-display').textContent = `v${data.new_version}`;
+        } else {
+            gosterMesaj(data.error || 'İşlem başarısız.', 'danger');
+        }
+    } catch (error) {
+        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+    }
+}
+
+
 
 async function sirketSil() {
     const sirketId = document.getElementById('silinecek-sirket-id').value;

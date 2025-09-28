@@ -1,12 +1,12 @@
-// static/service-worker.js
-// Önbellek adını son kez güncelleyerek tarayıcının bu dosyayı yenilemesini garantiliyoruz.
-const CACHE_NAME = 'sut-takip-cache-v14'; 
+// templates/service-worker.js.jinja
+
+// Önbellek adını Flask tarafından dinamik olarak alıyoruz.
+const CACHE_NAME = 'sut-takip-cache-v{{ cache_version }}'; 
 const APP_SHELL_URL = '/';
 const LOGIN_URL = '/login';
 const OFFLINE_URL = '/offline';
 
 const ASSETS_TO_CACHE = [
-    // APP_SHELL_URL'i buradan çıkarıyoruz çünkü onu özel başlıkla ayrıca önbelleğe alacağız.
     LOGIN_URL, OFFLINE_URL,
     '/static/style.css', '/static/theme.js',
     '/static/js/utils.js', '/static/js/main.js', '/static/js/login.js', '/static/js/offline.js',
@@ -29,7 +29,6 @@ self.addEventListener('install', event => {
       const cache = await caches.open(CACHE_NAME);
       console.log('Cache açıldı ve temel varlıklar önbelleğe alınıyor.');
       
-      // Ana uygulama kabuğunu özel başlıkla talep et
       const appShellRequest = new Request(APP_SHELL_URL, {
         headers: { 'X-Cache-Me': 'true' }
       });
@@ -39,7 +38,6 @@ self.addEventListener('install', event => {
         console.error('Uygulama kabuğu önbelleğe alınamadı:', error);
       }
 
-      // Diğer tüm varlıkları normal şekilde ekle
       await cache.addAll(ASSETS_TO_CACHE);
     })()
     .catch(err => console.error('Önbelleğe alma başarısız oldu:', err))
@@ -77,7 +75,6 @@ self.addEventListener('fetch', event => {
                     console.log('Ağ hatası, önbellekten sunuluyor.', error);
                     const cache = await caches.open(CACHE_NAME);
                     
-                    // İstenen sayfa önbellekte varsa onu, yoksa ana kabuğu, o da yoksa offline sayfasını ver
                     const cachedResponse = await cache.match(event.request);
                     return cachedResponse || await cache.match(APP_SHELL_URL) || await cache.match(OFFLINE_URL);
                 }

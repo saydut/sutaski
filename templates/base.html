@@ -38,19 +38,19 @@
     <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
     <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
 
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register("{{ url_for('static', filename='service-worker.js') }}")
-                    .then(registration => {
-                        console.log('Service Worker başarıyla kaydedildi: ', registration);
-                    })
-                    .catch(error => {
-                        console.log('Service Worker kaydı başarısız: ', error);
-                    });
-            });
-        }
-    </script>
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register("/service-worker.js")
+                .then(registration => {
+                    console.log('Dinamik Service Worker başarıyla kaydedildi: ', registration);
+                })
+                .catch(error => {
+                    console.log('Dinamik Service Worker kaydı başarısız: ', error);
+                });
+        });
+    }
+</script>
 
     {% block scripts %}{% endblock %}
 
