@@ -1,14 +1,12 @@
+// static/js/yem_yonetimi.js (TÜM FONKSİYONLARI İÇEREN TAM VE GÜNCEL VERSİYON)
+
 let tedarikciSecici, yemUrunSecici;
 let yemUrunuModal, yemSilmeOnayModal;
-// DEĞİŞİKLİK: allYemUrunleri kaldırıldı.
-// Sıralama durumu için değişkenler
 let mevcutYemSiralamaSutunu = 'yem_adi';
 let mevcutYemSiralamaYonu = 'asc';
-const KRITIK_STOK_SEVIYESI = 500; // Stok bu değerin altına (kg) düştüğünde uyarı verilir.
+let mevcutGorunum = 'tablo';
+const KRITIK_STOK_SEVIYESI = 500;
 
-/**
- * Sayfa yüklendiğinde çalışacak ana fonksiyon.
- */
 window.onload = function() {
     yemUrunuModal = new bootstrap.Modal(document.getElementById('yemUrunuModal'));
     yemSilmeOnayModal = new bootstrap.Modal(document.getElementById('yemSilmeOnayModal'));
@@ -16,9 +14,11 @@ window.onload = function() {
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
     yemUrunSecici = new TomSelect("#yem-urun-sec", { create: false, sortField: { field: "text", direction: "asc" } });
 
+    mevcutGorunum = localStorage.getItem('yemGorunum') || 'tablo';
+    gorunumuAyarla(mevcutGorunum);
+    
     verileriYukle();
 
-    // Yem tablosu başlıklarına tıklama olaylarını ekle
     document.querySelectorAll('.sortable-yem').forEach(header => {
         header.addEventListener('click', () => {
             const sutun = header.dataset.sort;
@@ -33,124 +33,140 @@ window.onload = function() {
     });
 };
 
-/**
- * Gerekli tüm başlangıç verilerini paralel olarak yükler.
- */
+function gorunumuDegistir(yeniGorunum) {
+    if (mevcutGorunum === yeniGorunum) return;
+    mevcutGorunum = yeniGorunum;
+    localStorage.setItem('yemGorunum', yeniGorunum);
+    gorunumuAyarla(yeniGorunum);
+    yemleriSiralaVeGoster();
+}
+
+function gorunumuAyarla(aktifGorunum) {
+    document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
+    const gorunumElementi = document.getElementById(`${aktifGorunum}-gorunumu`);
+    if(gorunumElementi) {
+        gorunumElementi.style.display = gorunumElementi.id.includes('kart') ? 'flex' : 'block'; // Kartlar için row'u aktif et
+        if (gorunumElementi.id.includes('kart')) {
+            gorunumElementi.querySelector('.row').style.display = 'flex';
+        }
+    }
+    document.getElementById('btn-view-table').classList.toggle('active', aktifGorunum === 'tablo');
+    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
+}
+
 async function verileriYukle() {
-    const spinner = '<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>';
-    document.getElementById('yem-urunleri-tablosu').innerHTML = spinner;
-    
     await Promise.all([
         tedarikcileriDoldur(),
         yemUrunleriniDoldur()
     ]);
 }
 
-/**
- * Sunucudan tedarikçi listesini çeker ve seçim kutusunu doldurur.
- */
 async function tedarikcileriDoldur() {
     try {
-        // DEĞİŞİKLİK: Veriyi store'dan al
         const tedarikciler = await store.getTedarikciler();
-        tedarikciSecici.clear();
         tedarikciSecici.clearOptions();
         const options = tedarikciler.map(t => ({ value: t.id, text: t.isim }));
         tedarikciSecici.addOptions(options);
     } catch (error) {
-        console.error("Tedarikçi doldurma hatası:", error);
-        gosterMesaj(error.message, "danger");
+        gosterMesaj('Tedarikçiler yüklenirken bir hata oluştu.', 'danger');
     }
 }
 
-/**
- * Sunucudan yem ürünlerini çeker ve sıralama fonksiyonunu çağırır.
- */
 async function yemUrunleriniDoldur() {
     try {
-        // DEĞİŞİKLİK: Veriyi store'dan al
         await store.getYemUrunleri();
-        yemleriSiralaVeGoster(); // Direkt render etmek yerine sıralama fonksiyonunu çağır
+        yemleriSiralaVeGoster();
 
-        // Seçim kutusunu doldur
-        yemUrunSecici.clear();
         yemUrunSecici.clearOptions();
         const options = store.yemUrunleri.map(u => ({ 
             value: u.id, 
             text: `${u.yem_adi} (Stok: ${parseFloat(u.stok_miktari_kg).toFixed(2)} kg)` 
         }));
         yemUrunSecici.addOptions(options);
-
     } catch (error) {
-        console.error("Yem ürünleri doldurma hatası:", error);
         gosterMesaj(error.message, "danger");
-        document.getElementById('yem-urunleri-tablosu').innerHTML = `<tr><td colspan="4" class="text-center text-danger p-4">${error.message}</td></tr>`;
+        document.getElementById('veri-yok-mesaji').style.display = 'block';
     }
 }
 
-/**
- * Yemleri mevcut sıralama durumuna göre sıralar ve tabloyu günceller.
- */
 function yemleriSiralaVeGoster() {
-    // DEĞİŞİKLİK: Veriyi store'dan al
-    let siraliYemler = [...store.yemUrunleri]; // Orijinal diziyi bozmamak için kopyasını oluştur
-
+    let siraliYemler = [...store.yemUrunleri];
     siraliYemler.sort((a, b) => {
-        let valA = a[mevcutYemSiralamaSutunu];
-        let valB = b[mevcutYemSiralamaSutunu];
-
-        if (mevcutYemSiralamaSutunu !== 'yem_adi') {
-            valA = parseFloat(valA || 0);
-            valB = parseFloat(valB || 0);
-        } else {
-            valA = (valA || '').toLowerCase();
-            valB = (valB || '').toLowerCase();
+        let valA = a[mevcutYemSiralamaSutunu] || '';
+        let valB = b[mevcutYemSiralamaSutunu] || '';
+        if (typeof valA === 'string') {
+            return mevcutYemSiralamaYonu === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
         }
-
-        if (valA < valB) return mevcutYemSiralamaYonu === 'asc' ? -1 : 1;
-        if (valA > valB) return mevcutYemSiralamaYonu === 'asc' ? 1 : -1;
-        return 0;
+        return mevcutYemSiralamaYonu === 'asc' ? parseFloat(valA) - parseFloat(valB) : parseFloat(valB) - parseFloat(valA);
     });
     
-    renderYemTable(siraliYemler);
+    verileriGoster(siraliYemler);
     yemBasliklariniGuncelle();
 }
 
-/**
- * Gelen yem listesine göre HTML tablosunu oluşturur.
- * @param {Array} urunler - Gösterilecek yem ürünlerinin listesi.
- */
-function renderYemTable(urunler) {
-    const tbody = document.getElementById('yem-urunleri-tablosu');
-    tbody.innerHTML = '';
-    if (urunler.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary p-4">Kayıtlı yem ürünü bulunamadı.</td></tr>';
+function verileriGoster(urunler) {
+    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+    veriYokMesaji.style.display = urunler.length === 0 ? 'block' : 'none';
+
+    if (mevcutGorunum === 'tablo') {
+        renderTable(urunler);
     } else {
-        urunler.forEach(urun => {
-            const stokMiktari = parseFloat(urun.stok_miktari_kg);
-            const isKritik = stokMiktari <= KRITIK_STOK_SEVIYESI;
-            const rowClass = isKritik ? 'table-warning' : ''; 
-            const uyariIconu = isKritik 
-                ? `<i class="bi bi-exclamation-triangle-fill text-danger me-2" title="Stok kritik seviyede: ${stokMiktari.toFixed(2)} KG"></i>` 
-                : '';
-            const tr = `
-                <tr class="${rowClass}">
-                    <td>${uyariIconu}<strong>${urun.yem_adi}</strong></td>
-                    <td class="text-end">${stokMiktari.toFixed(2)} KG</td>
-                    <td class="text-end">${parseFloat(urun.birim_fiyat).toFixed(2)} TL</td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="yemDuzenleAc(${urun.id})"><i class="bi bi-pencil"></i></button>
-                        <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="yemSilmeOnayiAc(${urun.id}, '${urun.yem_adi}')"><i class="bi bi-trash"></i></button>
-                    </td>
-                </tr>`;
-            tbody.innerHTML += tr;
-        });
+        renderCards(urunler);
     }
 }
 
-/**
- * Yem tablosu başlıklarındaki sıralama ikonlarını günceller.
- */
+function renderTable(urunler) {
+    const tbody = document.getElementById('yem-urunleri-tablosu');
+    tbody.innerHTML = '';
+    urunler.forEach(urun => {
+        const stokMiktari = parseFloat(urun.stok_miktari_kg);
+        const isKritik = stokMiktari <= KRITIK_STOK_SEVIYESI;
+        const rowClass = isKritik ? 'table-warning' : ''; 
+        const uyariIconu = isKritik 
+            ? `<i class="bi bi-exclamation-triangle-fill text-danger me-2" title="Stok kritik seviyede: ${stokMiktari.toFixed(2)} KG"></i>` 
+            : '';
+        tbody.innerHTML += `
+            <tr class="${rowClass}">
+                <td>${uyariIconu}<strong>${urun.yem_adi}</strong></td>
+                <td class="text-end">${stokMiktari.toFixed(2)} KG</td>
+                <td class="text-end">${parseFloat(urun.birim_fiyat).toFixed(2)} TL</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="yemDuzenleAc(${urun.id})"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="yemSilmeOnayiAc(${urun.id}, '${urun.yem_adi}')"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>`;
+    });
+}
+
+function renderCards(urunler) {
+    const container = document.getElementById('yem-urunleri-kart-listesi');
+    container.innerHTML = '';
+    urunler.forEach(urun => {
+        const stokMiktari = parseFloat(urun.stok_miktari_kg);
+        const isKritik = stokMiktari <= KRITIK_STOK_SEVIYESI;
+        const kartSinifi = isKritik ? 'yem-card stok-kritik' : 'yem-card';
+        container.innerHTML += `
+            <div class="col-md-6 col-12">
+                <div class="${kartSinifi}">
+                    <div class="yem-card-header">
+                        <h5>${urun.yem_adi}</h5>
+                    </div>
+                    <div class="yem-card-body">
+                        <p class="mb-1 text-secondary">Mevcut Stok</p>
+                        <p class="stok-bilgisi ${isKritik ? 'text-danger' : ''}">${stokMiktari.toFixed(2)} KG</p>
+                    </div>
+                    <div class="yem-card-footer">
+                        <span class="fiyat-bilgisi">${parseFloat(urun.birim_fiyat).toFixed(2)} TL / KG</span>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="yemDuzenleAc(${urun.id})"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="yemSilmeOnayiAc(${urun.id}, '${urun.yem_adi}')"><i class="bi bi-trash"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+    });
+}
+
 function yemBasliklariniGuncelle() {
     document.querySelectorAll('.sortable-yem').forEach(header => {
         const sutun = header.dataset.sort;
@@ -161,39 +177,29 @@ function yemBasliklariniGuncelle() {
     });
 }
 
-/**
- * "Çıkışı Kaydet" butonuna tıklandığında çalışır. Form verilerini sunucuya gönderir.
- */
 async function yemCikisiYap() {
-    const kaydetButton = document.querySelector('.card .btn-primary');
+    const kaydetButton = document.getElementById('yem-cikis-btn');
     const originalButtonText = kaydetButton.innerHTML;
-    const tedarikci_id = tedarikciSecici.getValue();
-    const yem_urun_id = yemUrunSecici.getValue();
-    const miktar_kg = document.getElementById('miktar-input').value;
-    const aciklama = document.getElementById('aciklama-input').value.trim();
-
-    if (!tedarikci_id || !yem_urun_id || !miktar_kg || parseFloat(miktar_kg) <= 0) {
+    const veri = {
+        tedarikci_id: tedarikciSecici.getValue(),
+        yem_urun_id: yemUrunSecici.getValue(),
+        miktar_kg: document.getElementById('miktar-input').value,
+        aciklama: document.getElementById('aciklama-input').value.trim()
+    };
+    if (!veri.tedarikci_id || !veri.yem_urun_id || !veri.miktar_kg || parseFloat(veri.miktar_kg) <= 0) {
         gosterMesaj('Lütfen tedarikçi, yem ürünü seçin ve geçerli bir miktar girin.', 'warning');
         return;
     }
-
     kaydetButton.disabled = true;
     kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
-
     try {
-        const response = await fetch('/yem/api/islemler', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tedarikci_id, yem_urun_id, miktar_kg, aciklama })
-        });
+        const response = await fetch('/yem/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
         const result = await response.json();
-
         if (response.ok) {
             gosterMesaj(result.message, 'success');
-            tedarikciSecici.clear();
             document.getElementById('miktar-input').value = '';
             document.getElementById('aciklama-input').value = '';
-            // DEĞİŞİKLİK: Önbelleği temizle ve veriyi yeniden yükle
+            tedarikciSecici.clear();
             store.invalidateYemUrunleri();
             await yemUrunleriniDoldur();
         } else {
@@ -207,9 +213,6 @@ async function yemCikisiYap() {
     }
 }
 
-/**
- * "Yeni Yem Ekle" butonuna basıldığında modal'ı temizler ve açar.
- */
 function yeniYemModaliniAc() {
     document.getElementById('yemUrunuModalLabel').innerText = 'Yeni Yem Ürünü Ekle';
     document.getElementById('yem-urun-form').reset();
@@ -217,12 +220,7 @@ function yeniYemModaliniAc() {
     yemUrunuModal.show();
 }
 
-/**
- * "Düzenle" butonuna basıldığında modal'ı doldurur ve açar.
- * @param {number} id - Düzenlenecek yem ürününün ID'si.
- */
 function yemDuzenleAc(id) {
-    // DEĞİŞİKLİK: Veriyi store'dan al
     const urun = store.yemUrunleri.find(y => y.id === id);
     if (urun) {
         document.getElementById('yemUrunuModalLabel').innerText = 'Yem Ürününü Düzenle';
@@ -234,9 +232,6 @@ function yemDuzenleAc(id) {
     }
 }
 
-/**
- * Ekleme/Düzenleme modal'ındaki kaydet butonuna basıldığında çalışır.
- */
 async function yemUrunuKaydet() {
     const kaydetButton = document.querySelector('#yemUrunuModal .btn-primary');
     const originalButtonText = kaydetButton.innerHTML;
@@ -246,30 +241,20 @@ async function yemUrunuKaydet() {
         stok_miktari_kg: document.getElementById('yem-stok-input').value,
         birim_fiyat: document.getElementById('yem-fiyat-input').value
     };
-    
     if (!veri.yem_adi || !veri.stok_miktari_kg || !veri.birim_fiyat) {
         gosterMesaj('Lütfen tüm zorunlu alanları doldurun.', 'warning');
         return;
     }
-
     kaydetButton.disabled = true;
     kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
-
     const url = id ? `/yem/api/urunler/${id}` : '/yem/api/urunler';
     const method = id ? 'PUT' : 'POST';
-
     try {
-        const response = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
-        });
-        
+        const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
         const result = await response.json();
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             yemUrunuModal.hide();
-            // DEĞİŞİKLİK: Önbelleği temizle ve veriyi yeniden yükle
             store.invalidateYemUrunleri();
             await yemUrunleriniDoldur();
         } else {
@@ -283,20 +268,12 @@ async function yemUrunuKaydet() {
     }
 }
 
-/**
- * Silme onay modal'ını açar.
- * @param {number} id - Silinecek yem ürününün ID'si.
- * @param {string} isim - Silinecek yem ürününün adı.
- */
 function yemSilmeOnayiAc(id, isim) {
     document.getElementById('silinecek-yem-id').value = id;
     document.getElementById('silinecek-yem-adi').innerText = isim;
     yemSilmeOnayModal.show();
 }
 
-/**
- * Onay modal'ındaki sil butonuna basıldığında silme işlemini gerçekleştirir.
- */
 async function yemUrunuSil() {
     const id = document.getElementById('silinecek-yem-id').value;
     try {
@@ -305,7 +282,6 @@ async function yemUrunuSil() {
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             yemSilmeOnayModal.hide();
-            // DEĞİŞİKLİK: Önbelleği temizle ve veriyi yeniden yükle
             store.invalidateYemUrunleri();
             await yemUrunleriniDoldur();
         } else {

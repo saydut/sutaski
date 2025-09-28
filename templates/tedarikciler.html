@@ -23,33 +23,47 @@
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-body p-3">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="card-title mb-0">Tüm Tedarikçiler</h5>
-                <div class="col-md-4">
-                    <input type="text" id="arama-input" class="form-control form-control-sm" placeholder="İsim veya telefon ile ara...">
-                </div>
+    <div class="card mb-3">
+        <div class="card-body p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="col-md-4 col-12">
+                <input type="text" id="arama-input" class="form-control form-control-sm" placeholder="İsim veya telefon ile ara...">
             </div>
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th class="sortable" data-sort="isim">Tedarikçi Adı</th>
-                            <th>Telefon No</th>
-                            <th class="text-end sortable" data-sort="toplam_litre">Toplam Süt (Litre)</th>
-                            <th class="text-center">İşlemler</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tedarikciler-tablosu">
-                        </tbody>
-                </table>
-                <div id="veri-yok-mesaji" class="text-center p-4" style="display: none;">
-                    <p class="text-secondary">Kayıtlı tedarikçi bulunamadı veya arama sonucuyla eşleşen kayıt yok.</p>
+            <div class="btn-group" role="group">
+                <button type="button" id="btn-view-table" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('tablo')"><i class="bi bi-list-task"></i> Liste</button>
+                <button type="button" id="btn-view-card" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('kart')"><i class="bi bi-grid-3x2-gap-fill"></i> Kart</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tablo-gorunumu" class="gorunum-konteyneri" style="display: none;">
+        <div class="card">
+            <div class="card-body p-3">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-sort="isim">Tedarikçi Adı</th>
+                                <th>Telefon No</th>
+                                <th class="text-end sortable" data-sort="toplam_litre">Toplam Süt (Litre)</th>
+                                <th class="text-center">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tedarikciler-tablosu"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
+
+    <div id="kart-gorunumu" class="gorunum-konteyneri" style="display: none;">
+        <div class="row g-3" id="tedarikciler-kart-listesi">
+            </div>
+    </div>
+    
+    <div id="veri-yok-mesaji" class="text-center p-4" style="display: none;">
+        <p class="text-secondary">Kayıtlı tedarikçi bulunamadı veya arama sonucuyla eşleşen kayıt yok.</p>
+    </div>
+
 </div>
 
 <div class="modal fade" id="tedarikciModal" tabindex="-1" aria-labelledby="tedarikciModalLabel" aria-hidden="true">
@@ -62,22 +76,10 @@
             <div class="modal-body">
                 <form id="tedarikci-form">
                     <input type="hidden" id="edit-tedarikci-id">
-                    <div class="mb-2">
-                        <label for="tedarikci-isim-input" class="form-label">İsim Soyisim <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control form-control-sm" id="tedarikci-isim-input" required>
-                    </div>
-                    <div class="mb-2">
-                        <label for="tedarikci-tc-input" class="form-label">TC Kimlik No</label>
-                        <input type="text" class="form-control form-control-sm" id="tedarikci-tc-input">
-                    </div>
-                    <div class="mb-2">
-                        <label for="tedarikci-tel-input" class="form-label">Telefon Numarası</label>
-                        <input type="text" class="form-control form-control-sm" id="tedarikci-tel-input" placeholder="Örn: 532 123 4567">
-                    </div>
-                    <div class="mb-2">
-                        <label for="tedarikci-adres-input" class="form-label">Adres</label>
-                        <textarea class="form-control form-control-sm" id="tedarikci-adres-input" rows="3"></textarea>
-                    </div>
+                    <div class="mb-2"><label for="tedarikci-isim-input" class="form-label">İsim Soyisim <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="tedarikci-isim-input" required></div>
+                    <div class="mb-2"><label for="tedarikci-tc-input" class="form-label">TC Kimlik No</label><input type="text" class="form-control form-control-sm" id="tedarikci-tc-input"></div>
+                    <div class="mb-2"><label for="tedarikci-tel-input" class="form-label">Telefon Numarası</label><input type="text" class="form-control form-control-sm" id="tedarikci-tel-input" placeholder="Örn: 532 123 4567"></div>
+                    <div class="mb-2"><label for="tedarikci-adres-input" class="form-label">Adres</label><textarea class="form-control form-control-sm" id="tedarikci-adres-input" rows="3"></textarea></div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -91,10 +93,7 @@
 <div class="modal fade" id="silmeOnayModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title text-danger">Silme Onayı</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
+            <div class="modal-header"><h5 class="modal-title text-danger">Silme Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
                 <p><strong><span id="silinecek-tedarikci-adi"></span></strong> adlı tedarikçiyi silmek istediğinize emin misiniz?</p>
                 <p class="text-danger small">Bu tedarikçiye ait tüm veriler de silinecektir ve bu işlem geri alınamaz!</p>

@@ -51,27 +51,43 @@
         <div class="col-lg-8 col-12 order-lg-2 order-1">
             <div class="card">
                 <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                         <h5 class="card-title mb-0">Yem Ürünleri ve Stok Durumu</h5>
-                        {% if session.get('user', {}).get('rol') != 'muhasebeci' %}
-                        <button class="btn btn-success btn-sm" onclick="yeniYemModaliniAc()">
-                            <i class="bi bi-plus-circle"></i> Yeni Yem Ekle
-                        </button>
-                        {% endif %}
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="btn-group" role="group">
+                                <button type="button" id="btn-view-table" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('tablo')"><i class="bi bi-list-task"></i> Liste</button>
+                                <button type="button" id="btn-view-card" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('kart')"><i class="bi bi-grid-3x2-gap-fill"></i> Kart</button>
+                            </div>
+                            {% if session.get('user', {}).get('rol') != 'muhasebeci' %}
+                            <button class="btn btn-success btn-sm" onclick="yeniYemModaliniAc()">
+                                <i class="bi bi-plus-circle"></i> Yeni Yem Ekle
+                            </button>
+                            {% endif %}
+                        </div>
                     </div>
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th class="sortable sortable-yem" data-sort="yem_adi">Yem Adı</th>
-                                    <th class="text-end sortable sortable-yem" data-sort="stok_miktari_kg">Stok (KG)</th>
-                                    <th class="text-end sortable sortable-yem" data-sort="birim_fiyat">Birim Fiyat (TL)</th>
-                                    <th class="text-center">İşlemler</th>
-                                </tr>
-                            </thead>
-                            <tbody id="yem-urunleri-tablosu">
-                                </tbody>
-                        </table>
+
+                    <div id="tablo-gorunumu" class="gorunum-konteyneri" style="display: none;">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable sortable-yem" data-sort="yem_adi">Yem Adı</th>
+                                        <th class="text-end sortable sortable-yem" data-sort="stok_miktari_kg">Stok (KG)</th>
+                                        <th class="text-end sortable sortable-yem" data-sort="birim_fiyat">Birim Fiyat (TL)</th>
+                                        <th class="text-center">İşlemler</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="yem-urunleri-tablosu"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div id="kart-gorunumu" class="gorunum-konteyneri" style="display: none;">
+                        <div class="row g-3" id="yem-urunleri-kart-listesi"></div>
+                    </div>
+
+                    <div id="veri-yok-mesaji" class="text-center p-4" style="display: none;">
+                        <p class="text-secondary">Kayıtlı yem ürünü bulunamadı.</p>
                     </div>
                 </div>
             </div>
