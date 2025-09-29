@@ -18,6 +18,21 @@ def yem_yonetimi_sayfasi():
     return render_template('yem_yonetimi.html')
 
 # --- API UÇ NOKTALARI ---
+@yem_bp.route('/api/urunler/liste', methods=['GET'])
+@login_required
+def get_yem_urunleri_listesi():
+    try:
+        sirket_id = session['user']['sirket_id']
+        # Sayfalama olmadan, sadece menü için gerekli alanları çekiyoruz
+        urunler = supabase.table('yem_urunleri').select(
+            'id, yem_adi, stok_miktari_kg'
+        ).eq('sirket_id', sirket_id).order('yem_adi').execute()
+        return jsonify(urunler.data)
+    except Exception as e:
+        logger.error(f"Yem ürün listesi çekilirken hata: {e}", exc_info=True)
+        return jsonify({"error": "Ürün listesi alınamadı."}), 500
+
+
 
 @yem_bp.route('/api/urunler', methods=['GET'])
 @login_required
