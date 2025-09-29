@@ -1,32 +1,43 @@
-# Dosya Adı: utils.py (GÜÇLENDİRİLMİŞ VERSİYON)
-
 import pytz
 from datetime import datetime
 
 def parse_supabase_timestamp(timestamp_str):
     """
-    Supabase'den gelen çeşitli ISO 8601 formatlarını (timezone'lu, timezone'suz, mikrosaniyeli veya değil)
-    doğru bir şekilde anlayan ve timezone-aware bir datetime objesine çeviren daha güçlü bir fonksiyon.
+    Supabase'den gelen ve mikrosaniye hassasiyeti değişebilen ISO 8601 formatlarını
+    doğru bir şekilde anlayan ve timezone-aware bir datetime objesine çeviren fonksiyon.
     """
     if not timestamp_str:
         return None
     
     try:
-        # Python 3.7+ için fromisoformat en esnek yöntemdir.
-        # "+00:00" gibi timezone uzantılarını otomatik olarak anlar.
-        # "Z" (Zulu/UTC) formatını da anlayabilmesi için küçük bir ayar yapıyoruz.
-        if timestamp_str.endswith('Z'):
-            timestamp_str = timestamp_str[:-1] + '+00:00'
-        
-        return datetime.fromisoformat(timestamp_str)
+        # Timezone bilgisini (+00:00) ve mikrosaniye bölümünü ayır
+        if '+' in timestamp_str:
+            main_part, timezone_part = timestamp_str.rsplit('+', 1)
+            timezone_part = '+' + timezone_part
+        elif 'Z' in timestamp_str:
+            main_part, timezone_part = timestamp_str.rsplit('Z', 1)
+            timezone_part = '+00:00'
+        else:
+            main_part = timestamp_str
+            timezone_part = None
 
-    except (ValueError, TypeError):
-        # Eğer fromisoformat başarısız olursa, daha basit formatları deneriz.
-        # Bu, eski veya farklı formatta girilmiş veriler için bir geri dönüş yoludur.
-        try:
-            # Örneğin: '2025-09-28T20:00:00'
-            dt_obj = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S')
-            return pytz.utc.localize(dt_obj) # Bunun UTC olduğunu varsayıyoruz
-        except (ValueError, TypeError):
-            print(f"!!! ZAMAN DAMGASI AYRIŞTIRMA HATASI: '{timestamp_str}' anlaşılamadı.")
-            return None
+        # Mikrosaniye bölümünün her zaman 6 haneli olmasını sağla
+        if '.' in main_part:
+            time_part, microsecond_part = main_part.rsplit('.', 1)
+            main_part = f"{time_part}.{microsecond_part.ljust(6, '0')}"
+
+        # Parçaları tekrar birleştir
+        full_timestamp_str = main_part + (timezone_part if timezone_part else '')
+        
+        # Standart strptime ile parse et
+        # Python'un %f formatı 6 haneli mikrosaniyeyi sorunsuz anlar.
+        if timezone_part:
+            return datetime.strptime(full_timestamp_str, '%Y-%m-%dT%H:%M:%S.%f%z')
+        else:
+            # Eğer timezone bilgisi yoksa, UTC olduğunu varsay
+            dt_obj = datetime.strptime(full_timestamp_str, '%Y-%m-%dT%H:%M:%S.%f')
+            return pytz.utc.localize(dt_obj)
+
+    except (ValueError, TypeError) as e:
+        print(f"!!! ZAMAN DAMGASI AYRIŞTIRMA HATASI: '{timestamp_str}' anlaşılamadı. Hata: {e}")
+        return None

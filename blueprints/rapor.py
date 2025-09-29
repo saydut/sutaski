@@ -9,6 +9,7 @@ import csv
 import calendar
 from weasyprint import HTML
 from decimal import Decimal, getcontext, InvalidOperation
+from blueprints.sut import get_guncel_ozet
 
 rapor_bp = Blueprint('rapor', __name__, url_prefix='/api/rapor')
 getcontext().prec = 10
@@ -16,46 +17,26 @@ getcontext().prec = 10
 @rapor_bp.route('/gunluk_ozet')
 @login_required
 def get_gunluk_ozet():
+    """
+    BU FONKSİYON ARTIK HESAPLAMAYI DOĞRUDAN SUPABASE'E YAPTIRIYOR.
+    """
     try:
         sirket_id = session['user']['sirket_id']
         tarih_str = request.args.get('tarih')
 
-        # Hangi tarihin istendiğini belirle
-        target_date = datetime.strptime(tarih_str, '%Y-%m-%d').date() if tarih_str else datetime.now(turkey_tz).date()
+        # İstenen tarihi belirle, eğer belirtilmemişse bugünü kullan
+        target_date_str = tarih_str if tarih_str else datetime.now(turkey_tz).date().isoformat()
 
-        # Türkiye saatine göre günün başlangıç ve bitişini UTC'ye çevir (En güvenilir yöntem)
-        start_utc = turkey_tz.localize(datetime.combine(target_date, datetime.min.time())).astimezone(pytz.utc)
-        end_utc = turkey_tz.localize(datetime.combine(target_date, datetime.max.time())).astimezone(pytz.utc)
-
-        # Veriyi çek
-        response = supabase.table('sut_girdileri').select(
-            'litre', count='exact'
-        ).eq('sirket_id', sirket_id).gte(
-            'taplanma_tarihi', start_utc.isoformat()
-        ).lte(
-            'taplanma_tarihi', end_utc.isoformat()
-        ).execute()
-
-        # Supabase'den gelen yanıtı dikkatlice kontrol et
-        if response.data is None:
-            # Eğer 'data' alanı yoksa veya None ise, hata olarak kabul etme, boş olarak kabul et.
-            toplam_litre = 0.0
-            girdi_sayisi = 0
-        else:
-            # Hesaplamayı basit float'lar ile yap, olası Decimal hatalarını önle
-            toplam_litre = sum(float(item.get('litre', 0)) for item in response.data)
-            girdi_sayisi = response.count if response.count is not None else 0
-
-        summary = {
-            'toplam_litre': round(toplam_litre, 2),
-            'girdi_sayisi': girdi_sayisi
-        }
+        # Doğrudan RPC'yi çağıran hazır ve optimize fonksiyonumuzu kullanıyoruz
+        summary = get_guncel_ozet(sirket_id, target_date_str)
+        
         return jsonify(summary)
 
     except Exception as e:
         # Hata olursa, loglara detaylı yazdır
-        print(f"!!! GÜNLÜK ÖZET KRİTİK HATA: {e}", exc_info=True)
+        print(f"!!! GÜNLÜK ÖZET KRİTİK HATA: {e}")
         return jsonify({"error": "Özet hesaplanırken sunucuda bir hata oluştu."}), 500
+    
     
 @rapor_bp.route('/haftalik_ozet')
 @login_required
@@ -95,6 +76,7 @@ def get_tedarikci_dagilimi():
     except Exception as e:
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
+# Lütfen bu fonksiyonun tamamını kopyalayıp dosyadaki mevcut olanla değiştirin.
 @rapor_bp.route('/detayli_rapor', methods=['GET'])
 @login_required
 def get_detayli_rapor():
@@ -102,35 +84,67 @@ def get_detayli_rapor():
         sirket_id = session['user']['sirket_id']
         start_date_str = request.args.get('baslangic')
         end_date_str = request.args.get('bitis')
+        
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        
         if start_date > end_date or (end_date - start_date).days > 90:
             return jsonify({"error": "Geçersiz tarih aralığı."}), 400
+            
         start_utc = turkey_tz.localize(datetime.combine(start_date, datetime.min.time())).astimezone(pytz.utc).isoformat()
-        end_utc = turkey_tz.localize(datetime.combine(end_date, datetime.max.time())).astimezone(pytz.utc).isoformat()
-        response = supabase.table('sut_girdileri').select('litre, taplanma_tarihi, tedarikciler(isim)').eq('sirket_id', sirket_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).execute()
+        end_date_plus_one = end_date + timedelta(days=1)
+        end_utc = turkey_tz.localize(datetime.combine(end_date_plus_one, datetime.min.time())).astimezone(pytz.utc).isoformat()
+
+        response = supabase.table('sut_girdileri').select(
+            '*, tedarikciler(isim)'
+        ).eq('sirket_id', sirket_id).gte(
+            'taplanma_tarihi', start_utc
+        ).lt(
+            'taplanma_tarihi', end_utc
+        ).execute()
+        
         date_range = [start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)]
         daily_totals = {gun.strftime('%Y-%m-%d'): Decimal(0) for gun in date_range}
         supplier_totals = {}
+        
         for girdi in response.data:
             parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
-            if not parsed_date: continue
+            if not parsed_date:
+                continue # Hatalı tarihli kayıtları atla
+            
             girdi_gunu_str = parsed_date.astimezone(turkey_tz).strftime('%Y-%m-%d')
             if girdi_gunu_str in daily_totals:
                 daily_totals[girdi_gunu_str] += Decimal(str(girdi.get('litre', '0')))
-            if girdi.get('tedarikciler') and girdi.get('tedarikciler').get('isim'):
-                isim = girdi['tedarikciler']['isim']
-                if isim not in supplier_totals: supplier_totals[isim] = {'litre': Decimal(0), 'entryCount': 0}
+            
+            tedarikci_bilgisi = girdi.get('tedarikciler')
+            if tedarikci_bilgisi and tedarikci_bilgisi.get('isim'):
+                isim = tedarikci_bilgisi['isim']
+                if isim not in supplier_totals: 
+                    supplier_totals[isim] = {'litre': Decimal(0), 'entryCount': 0}
                 supplier_totals[isim]['litre'] += Decimal(str(girdi.get('litre', '0')))
                 supplier_totals[isim]['entryCount'] += 1
+                
         turkce_aylar = {"01":"Oca","02":"Şub","03":"Mar","04":"Nis","05":"May","06":"Haz","07":"Tem","08":"Ağu","09":"Eyl","10":"Eki","11":"Kas","12":"Ara"}
         labels = [f"{datetime.strptime(gun, '%Y-%m-%d').strftime('%d')} {turkce_aylar.get(datetime.strptime(gun, '%Y-%m-%d').strftime('%m'), '')}" for gun in sorted(daily_totals.keys())]
         data = [float(toplam) for gun, toplam in sorted(daily_totals.items())]
+        
         total_litre = sum(daily_totals.values())
-        summary = {'totalLitre': float(total_litre), 'averageDailyLitre': float(total_litre / len(date_range) if date_range else 0), 'dayCount': len(date_range), 'entryCount': len(response.data)}
+        
+        summary = {
+            'totalLitre': float(total_litre), 
+            'averageDailyLitre': float(total_litre / len(date_range) if date_range else 0), 
+            'dayCount': len(date_range), 
+            'entryCount': len(response.data)
+        }
+        
         breakdown = sorted([{'name': isim, 'litre': float(totals['litre']), 'entryCount': totals['entryCount']} for isim, totals in supplier_totals.items()], key=lambda x: x['litre'], reverse=True)
+        
         return jsonify({'chartData': {'labels': labels, 'data': data}, 'summaryData': summary, 'supplierBreakdown': breakdown})
+        
     except Exception as e:
+        import traceback
+        print(f"Detaylı rapor hatası: {e}")
+        traceback.print_exc()
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @rapor_bp.route('/aylik_pdf')
