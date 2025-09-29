@@ -24,8 +24,27 @@ def yem_yonetimi_sayfasi():
 def get_yem_urunleri():
     try:
         sirket_id = session['user']['sirket_id']
-        urunler = supabase.table('yem_urunleri').select('*').eq('sirket_id', sirket_id).order('yem_adi').execute()
-        return jsonify(urunler.data)
+        sayfa = int(request.args.get('sayfa', 1))
+        limit = 10 # Sayfa başına gösterilecek ürün sayısı
+        offset = (sayfa - 1) * limit
+
+        # Sorguya hem sayfalama hem de toplam kayıt sayısını alacak şekilde güncelleme yapıyoruz
+        query = supabase.table('yem_urunleri').select(
+            '*', count='exact'  # count='exact' toplam ürün sayısını verir
+        ).eq('sirket_id', sirket_id).order(
+            'yem_adi'
+        ).range(
+            offset, offset + limit - 1
+        )
+        
+        response = query.execute()
+
+        # Frontend'e hem ürünleri hem de toplam sayıyı gönderiyoruz
+        return jsonify({
+            "urunler": response.data,
+            "toplam_urun_sayisi": response.count
+        })
+
     except Exception as e:
         logger.error(f"Yem ürünleri listelenirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "Ürünler listelenirken bir sunucu hatası oluştu."}), 500

@@ -1,64 +1,91 @@
-// static/js/yem_yonetimi.js (TÜM FONKSİYONLARI İÇEREN TAM VE GÜNCEL VERSİYON)
+// static/js/yem_yonetimi.js (SAYFALAMA EKLENMİŞ TAM VERSİYON)
 
 let tedarikciSecici, yemUrunSecici;
 let yemUrunuModal, yemSilmeOnayModal;
-let mevcutYemSiralamaSutunu = 'yem_adi';
-let mevcutYemSiralamaYonu = 'asc';
 let mevcutGorunum = 'tablo';
 const KRITIK_STOK_SEVIYESI = 500;
+let mevcutYemSayfasi = 1;
+const YEMLER_SAYFA_BASI = 10; // Backend'deki limit ile aynı olmalı
 
 window.onload = function() {
     yemUrunuModal = new bootstrap.Modal(document.getElementById('yemUrunuModal'));
     yemSilmeOnayModal = new bootstrap.Modal(document.getElementById('yemSilmeOnayModal'));
-    
+
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
     yemUrunSecici = new TomSelect("#yem-urun-sec", { create: false, sortField: { field: "text", direction: "asc" } });
 
     mevcutGorunum = localStorage.getItem('yemGorunum') || 'tablo';
     gorunumuAyarla(mevcutGorunum);
-    
-    verileriYukle();
 
-    document.querySelectorAll('.sortable-yem').forEach(header => {
-        header.addEventListener('click', () => {
-            const sutun = header.dataset.sort;
-            if (mevcutYemSiralamaSutunu === sutun) {
-                mevcutYemSiralamaYonu = mevcutYemSiralamaYonu === 'asc' ? 'desc' : 'asc';
-            } else {
-                mevcutYemSiralamaSutunu = sutun;
-                mevcutYemSiralamaYonu = 'asc';
-            }
-            yemleriSiralaVeGoster();
-        });
-    });
+    // Ana veri yükleme fonksiyonlarını çağır
+    tedarikcileriDoldur();
+    yemleriGoster(1); // İlk sayfa verisini yükle
 };
+
+/**
+ * Belirtilen sayfa için yem ürünlerini getirir ve gösterir.
+ * @param {number} sayfa - Yüklenecek sayfa numarası.
+ */
+async function yemleriGoster(sayfa = 1) {
+    mevcutYemSayfasi = sayfa;
+    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+    const tbody = document.getElementById('yem-urunleri-tablosu');
+    const kartListesi = document.getElementById('yem-urunleri-kart-listesi');
+
+    // Yükleniyor animasyonunu göster
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
+    kartListesi.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
+    veriYokMesaji.style.display = 'none';
+
+    try {
+        const response = await fetch(`/yem/api/urunler?sayfa=${sayfa}`);
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || 'Ürünler yüklenemedi.');
+        }
+
+        // store objesindeki yem listesini güncelle (diğer fonksiyonların kullanabilmesi için)
+        store.yemUrunleri = result.urunler;
+
+        verileriGoster(result.urunler);
+
+        // Sayfalama kontrollerini oluştur
+        ui.sayfalamaNavOlustur(
+            'yem-urunleri-sayfalama',
+            result.toplam_urun_sayisi,
+            sayfa,
+            YEMLER_SAYFA_BASI,
+            (yeniSayfa) => yemleriGoster(yeniSayfa)
+        );
+
+    } catch (error) {
+        gosterMesaj(error.message, "danger");
+        tbody.innerHTML = '';
+        kartListesi.innerHTML = '';
+        veriYokMesaji.style.display = 'block';
+    }
+}
 
 function gorunumuDegistir(yeniGorunum) {
     if (mevcutGorunum === yeniGorunum) return;
     mevcutGorunum = yeniGorunum;
     localStorage.setItem('yemGorunum', yeniGorunum);
     gorunumuAyarla(yeniGorunum);
-    yemleriSiralaVeGoster();
+    verileriGoster(store.yemUrunleri); // Mevcut sayfadaki veriyi yeni görünüme göre render et
 }
 
 function gorunumuAyarla(aktifGorunum) {
     document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
     const gorunumElementi = document.getElementById(`${aktifGorunum}-gorunumu`);
     if(gorunumElementi) {
-        gorunumElementi.style.display = gorunumElementi.id.includes('kart') ? 'flex' : 'block'; // Kartlar için row'u aktif et
+        gorunumElementi.style.display = gorunumElementi.id.includes('kart') ? 'flex' : 'block';
         if (gorunumElementi.id.includes('kart')) {
             gorunumElementi.querySelector('.row').style.display = 'flex';
         }
     }
     document.getElementById('btn-view-table').classList.toggle('active', aktifGorunum === 'tablo');
     document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
-}
-
-async function verileriYukle() {
-    await Promise.all([
-        tedarikcileriDoldur(),
-        yemUrunleriniDoldur()
-    ]);
 }
 
 async function tedarikcileriDoldur() {
@@ -70,38 +97,6 @@ async function tedarikcileriDoldur() {
     } catch (error) {
         gosterMesaj('Tedarikçiler yüklenirken bir hata oluştu.', 'danger');
     }
-}
-
-async function yemUrunleriniDoldur() {
-    try {
-        await store.getYemUrunleri();
-        yemleriSiralaVeGoster();
-
-        yemUrunSecici.clearOptions();
-        const options = store.yemUrunleri.map(u => ({ 
-            value: u.id, 
-            text: `${u.yem_adi} (Stok: ${parseFloat(u.stok_miktari_kg).toFixed(2)} kg)` 
-        }));
-        yemUrunSecici.addOptions(options);
-    } catch (error) {
-        gosterMesaj(error.message, "danger");
-        document.getElementById('veri-yok-mesaji').style.display = 'block';
-    }
-}
-
-function yemleriSiralaVeGoster() {
-    let siraliYemler = [...store.yemUrunleri];
-    siraliYemler.sort((a, b) => {
-        let valA = a[mevcutYemSiralamaSutunu] || '';
-        let valB = b[mevcutYemSiralamaSutunu] || '';
-        if (typeof valA === 'string') {
-            return mevcutYemSiralamaYonu === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-        }
-        return mevcutYemSiralamaYonu === 'asc' ? parseFloat(valA) - parseFloat(valB) : parseFloat(valB) - parseFloat(valA);
-    });
-    
-    verileriGoster(siraliYemler);
-    yemBasliklariniGuncelle();
 }
 
 function verileriGoster(urunler) {
@@ -121,9 +116,9 @@ function renderTable(urunler) {
     urunler.forEach(urun => {
         const stokMiktari = parseFloat(urun.stok_miktari_kg);
         const isKritik = stokMiktari <= KRITIK_STOK_SEVIYESI;
-        const rowClass = isKritik ? 'table-warning' : ''; 
-        const uyariIconu = isKritik 
-            ? `<i class="bi bi-exclamation-triangle-fill text-danger me-2" title="Stok kritik seviyede: ${stokMiktari.toFixed(2)} KG"></i>` 
+        const rowClass = isKritik ? 'table-warning' : '';
+        const uyariIconu = isKritik
+            ? `<i class="bi bi-exclamation-triangle-fill text-danger me-2" title="Stok kritik seviyede: ${stokMiktari.toFixed(2)} KG"></i>`
             : '';
         tbody.innerHTML += `
             <tr class="${rowClass}">
@@ -167,16 +162,6 @@ function renderCards(urunler) {
     });
 }
 
-function yemBasliklariniGuncelle() {
-    document.querySelectorAll('.sortable-yem').forEach(header => {
-        const sutun = header.dataset.sort;
-        header.classList.remove('asc', 'desc');
-        if (sutun === mevcutYemSiralamaSutunu) {
-            header.classList.add(mevcutYemSiralamaYonu);
-        }
-    });
-}
-
 async function yemCikisiYap() {
     const kaydetButton = document.getElementById('yem-cikis-btn');
     const originalButtonText = kaydetButton.innerHTML;
@@ -201,7 +186,7 @@ async function yemCikisiYap() {
             document.getElementById('aciklama-input').value = '';
             tedarikciSecici.clear();
             store.invalidateYemUrunleri();
-            await yemUrunleriniDoldur();
+            await yemleriGoster(mevcutYemSayfasi); // Mevcut sayfayı yenile
         } else {
             gosterMesaj(result.error || 'Bir hata oluştu.', 'danger');
         }
@@ -256,7 +241,7 @@ async function yemUrunuKaydet() {
             gosterMesaj(result.message, 'success');
             yemUrunuModal.hide();
             store.invalidateYemUrunleri();
-            await yemUrunleriniDoldur();
+            await yemleriGoster(mevcutYemSayfasi);
         } else {
             gosterMesaj(result.error || 'İşlem sırasında bir hata oluştu.', 'danger');
         }
@@ -283,7 +268,7 @@ async function yemUrunuSil() {
             gosterMesaj(result.message, 'success');
             yemSilmeOnayModal.hide();
             store.invalidateYemUrunleri();
-            await yemUrunleriniDoldur();
+            await yemleriGoster(1); // Silme sonrası ilk sayfaya dön
         } else {
             gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
         }
