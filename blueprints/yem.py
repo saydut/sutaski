@@ -187,3 +187,33 @@ def add_yem_islemi():
     except Exception as e:
         logger.error(f"Yem işlemi eklenirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "İşlem sırasında bir hata oluştu."}), 500
+    
+# Son yem çıkış işlemlerini sayfalama ile listeleyen endpoint
+@yem_bp.route('/api/islemler/liste', methods=['GET'])
+@login_required
+def get_yem_islemleri():
+    try:
+        sirket_id = session['user']['sirket_id']
+        sayfa = int(request.args.get('sayfa', 1))
+        limit = 5 # Sayfa başına 5 işlem gösterelim
+        offset = (sayfa - 1) * limit
+
+        query = supabase.table('yem_islemleri').select(
+            '*, tedarikciler(isim), yem_urunleri(yem_adi)',
+            count='exact'
+        ).eq('sirket_id', sirket_id).order(
+            'islem_tarihi', desc=True # En yeni işlem en üstte
+        ).range(
+            offset, offset + limit - 1
+        )
+        
+        response = query.execute()
+
+        return jsonify({
+            "islemler": response.data,
+            "toplam_islem_sayisi": response.count
+        })
+
+    except Exception as e:
+        logger.error(f"Yem işlemleri listelenirken hata: {e}", exc_info=True)
+        return jsonify({"error": "İşlemler listelenemedi."}), 500

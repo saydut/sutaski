@@ -6,6 +6,8 @@ let mevcutGorunum = 'tablo';
 const KRITIK_STOK_SEVIYESI = 500;
 let mevcutYemSayfasi = 1;
 const YEMLER_SAYFA_BASI = 10; // Backend'deki limit ile aynı olmalı
+let mevcutIslemSayfasi = 1; // YENİ
+const ISLEMLER_SAYFA_BASI = 5; // YENİ
 
 window.onload = function() {
     yemUrunuModal = new bootstrap.Modal(document.getElementById('yemUrunuModal'));
@@ -19,8 +21,67 @@ window.onload = function() {
 
     // Ana veri yükleme fonksiyonlarını çağır
     tedarikcileriDoldur();
-    yemleriGoster(1); // İlk sayfa verisini yükle
+    yemSeciciyiDoldur();      // YENİ EKLENDİ: Formdaki dropdown menüyü doldurur
+    yemListesiniGoster(1);   // YENİ İSİM: Sağdaki tablo/kart listesini doldurur
+    yemIslemleriniGoster(1); // YENİ EKLENDİ
 };
+
+// 1. Sadece soldaki yem seçme menüsünü doldurur.
+async function yemSeciciyiDoldur() {
+    try {
+        // Yeni, sayfalama yapmayan API adresini çağırıyoruz
+        const response = await fetch('/yem/api/urunler/liste');
+        const urunler = await response.json();
+        if (!response.ok) throw new Error(urunler.error || 'Hata');
+
+        yemUrunSecici.clearOptions();
+        const options = urunler.map(u => ({
+            value: u.id,
+            text: `${u.yem_adi} (Stok: ${parseFloat(u.stok_miktari_kg).toFixed(2)} kg)`
+        }));
+        yemUrunSecici.addOptions(options);
+
+    } catch (error) {
+        gosterMesaj('Yem ürünleri menüsü yüklenemedi.', 'danger');
+    }
+}
+
+// 2. Sadece sağdaki tablo/kart listesini doldurur. (Eski yemleriGoster fonksiyonunun yeni hali)
+async function yemListesiniGoster(sayfa = 1) {
+    mevcutYemSayfasi = sayfa;
+    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+    const tbody = document.getElementById('yem-urunleri-tablosu');
+    const kartListesi = document.getElementById('yem-urunleri-kart-listesi');
+
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
+    kartListesi.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
+    veriYokMesaji.style.display = 'none';
+
+    try {
+        const response = await fetch(`/yem/api/urunler?sayfa=${sayfa}`); // Sayfalamalı API adresi
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Ürünler yüklenemedi.');
+
+        store.yemUrunleri = result.urunler; // Sadece o sayfanın ürünlerini sakla
+        verileriGoster(result.urunler);
+
+        ui.sayfalamaNavOlustur(
+            'yem-urunleri-sayfalama',
+            result.toplam_urun_sayisi,
+            sayfa,
+            YEMLER_SAYFA_BASI,
+            (yeniSayfa) => yemListesiniGoster(yeniSayfa)
+        );
+
+    } catch (error) {
+        gosterMesaj(error.message, "danger");
+        tbody.innerHTML = '';
+        kartListesi.innerHTML = '';
+        veriYokMesaji.style.display = 'block';
+    }
+}
+
+
 
 /**
  * Belirtilen sayfa için yem ürünlerini getirir ve gösterir.
@@ -185,8 +246,12 @@ async function yemCikisiYap() {
             document.getElementById('miktar-input').value = '';
             document.getElementById('aciklama-input').value = '';
             tedarikciSecici.clear();
-            store.invalidateYemUrunleri();
-            await yemleriGoster(mevcutYemSayfasi); // Mevcut sayfayı yenile
+            
+            // HEM LİSTEYİ HEM DE MENÜYÜ YENİLİYORUZ
+            await yemListesiniGoster(mevcutYemSayfasi); 
+            await yemSeciciyiDoldur(); // <-- EKLENEN SATIR BU
+            await yemIslemleriniGoster(1); // YENİ EKLENDİ - Yeni işlem sonrası ilk sayfayı göster
+
         } else {
             gosterMesaj(result.error || 'Bir hata oluştu.', 'danger');
         }
@@ -240,8 +305,8 @@ async function yemUrunuKaydet() {
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             yemUrunuModal.hide();
-            store.invalidateYemUrunleri();
-            await yemleriGoster(mevcutYemSayfasi);
+            await yemListesiniGoster(mevcutYemSayfasi);
+            await yemSeciciyiDoldur();
         } else {
             gosterMesaj(result.error || 'İşlem sırasında bir hata oluştu.', 'danger');
         }
@@ -267,12 +332,57 @@ async function yemUrunuSil() {
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             yemSilmeOnayModal.hide();
-            store.invalidateYemUrunleri();
-            await yemleriGoster(1); // Silme sonrası ilk sayfaya dön
+            await yemListesiniGoster(1); // İlk sayfaya dön
+            await yemSeciciyiDoldur();
         } else {
             gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
         }
     } catch (error) {
         gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+    }
+}
+
+async function yemIslemleriniGoster(sayfa = 1) {
+    mevcutIslemSayfasi = sayfa;
+    const tbody = document.getElementById('yem-islemleri-listesi');
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3"><div class="spinner-border spinner-border-sm"></div></td></tr>`;
+
+    try {
+        const response = await fetch(`/yem/api/islemler/liste?sayfa=${sayfa}`);
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'İşlemler yüklenemedi.');
+
+        tbody.innerHTML = ''; // Temizle
+
+        if (result.islemler.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3 text-secondary">Kayıtlı yem çıkış işlemi bulunamadı.</td></tr>`;
+            return;
+        }
+
+        result.islemler.forEach(islem => {
+            const tarih = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
+            const miktar = parseFloat(islem.miktar_kg).toFixed(2);
+
+            const tr = `
+                <tr>
+                    <td>${tarih}</td>
+                    <td>${islem.tedarikciler.isim}</td>
+                    <td>${islem.yem_urunleri.yem_adi}</td>
+                    <td class="text-end">${miktar} KG</td>
+                </tr>
+            `;
+            tbody.innerHTML += tr;
+        });
+
+        ui.sayfalamaNavOlustur(
+            'yem-islemleri-sayfalama',
+            result.toplam_islem_sayisi,
+            sayfa,
+            ISLEMLER_SAYFA_BASI,
+            (yeniSayfa) => yemIslemleriniGoster(yeniSayfa)
+        );
+
+    } catch (error) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3 text-danger">${error.message}</td></tr>`;
     }
 }
