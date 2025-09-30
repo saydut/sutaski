@@ -88,20 +88,23 @@ def get_detayli_rapor():
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
         
+        # Tarih aralığı kontrolü - 90 günden fazla olmasın
         if start_date > end_date or (end_date - start_date).days > 90:
-            return jsonify({"error": "Geçersiz tarih aralığı."}), 400
+            return jsonify({"error": "Geçersiz tarih aralığı. En fazla 90 günlük rapor alabilirsiniz."}), 400
             
         start_utc = turkey_tz.localize(datetime.combine(start_date, datetime.min.time())).astimezone(pytz.utc).isoformat()
         end_date_plus_one = end_date + timedelta(days=1)
         end_utc = turkey_tz.localize(datetime.combine(end_date_plus_one, datetime.min.time())).astimezone(pytz.utc).isoformat()
 
+        # --- DEĞİŞİKLİK BURADA: Sorguya .limit() eklendi ---
+        # 90 günlük bir rapor için yaklaşık 9000 kayıt yeterli olacaktır, biz garanti olsun diye 10000 yapalım.
         response = supabase.table('sut_girdileri').select(
             '*, tedarikciler(isim)'
         ).eq('sirket_id', sirket_id).gte(
             'taplanma_tarihi', start_utc
         ).lt(
             'taplanma_tarihi', end_utc
-        ).execute()
+        ).limit(10000).execute() # <-- EN ÖNEMLİ SATIR BU
         
         date_range = [start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)]
         daily_totals = {gun.strftime('%Y-%m-%d'): Decimal(0) for gun in date_range}

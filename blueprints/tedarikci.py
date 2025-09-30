@@ -1,4 +1,4 @@
-# Dosya: blueprints/tedarikci.py (TAM VE DÜZELTİLMİŞ VERSİYON)
+# Dosya: blueprints/tedarikci.py (RPC HATASI DÜZELTİLMİŞ, TAM VE DOĞRU VERSİYON)
 
 from flask import Blueprint, jsonify, request, session, render_template, current_app, send_file
 from decorators import login_required, lisans_kontrolu, modification_allowed
@@ -10,11 +10,120 @@ import pytz
 import calendar
 from weasyprint import HTML
 import io
-from postgrest import APIError # Hata yakalama için eklendi
+from postgrest import APIError
 
 tedarikci_bp = Blueprint('tedarikci', __name__, url_prefix='/api')
 
-# --- TEDARİKÇİ EKLEME (YENİ VE GÜVENİLİR KOD) ---
+# --- YENİ VE HIZLI ENDPOINT'LER ---
+
+@tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/ozet')
+@login_required
+def get_tedarikci_ozet(tedarikci_id):
+    """
+    Sadece özet kartları için hızlı veri çeker.
+    RPC fonksiyonu yerine hesaplamayı Python'da yapar.
+    """
+    try:
+        sirket_id = session['user']['sirket_id']
+        
+        # Tedarikçinin tüm işlem verilerini tek bir sorguda, sadece hesaplama için gerekli sütunları alarak çekiyoruz.
+        response = supabase.table('tedarikciler').select(
+            'isim, sut_girdileri(litre, fiyat), yem_islemleri(toplam_tutar), finansal_islemler(tutar)'
+        ).eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
+
+        if not response.data:
+            return jsonify({"error": "Tedarikçi bulunamadı."}), 404
+
+        td = response.data
+        
+        # Hesaplamaları Python'da yapıyoruz
+        toplam_sut_alacagi = sum(Decimal(str(g.get('litre', '0'))) * Decimal(str(g.get('fiyat', '0'))) for g in td.get('sut_girdileri', []))
+        toplam_yem_borcu = sum(Decimal(str(y.get('toplam_tutar', '0'))) for y in td.get('yem_islemleri', []))
+        toplam_odeme = sum(Decimal(str(f.get('tutar', '0'))) for f in td.get('finansal_islemler', []))
+        net_bakiye = toplam_sut_alacagi - toplam_yem_borcu - toplam_odeme
+
+        sonuc = {
+            "isim": td.get('isim', 'Bilinmeyen Tedarikçi'),
+            "toplam_sut_alacagi": f"{toplam_sut_alacagi:.2f}",
+            "toplam_yem_borcu": f"{toplam_yem_borcu:.2f}",
+            "toplam_odeme": f"{toplam_odeme:.2f}",
+            "net_bakiye": f"{net_bakiye:.2f}"
+        }
+        
+        return jsonify(sonuc)
+        
+    except Exception as e:
+        print(f"Tedarikçi özet hatası: {e}")
+        return jsonify({"error": "Sunucuda beklenmedik bir özet hatası oluştu."}), 500
+
+@tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/sut_girdileri')
+@login_required
+def get_sut_girdileri_sayfali(tedarikci_id):
+    """Tedarikçinin süt girdilerini sayfalayarak getirir."""
+    try:
+        sayfa = int(request.args.get('sayfa', 1))
+        limit = 10  # Sayfa başına 10 kayıt
+        offset = (sayfa - 1) * limit
+        sirket_id = session['user']['sirket_id']
+
+        query = supabase.table('sut_girdileri').select(
+            '*, kullanicilar(kullanici_adi)', count='exact'
+        ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order(
+            'taplanma_tarihi', desc=True
+        ).range(offset, offset + limit - 1)
+        
+        response = query.execute()
+        return jsonify({"girdiler": response.data, "toplam_kayit": response.count})
+    except Exception as e:
+        print(f"Sayfalı süt girdisi hatası: {e}")
+        return jsonify({"error": "Süt girdileri listelenemedi."}), 500
+
+@tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/yem_islemleri')
+@login_required
+def get_yem_islemleri_sayfali(tedarikci_id):
+    """Tedarikçinin yem işlemlerini sayfalayarak getirir."""
+    try:
+        sayfa = int(request.args.get('sayfa', 1))
+        limit = 10
+        offset = (sayfa - 1) * limit
+        sirket_id = session['user']['sirket_id']
+
+        query = supabase.table('yem_islemleri').select(
+            '*, kullanicilar(kullanici_adi), yem_urunleri(yem_adi)', count='exact'
+        ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order(
+            'islem_tarihi', desc=True
+        ).range(offset, offset + limit - 1)
+
+        response = query.execute()
+        return jsonify({"islemler": response.data, "toplam_kayit": response.count})
+    except Exception as e:
+        print(f"Sayfalı yem işlemi hatası: {e}")
+        return jsonify({"error": "Yem işlemleri listelenemedi."}), 500
+
+@tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/finansal_islemler')
+@login_required
+def get_finansal_islemler_sayfali(tedarikci_id):
+    """Tedarikçinin finansal işlemlerini sayfalayarak getirir."""
+    try:
+        sayfa = int(request.args.get('sayfa', 1))
+        limit = 10
+        offset = (sayfa - 1) * limit
+        sirket_id = session['user']['sirket_id']
+
+        query = supabase.table('finansal_islemler').select(
+            '*, kullanicilar(kullanici_adi)', count='exact'
+        ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order(
+            'islem_tarihi', desc=True
+        ).range(offset, offset + limit - 1)
+
+        response = query.execute()
+        return jsonify({"islemler": response.data, "toplam_kayit": response.count})
+    except Exception as e:
+        print(f"Sayfalı finans işlemi hatası: {e}")
+        return jsonify({"error": "Finansal işlemler listelenemedi."}), 500
+
+# --- TEDARİKÇİ YÖNETİMİ FONKSİYONLARI ---
+
 @tedarikci_bp.route('/tedarikci_ekle', methods=['POST'])
 @login_required
 @lisans_kontrolu
@@ -28,33 +137,20 @@ def add_tedarikci():
         if not isim:
             return jsonify({"error": "Tedarikçi ismi zorunludur."}), 400
 
-        # Sadece zorunlu alanlarla başla
-        yeni_veri = {
-            'isim': isim,
-            'sirket_id': sirket_id,
-        }
-
-        # İsteğe bağlı alanları SADECE doluysa ekle
-        if data.get('tc_no'):
-            yeni_veri['tc_no'] = data.get('tc_no')
-        if data.get('telefon_no'):
-            yeni_veri['telefon_no'] = data.get('telefon_no')
-        if data.get('adres'):
-            yeni_veri['adres'] = data.get('adres')
+        yeni_veri = {'isim': isim, 'sirket_id': sirket_id}
+        if data.get('tc_no'): yeni_veri['tc_no'] = data.get('tc_no')
+        if data.get('telefon_no'): yeni_veri['telefon_no'] = data.get('telefon_no')
+        if data.get('adres'): yeni_veri['adres'] = data.get('adres')
 
         supabase.table('tedarikciler').insert(yeni_veri).execute()
         
         return jsonify({"message": "Tedarikçi başarıyla eklendi."}), 201
 
     except APIError as e:
-        # Supabase'den gelen spesifik hatayı logla ve kullanıcıya göster
-        print(f"Tedarikçi Ekleme - Supabase API Hatası: {e.message}")
         return jsonify({"error": f"Veritabanı hatası: {e.message}"}), 500
     except Exception as e:
-        print(f"Tedarikçi Ekleme - Genel Hata: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
-# --- TEDARİKÇİ DÜZENLEME (YENİ VE GÜVENİLİR KOD) ---
 @tedarikci_bp.route('/tedarikci_duzenle/<int:id>', methods=['PUT'])
 @login_required
 @lisans_kontrolu
@@ -63,23 +159,16 @@ def update_tedarikci(id):
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
-
-        # Başlangıçta boş bir sözlük oluştur
         guncellenecek_veri = {}
-
-        # Gelen veride hangi alanlar varsa, onları güncelleme listesine ekle
+        
         if 'isim' in data and data.get('isim'):
             guncellenecek_veri['isim'] = data.get('isim')
         else:
              return jsonify({"error": "Tedarikçi ismi boş bırakılamaz."}), 400
 
-        # İsteğe bağlı alanları, dolu veya boş olarak gönderildiyse ekle
-        if 'tc_no' in data:
-            guncellenecek_veri['tc_no'] = data.get('tc_no')
-        if 'telefon_no' in data:
-            guncellenecek_veri['telefon_no'] = data.get('telefon_no')
-        if 'adres' in data:
-            guncellenecek_veri['adres'] = data.get('adres')
+        if 'tc_no' in data: guncellenecek_veri['tc_no'] = data.get('tc_no')
+        if 'telefon_no' in data: guncellenecek_veri['telefon_no'] = data.get('telefon_no')
+        if 'adres' in data: guncellenecek_veri['adres'] = data.get('adres')
         
         if not guncellenecek_veri:
             return jsonify({"error": "Güncellenecek veri bulunamadı."}), 400
@@ -92,16 +181,30 @@ def update_tedarikci(id):
         return jsonify({"message": "Tedarikçi bilgileri güncellendi."})
 
     except APIError as e:
-        print(f"Tedarikçi Güncelleme - Supabase API Hatası: {e.message}")
         return jsonify({"error": f"Veritabanı hatası: {e.message}"}), 500
     except Exception as e:
-        print(f"Tedarikçi Güncelleme - Genel Hata: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
-# --- DİĞER FONKSİYONLAR (DEĞİŞİKLİK YOK) ---
+@tedarikci_bp.route('/tedarikci_sil/<int:id>', methods=['DELETE'])
+@login_required
+@lisans_kontrolu
+@modification_allowed
+def delete_tedarikci(id):
+    try:
+        sirket_id = session['user']['sirket_id']
+        response = supabase.table('tedarikciler').delete().eq('id', id).eq('sirket_id', sirket_id).execute()
+        if not response.data:
+            return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
+        return jsonify({"message": "Tedarikçi başarıyla silindi."})
+    except Exception as e:
+        if 'violates foreign key constraint' in str(e).lower():
+            return jsonify({"error": "Bu tedarikçiye ait süt veya yem girdisi olduğu için silinemiyor."}), 409
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+
 @tedarikci_bp.route('/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
+    """Tedarikçiler sayfasındaki ana listeyi ve toplamları getirir."""
     try:
         sirket_id = session['user']['sirket_id']
         response = supabase.table('tedarikciler').select(
@@ -116,24 +219,22 @@ def get_tedarikciler_liste():
             total_litre = sum(
                 Decimal(g['litre']) for g in r.get('sut_girdileri', []) if g.get('litre') is not None
             )
-            
             formatted_data.append({
-                'id': r['id'],
-                'isim': r['isim'],
-                'telefon_no': r['telefon_no'],
-                'tc_no': r['tc_no'],
-                'adres': r['adres'],
-                'toplam_litre': float(total_litre),
-                'girdi_sayisi': len(r.get('sut_girdileri', []))
+                'id': r['id'], 'isim': r['isim'], 'telefon_no': r['telefon_no'],
+                'tc_no': r['tc_no'], 'adres': r['adres'],
+                'toplam_litre': float(total_litre), 'girdi_sayisi': len(r.get('sut_girdileri', []))
             })
         
         formatted_data.sort(key=lambda x: x['isim'].lower())
         return jsonify(formatted_data)
     except Exception as e:
-        print(f"Tedarikçi listesi hatası (Python tarafında): {e}")
+        print(f"Tedarikçi listesi hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
+# --- PDF OLUŞTURMA İÇİN YARDIMCI VE ANA FONKSİYONLAR ---
+
 def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
+    """Belirtilen ay içindeki tüm verileri PDF için tek seferde çeker."""
     _, ayin_son_gunu = calendar.monthrange(yil, ay)
     baslangic_tarihi = datetime(yil, ay, 1).date()
     bitis_tarihi = datetime(yil, ay, ayin_son_gunu).date()
@@ -166,39 +267,6 @@ def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
         "finansal_islemler": finans_response.data,
         "ozet": { "toplam_sut_tutari": toplam_sut_tutari, "toplam_yem_borcu": toplam_yem_borcu, "toplam_odeme": toplam_odeme }
     }
-
-@tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/detay')
-@login_required
-def get_tedarikci_detay(tedarikci_id):
-    try:
-        sirket_id = session['user']['sirket_id']
-        query = "id, isim, sut_girdileri(*, kullanicilar(kullanici_adi)), yem_islemleri(*, kullanicilar(kullanici_adi), yem_urunleri(yem_adi)), finansal_islemler(*, kullanicilar(kullanici_adi))"
-        response = supabase.table('tedarikciler').select(query).eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
-
-        if not response.data:
-            return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
-
-        td = response.data
-        toplam_sut_alacagi = sum(Decimal(str(g.get('litre', '0'))) * Decimal(str(g.get('fiyat', '0'))) for g in td.get('sut_girdileri', []))
-        toplam_yem_borcu = sum(Decimal(str(y.get('toplam_tutar', '0'))) for y in td.get('yem_islemleri', []))
-        toplam_odeme = sum(Decimal(str(f.get('tutar', '0'))) for f in td.get('finansal_islemler', []))
-
-        sonuc = {
-            "isim": td['isim'],
-            "sut_girdileri": sorted(td.get('sut_girdileri', []), key=lambda x: x['taplanma_tarihi'], reverse=True),
-            "yem_islemleri": sorted(td.get('yem_islemleri', []), key=lambda x: x['islem_tarihi'], reverse=True),
-            "finansal_islemler": sorted(td.get('finansal_islemler', []), key=lambda x: x['islem_tarihi'], reverse=True),
-            "ozet": {
-                "toplam_sut_alacagi": f"{toplam_sut_alacagi:.2f}",
-                "toplam_yem_borcu": f"{toplam_yem_borcu:.2f}",
-                "toplam_odeme": f"{toplam_odeme:.2f}",
-                "net_bakiye": f"{toplam_sut_alacagi - toplam_yem_borcu - toplam_odeme:.2f}"
-            }
-        }
-        return jsonify(sonuc)
-    except Exception as e:
-        print(f"Tedarikçi detay hatası: {e}")
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/hesap_ozeti_pdf')
 @login_required
@@ -275,20 +343,4 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception as e:
         print(f"Müstahsil PDF hatası: {e}")
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
-
-@tedarikci_bp.route('/tedarikci_sil/<int:id>', methods=['DELETE'])
-@login_required
-@lisans_kontrolu
-@modification_allowed
-def delete_tedarikci(id):
-    try:
-        sirket_id = session['user']['sirket_id']
-        response = supabase.table('tedarikciler').delete().eq('id', id).eq('sirket_id', sirket_id).execute()
-        if not response.data:
-            return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
-        return jsonify({"message": "Tedarikçi başarıyla silindi."})
-    except Exception as e:
-        if 'violates foreign key constraint' in str(e).lower():
-            return jsonify({"error": "Bu tedarikçiye ait süt veya yem girdisi olduğu için silinemiyor."}), 409
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500

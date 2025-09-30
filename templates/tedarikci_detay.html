@@ -23,8 +23,7 @@
     </div>
 
     <div class="row g-3 mb-3" id="ozet-kartlari">
-        <!-- JS ile doldurulacak -->
-    </div>
+        </div>
 
     <div class="card mb-3">
         <div class="card-body p-3">
@@ -64,13 +63,13 @@
             <div class="tab-content" id="myTabContent">
                 <div class="tab-pane fade show active" id="sut-tab-pane" role="tabpanel">
                     <div class="table-responsive"><table class="table"><thead><tr><th>Tarih</th><th class="text-end">Litre</th><th class="text-end">Fiyat (TL)</th><th class="text-end">Tutar (TL)</th><th>Giren Kullanıcı</th></tr></thead><tbody id="sut-girdileri-tablosu"></tbody></table></div>
-                </div>
+                    <nav id="sut-sayfalama" class="d-flex justify-content-center mt-3"></nav> </div>
                 <div class="tab-pane fade" id="yem-tab-pane" role="tabpanel">
                     <div class="table-responsive"><table class="table"><thead><tr><th>İşlem Tarihi</th><th>Yem Adı</th><th class="text-end">Miktar (KG)</th><th class="text-end">Birim Fiyat (TL)</th><th class="text-end">Toplam Tutar (TL)</th><th>İşlemi Yapan</th></tr></thead><tbody id="yem-islemleri-tablosu"></tbody></table></div>
-                </div>
+                    <nav id="yem-sayfalama" class="d-flex justify-content-center mt-3"></nav> </div>
                 <div class="tab-pane fade" id="finans-tab-pane" role="tabpanel">
                     <div class="table-responsive"><table class="table"><thead><tr><th>İşlem Tarihi</th><th>İşlem Tipi</th><th class="text-end">Tutar (TL)</th><th>Açıklama</th><th>İşlemi Yapan</th></tr></thead><tbody id="finansal-islemler-tablosu"></tbody></table></div>
-                </div>
+                    <nav id="finans-sayfalama" class="d-flex justify-content-center mt-3"></nav> </div>
             </div>
         </div>
     </div>
@@ -81,4 +80,3 @@
 <script> const TEDARIKCI_ID = {{ tedarikci_id }}; </script>
 <script src="{{ url_for('static', filename='js/tedarikci_detay.js') }}"></script>
 {% endblock %}
-
