@@ -8,7 +8,7 @@ const yuklenenSekmeler = {
 const KAYIT_SAYISI = 10;
 
 window.onload = () => {
-    ayYilSecicileriniDoldur();
+    ayYilSecicileriniDoldur('rapor-ay', 'rapor-yil');
     ozetVerileriniYukle();
     sutGirdileriniYukle(1);
     sekmeOlaylariniAyarla();
@@ -158,58 +158,28 @@ function ozetKartlariniDoldur(ozet) {
     `;
 }
 
-function ayYilSecicileriniDoldur() {
-    const aySecici = document.getElementById('rapor-ay');
-    const yilSecici = document.getElementById('rapor-yil');
-    const aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
-    const simdikiTarih = new Date();
-    const simdikiYil = simdikiTarih.getFullYear();
-    const simdikiAy = simdikiTarih.getMonth();
-    aylar.forEach((ay, index) => { aySecici.add(new Option(ay, index + 1)); });
-    aySecici.value = simdikiAy + 1;
-    for (let i = 0; i < 5; i++) { yilSecici.add(new Option(simdikiYil - i, simdikiYil - i)); }
-}
 
-async function pdfIndir(endpoint, buttonId, successMessage, errorMessage) {
-    const ay = document.getElementById('rapor-ay').value;
-    const yil = document.getElementById('rapor-yil').value;
-    const button = document.getElementById(buttonId);
-    const originalContent = button.innerHTML;
-    button.disabled = true;
-    button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> İşleniyor...`;
-    try {
-        const response = await fetch(`/api/tedarikci/${TEDARIKCI_ID}/${endpoint}?ay=${ay}&yil=${yil}`);
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || errorMessage);
-        }
-        const disposition = response.headers.get('Content-Disposition');
-        let filename = `rapor.pdf`;
-        if (disposition && disposition.includes('attachment')) {
-            const filenameMatch = /filename[^;=\n]*=(['"]?)([^'";\n]+)\1?/;
-            const matches = filenameMatch.exec(disposition);
-            if (matches && matches[2]) { filename = matches[2]; }
-        }
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        const a = document.createElement('a');
-        a.style.display = 'none'; a.href = url; a.download = filename;
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => window.URL.revokeObjectURL(url), 100);
-        gosterMesaj(successMessage, "success");
-    } catch (error) {
-        gosterMesaj(error.message, "danger");
-    } finally {
-        button.disabled = false;
-        button.innerHTML = originalContent;
-    }
-}
+
+
 
 function hesapOzetiIndir() {
-    pdfIndir('hesap_ozeti_pdf', 'pdf-indir-btn', 'Hesap özeti indirildi ve yeni sekmede açıldı.', 'PDF özeti oluşturulurken hata oluştu.');
+    const ay = document.getElementById('rapor-ay').value;
+    const yil = document.getElementById('rapor-yil').value;
+    const url = `/api/tedarikci/${TEDARIKCI_ID}/hesap_ozeti_pdf?ay=${ay}&yil=${yil}`;
+    
+    indirVeAc(url, 'pdf-indir-btn', {
+        success: 'Hesap özeti indirildi ve yeni sekmede açıldı.',
+        error: 'PDF özeti oluşturulurken hata oluştu.'
+    });
 }
 
 function mustahsilMakbuzuIndir() {
-    pdfIndir('mustahsil_makbuzu_pdf', 'mustahsil-indir-btn', 'Müstahsil makbuzu indirildi ve yeni sekmede açıldı.', 'Müstahsil makbuzu oluşturulurken hata oluştu.');
+    const ay = document.getElementById('rapor-ay').value;
+    const yil = document.getElementById('rapor-yil').value;
+    const url = `/api/tedarikci/${TEDARIKCI_ID}/mustahsil_makbuzu_pdf?ay=${ay}&yil=${yil}`;
+
+    indirVeAc(url, 'mustahsil-indir-btn', {
+        success: 'Müstahsil makbuzu indirildi ve yeni sekmede açıldı.',
+        error: 'Müstahsil makbuzu oluşturulurken hata oluştu.'
+    });
 }

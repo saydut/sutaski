@@ -97,3 +97,63 @@ function ayYilSecicileriniDoldur(aySeciciId, yilSeciciId) {
         yilSecici.add(new Option(simdikiYil - i, simdikiYil - i));
     }
 }
+
+/**
+ * Bir API endpoint'inden PDF dosyasını indirir ve yeni sekmede açar.
+ * @param {string} url - PDF'i getirecek API adresi.
+ * @param {string} buttonId - İşlemi tetikleyen butonun ID'si.
+ * @param {object} messages - {success: string, error: string} formatında mesajlar.
+ */
+async function indirVeAc(url, buttonId, messages) {
+    const button = document.getElementById(buttonId);
+    if (!button) {
+        console.error(`Buton bulunamadı: ${buttonId}`);
+        return;
+    }
+    const originalContent = button.innerHTML;
+
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> İşleniyor...`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: messages.error }));
+            throw new Error(errorData.error || messages.error);
+        }
+        
+        const disposition = response.headers.get('Content-Disposition');
+        let filename = `rapor.pdf`;
+        if (disposition && disposition.includes('attachment')) {
+            const filenameMatch = /filename[^;=\n]*=(['"]?)([^'";\n]+)\1?/;
+            const matches = filenameMatch.exec(disposition);
+            if (matches && matches[2]) {
+                filename = matches[2].replace(/['"]/g, '');
+            }
+        }
+
+        const blob = await response.blob();
+        const objectUrl = window.URL.createObjectURL(blob);
+        
+        // Yeni sekmede aç ve indir
+        window.open(objectUrl, '_blank');
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Temizlik
+        a.remove();
+        setTimeout(() => window.URL.revokeObjectURL(objectUrl), 100);
+        
+        gosterMesaj(messages.success, "success");
+
+    } catch (error) {
+        gosterMesaj(error.message, "danger");
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalContent;
+    }
+}

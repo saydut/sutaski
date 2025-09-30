@@ -9,84 +9,19 @@ function formatDateToYYYYMMDD(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function ayYilSecicileriniDoldur() {
-    const aySecici = document.getElementById('rapor-ay');
-    const yilSecici = document.getElementById('rapor-yil');
-    const aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
-    const simdikiTarih = new Date();
-    const simdikiYil = simdikiTarih.getFullYear();
-    const simdikiAy = simdikiTarih.getMonth();
 
-    aylar.forEach((ay, index) => { aySecici.add(new Option(ay, index + 1)); });
-    aySecici.value = simdikiAy + 1;
-
-    for (let i = 0; i < 5; i++) {
-        yilSecici.add(new Option(simdikiYil - i, simdikiYil - i));
-    }
-}
 
 // static/js/reports.js
 
 async function pdfIndir() {
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
-    const button = document.getElementById('pdf-indir-btn');
-    const originalContent = button.innerHTML;
-
-    button.disabled = true;
-    button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> İşleniyor...`;
-
-    try {
-        // 1. PDF dosyasını arka planda BİR KEZ talep ediyoruz.
-        const response = await fetch(`/api/rapor/aylik_pdf?ay=${ay}&yil=${yil}`);
-
-        if (!response.ok) {
-            throw new Error('PDF raporu oluşturulurken bir hata oluştu.');
-        }
-
-        // 2. Sunucunun gönderdiği dosya adını alıyoruz.
-        const disposition = response.headers.get('Content-Disposition');
-        let filename = `rapor.pdf`; // Varsayılan
-        if (disposition && disposition.indexOf('attachment') !== -1) {
-            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-            const matches = filenameRegex.exec(disposition);
-            if (matches != null && matches[1]) {
-                filename = matches[1].replace(/['"]/g, '');
-            }
-        }
-
-        // 3. Gelen veriyi bir 'blob' nesnesine çeviriyoruz.
-        const blob = await response.blob();
-
-        // 4. Bu blob için geçici bir URL oluşturuyoruz. Bu URL'yi her iki işlem için de kullanacağız.
-        const url = window.URL.createObjectURL(blob);
-
-        // --- İŞLEM 1: YENİ SEKMEDE AÇMA ---
-        window.open(url, '_blank');
-
-        // --- İŞLEM 2: DOSYAYI İNDİRME ---
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        a.download = filename; // İndirilecek dosyanın adını belirliyoruz.
-        document.body.appendChild(a);
-        a.click();
-        a.remove(); // Linki temizliyoruz.
-
-        // 5. İşlemler bittikten sonra geçici URL'i bellekten siliyoruz.
-        setTimeout(() => window.URL.revokeObjectURL(url), 100);
-
-        // 6. Kullanıcıya bildirim veriyoruz.
-        gosterMesaj("Rapor indirildi ve yeni sekmede açıldı.", "success");
-
-    } catch (error) {
-        console.error("PDF işlenirken hata:", error);
-        gosterMesaj(error.message, "danger");
-    } finally {
-        // 7. Butonu eski haline getiriyoruz.
-        button.disabled = false;
-        button.innerHTML = originalContent;
-    }
+    const url = `/api/rapor/aylik_pdf?ay=${ay}&yil=${yil}`;
+    
+    await indirVeAc(url, 'pdf-indir-btn', {
+        success: 'Rapor indirildi ve yeni sekmede açıldı.',
+        error: 'PDF raporu oluşturulurken bir hata oluştu.'
+    });
 }
 
 
@@ -106,7 +41,7 @@ window.onload = function() {
         defaultDate: "today"
     });
 
-    ayYilSecicileriniDoldur();
+    ayYilSecicileriniDoldur('rapor-ay', 'rapor-yil');
     
     // --- DEĞİŞİKLİK BURADA ---
     // raporOlustur() fonksiyonunu çağırmadan önce 100 milisaniye bekliyoruz.
