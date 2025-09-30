@@ -136,7 +136,7 @@ def get_finansal_islemler_sayfali(tedarikci_id):
         print(f"Sayfalı finans işlemi hatası: {e}")
         return jsonify({"error": "Finansal işlemler listelenemedi."}), 500
 
-# ... (add_tedarikci, update_tedarikci, delete_tedarikci, get_tedarikciler_liste fonksiyonları değişiklik olmadan kalır)
+
 @tedarikci_bp.route('/tedarikci_ekle', methods=['POST'])
 @login_required
 @lisans_kontrolu
@@ -220,45 +220,34 @@ def get_tedarikciler_liste():
     try:
         sirket_id = session['user']['sirket_id']
         
-        # Frontend'den gelen parametreleri al
         sayfa = int(request.args.get('sayfa', 1))
-        limit = 15  # Sayfa başına 15 tedarikçi gösterelim
+        limit = 15
         offset = (sayfa - 1) * limit
         arama_terimi = request.args.get('arama', '')
         sirala_sutun = request.args.get('sirala', 'isim')
         sirala_yon = request.args.get('yon', 'asc')
 
-        # Ana sorguyu oluştur
-        query = supabase.table('tedarikciler').select(
-            'id, isim, telefon_no, tc_no, adres, sut_girdileri!left(litre)', 
+        # DEĞİŞİKLİK 1: 'tedarikciler' yerine yeni view'ı kullanıyoruz
+        # DEĞİŞİKLİK 2: 'select' içinden karmaşık ilişki sorgusunu kaldırdık
+        query = supabase.table('tedarikci_ozetleri').select(
+            'id, isim, telefon_no, tc_no, adres, toplam_litre', 
             count='exact'
         ).eq('sirket_id', sirket_id)
 
-        # Arama terimi varsa sorguya ekle
         if arama_terimi:
-            # Hem isimde hem de telefon numarasında ara
             query = query.ilike('isim', f'%{arama_terimi}%')
 
-        # Sıralama ve sayfalama uygula
         descending = sirala_yon == 'desc'
+        # ÖNEMLİ NOT: Artık 'toplam_litre' sütununa göre de sıralama yapabiliriz!
         query = query.order(sirala_sutun, desc=descending).range(offset, offset + limit - 1)
         
         response = query.execute()
 
-        if not response.data:
-            return jsonify({"tedarikciler": [], "toplam_kayit": 0})
-
-        # Süt litrelerini Python'da toplayalım
-        formatted_data = []
-        for r in response.data:
-            total_litre = sum(Decimal(g['litre']) for g in r.get('sut_girdileri', []) if g.get('litre') is not None)
-            formatted_data.append({
-                'id': r['id'], 'isim': r['isim'], 'telefon_no': r['telefon_no'],
-                'tc_no': r['tc_no'], 'adres': r['adres'],
-                'toplam_litre': float(total_litre)
-            })
+        # DEĞİŞİKLİK 3: Python içinde ayrıca toplama yapmaya gerek kalmadı!
+        # 'response.data' zaten bize hazır hesaplanmış 'toplam_litre' verisini içeriyor.
         
-        return jsonify({"tedarikciler": formatted_data, "toplam_kayit": response.count})
+        return jsonify({"tedarikciler": response.data, "toplam_kayit": response.count})
+        
     except Exception as e:
         print(f"Tedarikçi listesi hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
