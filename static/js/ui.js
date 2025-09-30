@@ -198,23 +198,67 @@ const ui = {
      */
     sayfalamaNavOlustur(containerId, toplamOge, aktifSayfa, sayfaBasiOge, sayfaDegistirCallback) {
         const container = document.getElementById(containerId);
+        if (!container) return;
         container.innerHTML = '';
         const toplamSayfa = Math.ceil(toplamOge / sayfaBasiOge);
         if (toplamSayfa <= 1) return;
-        
+
         const ul = document.createElement('ul');
-        ul.className = 'pagination';
-        for (let i = 1; i <= toplamSayfa; i++) {
+        // Bootstrap'in daha küçük sayfalama stilini kullanalım, daha şık durur.
+        ul.className = 'pagination pagination-sm justify-content-center';
+
+        // Buton oluşturan yardımcı fonksiyon
+        const createPageItem = (page, text, isDisabled = false, isActive = false) => {
             const li = document.createElement('li');
-            li.className = `page-item ${i === aktifSayfa ? 'active' : ''}`;
+            li.className = `page-item ${isDisabled ? 'disabled' : ''} ${isActive ? 'active' : ''}`;
             const a = document.createElement('a');
             a.className = 'page-link';
             a.href = '#';
-            a.innerText = i;
-            a.onclick = (e) => { e.preventDefault(); sayfaDegistirCallback(i); };
+            a.innerHTML = text; // innerHTML kullanarak « gibi karakterleri yazdırabiliyoruz
+            if (!isDisabled && page > 0) {
+                a.onclick = (e) => {
+                    e.preventDefault();
+                    sayfaDegistirCallback(page);
+                };
+            }
             li.appendChild(a);
-            ul.appendChild(li);
+            return li;
+        };
+
+        // "Önceki" butonu
+        ul.appendChild(createPageItem(aktifSayfa - 1, '&laquo;', aktifSayfa === 1));
+
+        // Gösterilecek sayfa numaralarını hesaplayan akıllı mantık
+        const pagesToShow = new Set();
+        const sayfaAraligi = 2; // Aktif sayfanın sağında ve solunda kaç buton olacağı
+
+        // Her zaman ilk ve son sayfayı ekle
+        pagesToShow.add(1);
+        pagesToShow.add(toplamSayfa);
+        
+        // Aktif sayfa ve etrafındakileri ekle
+        for (let i = -sayfaAraligi; i <= sayfaAraligi; i++) {
+            const page = aktifSayfa + i;
+            if (page > 0 && page <= toplamSayfa) {
+                pagesToShow.add(page);
+            }
         }
+        
+        let sonEklenenSayfa = 0;
+        const siraliSayfalar = Array.from(pagesToShow).sort((a, b) => a - b);
+
+        for (const page of siraliSayfalar) {
+            // Sayı grupları arasında 1'den fazla boşluk varsa "..." ekle
+            if (sonEklenenSayfa > 0 && page - sonEklenenSayfa > 1) {
+                ul.appendChild(createPageItem(0, '...', true));
+            }
+            ul.appendChild(createPageItem(page, page, false, page === aktifSayfa));
+            sonEklenenSayfa = page;
+        }
+
+        // "Sonraki" butonu
+        ul.appendChild(createPageItem(aktifSayfa + 1, '&raquo;', aktifSayfa === toplamSayfa));
+
         container.appendChild(ul);
     },
     

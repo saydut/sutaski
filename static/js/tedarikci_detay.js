@@ -1,29 +1,25 @@
-// static/js/tedarikci_detay.js (SAYFALAMA DESTEKLİ YENİ VERSİYON)
+// static/js/tedarikci_detay.js (MERKEZİ SAYFALAMA KULLANAN YENİ VERSİYON)
 
-// Hangi sekmenin verisinin yüklendiğini takip etmek için
 const yuklenenSekmeler = {
     sut: false,
     yem: false,
     finans: false
 };
-const KAYIT_SAYISI = 10; // Sayfa başına gösterilecek kayıt sayısı
+const KAYIT_SAYISI = 10;
 
 window.onload = () => {
-    ayYilSecicileriniDoldur(); // Raporlama için ay/yıl dropdown'larını doldur
-    ozetVerileriniYukle();     // Sadece özet kartlarını yükle
-    sutGirdileriniYukle(1);    // Varsayılan olarak ilk sekmenin ilk sayfasını yükle
-    sekmeOlaylariniAyarla();   // Diğer sekmelere tıklandığında veri yüklemesi için olayları ayarla
+    ayYilSecicileriniDoldur();
+    ozetVerileriniYukle();
+    sutGirdileriniYukle(1);
+    sekmeOlaylariniAyarla();
 };
 
-/**
- * Diğer sekmelere ilk kez tıklandığında ilgili veriyi yüklemek için olay dinleyicileri ekler.
- */
 function sekmeOlaylariniAyarla() {
     document.getElementById('yem-tab').addEventListener('show.bs.tab', () => {
         if (!yuklenenSekmeler.yem) {
             yemIslemleriniYukle(1);
         }
-    }, { once: true }); // Olay sadece bir kez tetiklensin
+    }, { once: true });
 
     document.getElementById('finans-tab').addEventListener('show.bs.tab', () => {
         if (!yuklenenSekmeler.finans) {
@@ -32,30 +28,7 @@ function sekmeOlaylariniAyarla() {
     }, { once: true });
 }
 
-/**
- * Sayfalama navigasyonunu oluşturan yardımcı fonksiyon.
- */
-function sayfalamaNavOlustur(containerId, toplamOge, aktifSayfa, sayfaDegistirCallback) {
-    const container = document.getElementById(containerId);
-    container.innerHTML = '';
-    const toplamSayfa = Math.ceil(toplamOge / KAYIT_SAYISI);
-    if (toplamSayfa <= 1) return;
-    
-    const ul = document.createElement('ul');
-    ul.className = 'pagination pagination-sm';
-    for (let i = 1; i <= toplamSayfa; i++) {
-        const li = document.createElement('li');
-        li.className = `page-item ${i === aktifSayfa ? 'active' : ''}`;
-        const a = document.createElement('a');
-        a.className = 'page-link';
-        a.href = '#';
-        a.innerText = i;
-        a.onclick = (e) => { e.preventDefault(); sayfaDegistirCallback(i); };
-        li.appendChild(a);
-        ul.appendChild(li);
-    }
-    container.appendChild(ul);
-}
+// ARTIK BU DOSYADA YEREL BİR "sayfalamaNavOlustur" FONKSİYONU YOK.
 
 async function ozetVerileriniYukle() {
     const ozetKartlariContainer = document.getElementById('ozet-kartlari');
@@ -95,13 +68,14 @@ async function sutGirdileriniYukle(sayfa = 1) {
                     <tr>
                         <td>${new Date(girdi.taplanma_tarihi).toLocaleDateString('tr-TR')}</td>
                         <td class="text-end">${parseFloat(girdi.litre).toFixed(2)} L</td>
-                        <td class="text-end">${parseFloat(girdi.fiyat).toFixed(2)}</td>
-                        <td class="text-end">${tutar.toFixed(2)}</td>
+                        <td class="text-end">${parseFloat(girdi.fiyat).toFixed(2)} TL</td>
+                        <td class="text-end">${tutar.toFixed(2)} TL</td>
                         <td>${girdi.kullanicilar.kullanici_adi}</td>
                     </tr>`;
             });
         }
-        sayfalamaNavOlustur('sut-sayfalama', data.toplam_kayit, sayfa, sutGirdileriniYukle);
+        // DEĞİŞİKLİK: 'ui.' öneki eklendi ve sayfa başına kayıt sayısı parametresi verildi.
+        ui.sayfalamaNavOlustur('sut-sayfalama', data.toplam_kayit, sayfa, KAYIT_SAYISI, sutGirdileriniYukle);
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-danger">Veriler yüklenemedi.</td></tr>`;
     }
@@ -124,14 +98,15 @@ async function yemIslemleriniYukle(sayfa = 1) {
                     <tr>
                         <td>${new Date(islem.islem_tarihi).toLocaleDateString('tr-TR')}</td>
                         <td>${islem.yem_urunleri.yem_adi}</td>
-                        <td class="text-end">${parseFloat(islem.miktar_kg).toFixed(2)}</td>
-                        <td class="text-end">${parseFloat(islem.islem_anindaki_birim_fiyat).toFixed(2)}</td>
-                        <td class="text-end">${parseFloat(islem.toplam_tutar).toFixed(2)}</td>
+                        <td class="text-end">${parseFloat(islem.miktar_kg).toFixed(2)} KG</td>
+                        <td class="text-end">${parseFloat(islem.islem_anindaki_birim_fiyat).toFixed(2)} TL</td>
+                        <td class="text-end">${parseFloat(islem.toplam_tutar).toFixed(2)} TL</td>
                         <td>${islem.kullanicilar.kullanici_adi}</td>
                     </tr>`;
             });
         }
-        sayfalamaNavOlustur('yem-sayfalama', data.toplam_kayit, sayfa, yemIslemleriniYukle);
+        // DEĞİŞİKLİK: 'ui.' öneki eklendi ve sayfa başına kayıt sayısı parametresi verildi.
+        ui.sayfalamaNavOlustur('yem-sayfalama', data.toplam_kayit, sayfa, KAYIT_SAYISI, yemIslemleriniYukle);
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-danger">Veriler yüklenemedi.</td></tr>`;
     }
@@ -160,11 +135,13 @@ async function finansalIslemleriYukle(sayfa = 1) {
                     </tr>`;
             });
         }
-        sayfalamaNavOlustur('finans-sayfalama', data.toplam_kayit, sayfa, finansalIslemleriYukle);
+        // DEĞİŞİKLİK: 'ui.' öneki eklendi ve sayfa başına kayıt sayısı parametresi verildi.
+        ui.sayfalamaNavOlustur('finans-sayfalama', data.toplam_kayit, sayfa, KAYIT_SAYISI, finansalIslemleriYukle);
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-danger">Veriler yüklenemedi.</td></tr>`;
     }
 }
+
 
 function ozetKartlariniDoldur(ozet) {
     const container = document.getElementById('ozet-kartlari');
@@ -181,11 +158,7 @@ function ozetKartlariniDoldur(ozet) {
     `;
 }
 
-
-// --- PDF İndirme ve Raporlama Fonksiyonları (DEĞİŞİKLİK YOK) ---
-
 function ayYilSecicileriniDoldur() {
-    // Bu fonksiyon utils.js'e taşınabilir, şimdilik burada bırakıyorum.
     const aySecici = document.getElementById('rapor-ay');
     const yilSecici = document.getElementById('rapor-yil');
     const aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
