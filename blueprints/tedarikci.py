@@ -16,6 +16,19 @@ from collections import defaultdict
 tedarikci_bp = Blueprint('tedarikci', __name__, url_prefix='/api')
 
 # --- HIZLI ENDPOINT'LER (Değişiklik yok) ---
+# BU YENİ FONKSİYONU OLDUĞU GİBİ EKLE
+@tedarikci_bp.route('/tedarikciler_dropdown')
+@login_required
+def get_tedarikciler_for_dropdown():
+    """Sadece ID ve İsim içeren, sıralanmış tam tedarikçi listesini döndürür."""
+    try:
+        sirket_id = session['user']['sirket_id']
+        response = supabase.table('tedarikciler').select('id, isim').eq('sirket_id', sirket_id).order('isim', asc=True).execute()
+        return jsonify(response.data)
+    except Exception as e:
+        print(f"Dropdown için tedarikçi listesi hatası: {e}")
+        return jsonify({"error": "Liste alınamadı."}), 500
+
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/ozet')
 @login_required
 def get_tedarikci_ozet(tedarikci_id):
@@ -173,23 +186,49 @@ def delete_tedarikci(id):
 @tedarikci_bp.route('/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
+    """Tedarikçiler sayfasındaki ana listeyi sayfalama, arama ve sıralama yaparak getirir."""
     try:
         sirket_id = session['user']['sirket_id']
-        response = supabase.table('tedarikciler').select(
-            'id, isim, telefon_no, tc_no, adres, sut_girdileri!left(litre)'
-        ).eq('sirket_id', sirket_id).execute()
+        
+        # Frontend'den gelen parametreleri al
+        sayfa = int(request.args.get('sayfa', 1))
+        limit = 15  # Sayfa başına 15 tedarikçi gösterelim
+        offset = (sayfa - 1) * limit
+        arama_terimi = request.args.get('arama', '')
+        sirala_sutun = request.args.get('sirala', 'isim')
+        sirala_yon = request.args.get('yon', 'asc')
+
+        # Ana sorguyu oluştur
+        query = supabase.table('tedarikciler').select(
+            'id, isim, telefon_no, tc_no, adres, sut_girdileri!left(litre)', 
+            count='exact'
+        ).eq('sirket_id', sirket_id)
+
+        # Arama terimi varsa sorguya ekle
+        if arama_terimi:
+            # Hem isimde hem de telefon numarasında ara
+            query = query.ilike('isim', f'%{arama_terimi}%')
+
+        # Sıralama ve sayfalama uygula
+        descending = sirala_yon == 'desc'
+        query = query.order(sirala_sutun, desc=descending).range(offset, offset + limit - 1)
+        
+        response = query.execute()
+
         if not response.data:
-            return jsonify([])
+            return jsonify({"tedarikciler": [], "toplam_kayit": 0})
+
+        # Süt litrelerini Python'da toplayalım
         formatted_data = []
         for r in response.data:
             total_litre = sum(Decimal(g['litre']) for g in r.get('sut_girdileri', []) if g.get('litre') is not None)
             formatted_data.append({
                 'id': r['id'], 'isim': r['isim'], 'telefon_no': r['telefon_no'],
                 'tc_no': r['tc_no'], 'adres': r['adres'],
-                'toplam_litre': float(total_litre), 'girdi_sayisi': len(r.get('sut_girdileri', []))
+                'toplam_litre': float(total_litre)
             })
-        formatted_data.sort(key=lambda x: x['isim'].lower())
-        return jsonify(formatted_data)
+        
+        return jsonify({"tedarikciler": formatted_data, "toplam_kayit": response.count})
     except Exception as e:
         print(f"Tedarikçi listesi hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500

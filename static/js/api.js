@@ -63,12 +63,14 @@ const api = {
         return this.request('/api/rapor/tedarikci_dagilimi');
     },
 
+// BU FONKSİYONU BUL VE GÜNCELLE
     /**
      * Tüm tedarikçilerin listesini çeker.
      * @returns {Promise<Array<{id: number, isim: string}>>}
      */
     fetchTedarikciler() {
-        return this.request('/api/tedarikciler_liste');
+        // Dropdownlar için tam listeyi çeken yeni endpoint'i kullanıyoruz.
+        return this.request('/api/tedarikciler_dropdown');
     },
 
     /**

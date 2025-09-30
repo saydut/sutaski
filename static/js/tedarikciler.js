@@ -1,24 +1,32 @@
-// static/js/tedarikciler.js (DİNAMİK GÖRÜNÜM DEĞİŞTİRME ÖZELLİKLİ TAM VERSİYON)
+// static/js/tedarikciler.js (SUNUCU TARAFLI SAYFALAMA, ARAMA VE SIRALAMA)
 
 let tedarikciModal, silmeOnayModal;
+let mevcutSayfa = 1;
+const KAYIT_SAYISI = 15; // Backend'deki limit ile aynı olmalı
+
+// SIRALAMA VE ARAMA DURUMUNU TUTACAK DEĞİŞKENLER
 let mevcutSiralamaSutunu = 'isim';
 let mevcutSiralamaYonu = 'asc';
-let mevcutGorunum = 'tablo'; // Varsayılan görünüm
+let mevcutAramaTerimi = '';
+let mevcutGorunum = 'tablo';
 
-/**
- * Sayfa yüklendiğinde çalışacak ana fonksiyon.
- */
 window.onload = async () => {
     tedarikciModal = new bootstrap.Modal(document.getElementById('tedarikciModal'));
     silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
 
-    // Kayıtlı görünüm tercihini yükle, yoksa varsayılanı kullan
     mevcutGorunum = localStorage.getItem('tedarikciGorunum') || 'tablo';
     gorunumuAyarla(mevcutGorunum);
 
-    await tedarikcileriYukle();
-
-    document.getElementById('arama-input').addEventListener('keyup', filtreleVeSirala);
+    // Olay dinleyicilerini ayarla
+    document.getElementById('arama-input').addEventListener('keyup', (event) => {
+        mevcutAramaTerimi = event.target.value;
+        // Kullanıcı yazmayı bıraktıktan sonra arama yapmak için küçük bir gecikme
+        setTimeout(() => {
+            if (mevcutAramaTerimi === document.getElementById('arama-input').value) {
+                tedarikcileriYukle(1); // Arama yapıldığında her zaman ilk sayfaya git
+            }
+        }, 300);
+    });
 
     document.querySelectorAll('.sortable').forEach(header => {
         header.addEventListener('click', () => {
@@ -29,76 +37,60 @@ window.onload = async () => {
                 mevcutSiralamaSutunu = sutun;
                 mevcutSiralamaYonu = 'asc';
             }
-            filtreleVeSirala();
+            tedarikcileriYukle(1); // Sıralama değiştiğinde ilk sayfaya git
         });
     });
+
+    // Sayfa ilk yüklendiğinde verileri çek
+    await tedarikcileriYukle(1);
 };
 
-/**
- * Arayüzü belirtilen görünüme geçirir (HTML'den çağrılır).
- * @param {'tablo' | 'kart'} yeniGorunum
- */
-function gorunumuDegistir(yeniGorunum) {
-    if (mevcutGorunum === yeniGorunum) return;
-    mevcutGorunum = yeniGorunum;
-    localStorage.setItem('tedarikciGorunum', yeniGorunum); // Tercihi kaydet
-    gorunumuAyarla(yeniGorunum);
-    filtreleVeSirala(); // Verileri yeni görünüme göre tekrar render et
-}
-
-/**
- * Arayüzdeki DOM elemanlarını aktif görünüme göre ayarlar.
- * @param {'tablo' | 'kart'} aktifGorunum
- */
-function gorunumuAyarla(aktifGorunum) {
-    document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
-    document.getElementById(`${aktifGorunum}-gorunumu`).style.display = 'block';
-    
-    document.getElementById('btn-view-table').classList.toggle('active', aktifGorunum === 'tablo');
-    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
-}
-
-async function tedarikcileriYukle() {
+// API'den verileri çeken ana fonksiyon
+async function tedarikcileriYukle(sayfa = 1) {
+    mevcutSayfa = sayfa;
     const tbody = document.getElementById('tedarikciler-tablosu');
+    const kartListesi = document.getElementById('tedarikciler-kart-listesi');
+    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+    
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
+    kartListesi.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
+    veriYokMesaji.style.display = 'none';
+
+    // Sunucuya gönderilecek URL'i oluştur
+    const url = `/api/tedarikciler_liste?sayfa=${sayfa}&arama=${mevcutAramaTerimi}&sirala=${mevcutSiralamaSutunu}&yon=${mevcutSiralamaYonu}`;
+
     try {
-        await store.getTedarikciler();
-        filtreleVeSirala();
+        const response = await fetch(url);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Veriler yüklenemedi');
+        
+        // Gelen veriyi ekrana bas
+        verileriGoster(data.tedarikciler);
+        
+        // Sayfalama kontrollerini oluştur
+        ui.sayfalamaNavOlustur(
+            'tedarikci-sayfalama',
+            data.toplam_kayit,
+            sayfa,
+            KAYIT_SAYISI,
+            (yeniSayfa) => tedarikcileriYukle(yeniSayfa) // Sayfa değiştirme callback'i
+        );
+        basliklariGuncelle();
+
     } catch (error) {
         console.error("Hata:", error);
-        document.getElementById('veri-yok-mesaji').innerText = error.message;
+        tbody.innerHTML = '';
+        kartListesi.innerHTML = '';
+        veriYokMesaji.innerText = error.message;
+        veriYokMesaji.style.display = 'block';
     }
-}
-
-function filtreleVeSirala() {
-    const searchTerm = document.getElementById('arama-input').value.toLowerCase();
-    let gosterilecekTedarikciler = store.tedarikciler.filter(supplier =>
-        supplier.isim.toLowerCase().includes(searchTerm) ||
-        (supplier.telefon_no && supplier.telefon_no.toLowerCase().includes(searchTerm))
-    );
-
-    gosterilecekTedarikciler.sort((a, b) => {
-        let valA = a[mevcutSiralamaSutunu] || '';
-        let valB = b[mevcutSiralamaSutunu] || '';
-        if (typeof valA === 'string') {
-            return mevcutSiralamaYonu === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-        }
-        return mevcutSiralamaYonu === 'asc' ? valA - valB : valB - valA;
-    });
-
-    verileriGoster(gosterilecekTedarikciler);
-    basliklariGuncelle();
 }
 
 function verileriGoster(suppliers) {
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
     veriYokMesaji.style.display = suppliers.length === 0 ? 'block' : 'none';
-
-    if (mevcutGorunum === 'tablo') {
-        renderTable(suppliers);
-    } else {
-        renderCards(suppliers);
-    }
+    if (mevcutGorunum === 'tablo') renderTable(suppliers);
+    else renderCards(suppliers);
 }
 
 function renderTable(suppliers) {
@@ -141,6 +133,71 @@ function renderCards(suppliers) {
     });
 }
 
+async function tedarikciKaydet() {
+    const kaydetButton = document.querySelector('#kaydet-tedarikci-btn');
+    const originalButtonText = kaydetButton.innerHTML;
+    const id = document.getElementById('edit-tedarikci-id').value;
+    const veri = {
+        isim: document.getElementById('tedarikci-isim-input').value.trim(),
+        tc_no: document.getElementById('tedarikci-tc-input').value.trim(),
+        telefon_no: document.getElementById('tedarikci-tel-input').value.trim(),
+        adres: document.getElementById('tedarikci-adres-input').value.trim()
+    };
+    if (!veri.isim) { gosterMesaj("Tedarikçi ismi zorunludur.", "warning"); return; }
+    kaydetButton.disabled = true;
+    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
+    const url = id ? `/api/tedarikci_duzenle/${id}` : '/api/tedarikci_ekle';
+    const method = id ? 'PUT' : 'POST';
+    try {
+        const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
+        const result = await response.json();
+        if (response.ok) {
+            gosterMesaj(result.message, "success");
+            tedarikciModal.hide();
+            await tedarikcileriYukle(mevcutSayfa);
+        } else {
+            gosterMesaj(result.error || "Bir hata oluştu.", "danger");
+        }
+    } catch (error) {
+        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+    } finally {
+        kaydetButton.disabled = false;
+        kaydetButton.innerHTML = originalButtonText;
+    }
+}
+
+async function tedarikciSil() {
+    const id = document.getElementById('silinecek-tedarikci-id').value;
+    try {
+        const response = await fetch(`/api/tedarikci_sil/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (response.ok) {
+            gosterMesaj(result.message, 'success');
+            silmeOnayModal.hide();
+            await tedarikcileriYukle(1);
+        } else {
+            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
+        }
+    } catch (error) {
+        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+    }
+}
+
+function gorunumuDegistir(yeniGorunum) {
+    if (mevcutGorunum === yeniGorunum) return;
+    mevcutGorunum = yeniGorunum;
+    localStorage.setItem('tedarikciGorunum', yeniGorunum);
+    gorunumuAyarla(yeniGorunum);
+    tedarikcileriYukle(mevcutSayfa);
+}
+
+function gorunumuAyarla(aktifGorunum) {
+    document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
+    document.getElementById(`${aktifGorunum}-gorunumu`).style.display = 'block';
+    document.getElementById('btn-view-table').classList.toggle('active', aktifGorunum === 'tablo');
+    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
+}
+
 function basliklariGuncelle() {
     document.querySelectorAll('.sortable').forEach(header => {
         const sutun = header.dataset.sort;
@@ -158,8 +215,11 @@ function yeniTedarikciAc() {
     tedarikciModal.show();
 }
 
-function tedarikciDuzenleAc(id) {
-    const supplier = store.tedarikciler.find(s => s.id === id);
+async function tedarikciDuzenleAc(id) {
+    gosterMesaj("Tedarikçi bilgileri getiriliyor...", "info", 1500);
+    const response = await fetch(`/api/tedarikciler_liste?sayfa=1&arama=&sirala=isim&yon=asc`);
+    const data = await response.json();
+    const supplier = data.tedarikciler.find(s => s.id === id);
     if (supplier) {
         document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
         document.getElementById('edit-tedarikci-id').value = supplier.id;
@@ -171,63 +231,8 @@ function tedarikciDuzenleAc(id) {
     }
 }
 
-async function tedarikciKaydet() {
-    const kaydetButton = document.querySelector('#kaydet-tedarikci-btn');
-    const originalButtonText = kaydetButton.innerHTML;
-    const id = document.getElementById('edit-tedarikci-id').value;
-    const veri = {
-        isim: document.getElementById('tedarikci-isim-input').value.trim(),
-        tc_no: document.getElementById('tedarikci-tc-input').value.trim(),
-        telefon_no: document.getElementById('tedarikci-tel-input').value.trim(),
-        adres: document.getElementById('tedarikci-adres-input').value.trim()
-    };
-    if (!veri.isim) {
-        gosterMesaj("Tedarikçi ismi zorunludur.", "warning");
-        return;
-    }
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
-    const url = id ? `/api/tedarikci_duzenle/${id}` : '/api/tedarikci_ekle';
-    const method = id ? 'PUT' : 'POST';
-    try {
-        const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, "success");
-            tedarikciModal.hide();
-            store.invalidateTedarikciler();
-            await tedarikcileriYukle();
-        } else {
-            gosterMesaj(result.error || "Bir hata oluştu.", "danger");
-        }
-    } catch (error) {
-        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
-    } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = originalButtonText;
-    }
-}
-
 function silmeOnayiAc(id, isim) {
     document.getElementById('silinecek-tedarikci-id').value = id;
     document.getElementById('silinecek-tedarikci-adi').innerText = isim;
     silmeOnayModal.show();
-}
-
-async function tedarikciSil() {
-    const id = document.getElementById('silinecek-tedarikci-id').value;
-    try {
-        const response = await fetch(`/api/tedarikci_sil/${id}`, { method: 'DELETE' });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            silmeOnayModal.hide();
-            store.invalidateTedarikciler();
-            await tedarikcileriYukle();
-        } else {
-            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
-        }
-    } catch (error) {
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
-    }
 }
