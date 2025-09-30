@@ -3,7 +3,7 @@
 let tedarikciSecici, tarihSecici;
 let duzenleModal, silmeOnayModal;
 let mevcutGorunum = 'tablo';
-const KAYIT_SAYISI = 15; // Backend'deki limit ile aynı olmalı
+const KAYIT_SAYISI = 5; // Backend'deki limit ile aynı olmalı
 
 window.onload = function() {
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });

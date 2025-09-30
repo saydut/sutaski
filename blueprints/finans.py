@@ -28,7 +28,7 @@ def get_finansal_islemler():
     try:
         sirket_id = session['user']['sirket_id']
         sayfa = int(request.args.get('sayfa', 1))
-        limit = 15 # Sayfa başına 15 işlem gösterelim
+        limit = 5 # Sayfa başına 15 işlem gösterelim
         offset = (sayfa - 1) * limit
 
         query = supabase.table('finansal_islemler').select(
