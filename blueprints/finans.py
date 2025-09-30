@@ -24,13 +24,26 @@ def finans_sayfasi():
 @finans_bp.route('/api/islemler', methods=['GET'])
 @login_required
 def get_finansal_islemler():
-    """Şirkete ait tüm finansal işlemleri listeler."""
+    """Şirkete ait tüm finansal işlemleri SAYFALAMALI olarak listeler."""
     try:
         sirket_id = session['user']['sirket_id']
-        islemler = supabase.table('finansal_islemler').select(
-            '*, tedarikciler(isim)'
-        ).eq('sirket_id', sirket_id).order('islem_tarihi', desc=True).execute()
-        return jsonify(islemler.data)
+        sayfa = int(request.args.get('sayfa', 1))
+        limit = 15 # Sayfa başına 15 işlem gösterelim
+        offset = (sayfa - 1) * limit
+
+        query = supabase.table('finansal_islemler').select(
+            '*, tedarikciler(isim)', count='exact'
+        ).eq('sirket_id', sirket_id).order(
+            'islem_tarihi', desc=True
+        ).range(offset, offset + limit - 1)
+        
+        response = query.execute()
+
+        return jsonify({
+            "islemler": response.data,
+            "toplam_kayit": response.count
+        })
+
     except Exception as e:
         logger.error(f"Finansal işlemler listelenirken hata oluştu: {e}", exc_info=True)
         return jsonify({"error": "İşlemler listelenirken bir sunucu hatası oluştu."}), 500

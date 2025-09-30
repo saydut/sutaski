@@ -33,7 +33,7 @@
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/store.js') }}"></script> <!-- YENİ DOSYAYI EKLEDİK -->
+    <script src="{{ url_for('static', filename='js/store.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
     <script src="{{ url_for('static', filename='js/chart-manager.js') }}"></script>
     <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
@@ -142,5 +142,9 @@
                 </div>
             </div>
         </div>
-    </body>
+    </div>
+    
+    <div class="modal fade" id="sifreDegistirModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Şifre Değiştir</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-2"><label for="mevcut-sifre-input" class="form-label">Mevcut Şifreniz</label><input type="password" class="form-control form-control-sm" id="mevcut-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-input" class="form-label">Yeni Şifre</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-tekrar-input" class="form-label">Yeni Şifre (Tekrar)</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-tekrar-input"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sifreDegistir()">Kaydet</button></div></div></div></div>
+
+</body>
 </html>

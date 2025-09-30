@@ -2,8 +2,8 @@
 
 let tedarikciSecici, tarihSecici;
 let duzenleModal, silmeOnayModal;
-let allFinancialTransactions = [];
 let mevcutGorunum = 'tablo';
+const KAYIT_SAYISI = 15; // Backend'deki limit ile aynı olmalı
 
 window.onload = function() {
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
@@ -14,7 +14,8 @@ window.onload = function() {
     mevcutGorunum = localStorage.getItem('finansGorunum') || 'tablo';
     gorunumuAyarla(mevcutGorunum);
 
-    verileriYukle();
+    tedarikcileriDoldur();
+    finansalIslemleriYukle(1); // İlk sayfayı yükle
 };
 
 function gorunumuDegistir(yeniGorunum) {
@@ -22,7 +23,7 @@ function gorunumuDegistir(yeniGorunum) {
     mevcutGorunum = yeniGorunum;
     localStorage.setItem('finansGorunum', yeniGorunum);
     gorunumuAyarla(yeniGorunum);
-    verileriGoster(allFinancialTransactions);
+    finansalIslemleriYukle(1); // Görünüm değiştiğinde ilk sayfayı yükle
 }
 
 function gorunumuAyarla(aktifGorunum) {
@@ -31,13 +32,6 @@ function gorunumuAyarla(aktifGorunum) {
     
     document.getElementById('btn-view-table').classList.toggle('active', aktifGorunum === 'tablo');
     document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
-}
-
-async function verileriYukle() {
-    await Promise.all([
-        tedarikcileriDoldur(),
-        finansalIslemleriDoldur()
-    ]);
 }
 
 async function tedarikcileriDoldur() {
@@ -49,18 +43,19 @@ async function tedarikcileriDoldur() {
     }
 }
 
-async function finansalIslemleriDoldur() {
+async function finansalIslemleriYukle(sayfa = 1) {
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
     veriYokMesaji.innerHTML = `<div class="spinner-border spinner-border-sm"></div> Yükleniyor...`;
     veriYokMesaji.style.display = 'block';
 
     try {
-        const response = await fetch('/finans/api/islemler');
-        const islemler = await response.json();
-        if (!response.ok) throw new Error(islemler.error || 'İşlemler yüklenemedi.');
+        const response = await fetch(`/finans/api/islemler?sayfa=${sayfa}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'İşlemler yüklenemedi.');
         
-        allFinancialTransactions = islemler;
-        verileriGoster(allFinancialTransactions);
+        verileriGoster(data.islemler);
+        ui.sayfalamaNavOlustur('finans-sayfalama', data.toplam_kayit, sayfa, KAYIT_SAYISI, finansalIslemleriYukle);
+
     } catch (error) {
          veriYokMesaji.innerHTML = `<p class="text-danger">${error.message}</p>`;
     }
@@ -69,6 +64,9 @@ async function finansalIslemleriDoldur() {
 function verileriGoster(islemler) {
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
     veriYokMesaji.style.display = islemler.length === 0 ? 'block' : 'none';
+
+    document.getElementById('finansal-islemler-tablosu').innerHTML = '';
+    document.getElementById('finansal-islemler-kart-listesi').innerHTML = '';
 
     if (mevcutGorunum === 'tablo') {
         renderTable(islemler);
@@ -79,50 +77,40 @@ function verileriGoster(islemler) {
 
 function renderTable(islemler) {
     const tbody = document.getElementById('finansal-islemler-tablosu');
-    tbody.innerHTML = '';
     islemler.forEach(islem => {
-        const tr = document.createElement('tr');
         const islemTarihi = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const tutar = parseFloat(islem.tutar);
-        const islemTipiClass = islem.islem_tipi === 'Ödeme' ? 'text-success' : 'text-danger';
-        
-        tr.innerHTML = `
-            <td>${islemTarihi}</td>
-            <td>${islem.tedarikciler ? islem.tedarikciler.isim : 'Bilinmiyor'}</td>
-            <td><span class="badge bg-${islem.islem_tipi === 'Ödeme' ? 'success' : 'warning'}">${islem.islem_tipi}</span></td>
-            <td class="text-end fw-bold ${islemTipiClass}">${tutar.toFixed(2)} TL</td>
-            <td>${islem.aciklama || '-'}</td>
-            <td class="text-center">
-                <button class="btn btn-sm btn-outline-primary" onclick="duzenleModaliniAc(${islem.id})" title="Düzenle"><i class="bi bi-pencil"></i></button>
-                <button class="btn btn-sm btn-outline-danger" onclick="silmeOnayiAc(${islem.id})" title="Sil"><i class="bi bi-trash"></i></button>
-            </td>
-        `;
-        tbody.appendChild(tr);
+        tbody.innerHTML += `
+            <tr>
+                <td>${islemTarihi}</td>
+                <td>${islem.tedarikciler ? islem.tedarikciler.isim : 'Bilinmiyor'}</td>
+                <td><span class="badge bg-${islem.islem_tipi === 'Ödeme' ? 'success' : 'warning'}">${islem.islem_tipi}</span></td>
+                <td class="text-end fw-bold ${islem.islem_tipi === 'Ödeme' ? 'text-success' : 'text-danger'}">${parseFloat(islem.tutar).toFixed(2)} TL</td>
+                <td>${islem.aciklama || '-'}</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-primary" onclick="duzenleModaliniAc(${islem.id}, '${islem.tutar}', '${islem.aciklama || ''}')" title="Düzenle"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="silmeOnayiAc(${islem.id})" title="Sil"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>`;
     });
 }
 
 function renderCards(islemler) {
     const container = document.getElementById('finansal-islemler-kart-listesi');
-    container.innerHTML = '';
     islemler.forEach(islem => {
         const islemTarihi = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const tutar = parseFloat(islem.tutar);
-        const islemTipiClass = islem.islem_tipi === 'Ödeme' ? 'odeme' : 'avans';
-        const islemTipiRenk = islem.islem_tipi === 'Ödeme' ? 'text-success' : 'text-danger';
-        
         container.innerHTML += `
             <div class="col-md-6 col-12">
-                <div class="finance-card ${islemTipiClass}">
+                <div class="finance-card ${islem.islem_tipi === 'Ödeme' ? 'odeme' : 'avans'}">
                     <div class="finance-card-header">
                         <h5>${islem.tedarikciler ? islem.tedarikciler.isim : 'Bilinmiyor'}</h5>
                         <div class="tarih">${islemTarihi}</div>
                     </div>
                     <div class="finance-card-body">
-                        <p class="tutar ${islemTipiRenk}">${tutar.toFixed(2)} TL</p>
+                        <p class="tutar ${islem.islem_tipi === 'Ödeme' ? 'text-success' : 'text-danger'}">${parseFloat(islem.tutar).toFixed(2)} TL</p>
                         <p class="aciklama">${islem.aciklama || 'Açıklama yok'}</p>
                     </div>
                     <div class="finance-card-footer">
-                        <button class="btn btn-sm btn-outline-primary" onclick="duzenleModaliniAc(${islem.id})" title="Düzenle"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="duzenleModaliniAc(${islem.id}, '${islem.tutar}', '${islem.aciklama || ''}')" title="Düzenle"><i class="bi bi-pencil"></i></button>
                         <button class="btn btn-sm btn-outline-danger" onclick="silmeOnayiAc(${islem.id})" title="Sil"><i class="bi bi-trash"></i></button>
                     </div>
                 </div>
@@ -162,14 +150,11 @@ async function finansalIslemKaydet() {
     }
 }
 
-function duzenleModaliniAc(islemId) {
-    const islem = allFinancialTransactions.find(i => i.id === islemId);
-    if (islem) {
-        document.getElementById('edit-islem-id').value = islem.id;
-        document.getElementById('edit-tutar-input').value = parseFloat(islem.tutar);
-        document.getElementById('edit-aciklama-input').value = islem.aciklama || '';
-        duzenleModal.show();
-    }
+function duzenleModaliniAc(islemId, tutar, aciklama) {
+    document.getElementById('edit-islem-id').value = islemId;
+    document.getElementById('edit-tutar-input').value = parseFloat(tutar);
+    document.getElementById('edit-aciklama-input').value = aciklama;
+    duzenleModal.show();
 }
 
 async function finansalIslemGuncelle() {

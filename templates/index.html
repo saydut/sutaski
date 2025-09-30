@@ -18,6 +18,7 @@
         <div id="alert-container"></div>
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 mb-md-4">
             <h1 class="fw-bold">Süt Takip Paneli</h1>
+            
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <div class="text-end d-none d-md-block">
                     <span class="text-secondary d-block" style="font-size: 0.85rem;">Hoş geldin, <strong id="user-name-placeholder">{{ session.get('user', {}).get('kullanici_adi') }}</strong></span>
@@ -33,32 +34,7 @@
                     </span>
                 </div>
                 
-                <div class="btn-group">
-                    <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-lightning-charge-fill"></i> Hızlı İşlemler
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="{{ url_for('main.tedarikciler_sayfasi') }}"><i class="bi bi-people-fill me-2"></i>Tedarikçi Yönetimi</a></li>
-                        <li><a class="dropdown-item" href="{{ url_for('yem.yem_yonetimi_sayfasi') }}"><i class="bi bi-inboxes-fill me-2"></i>Yem Yönetimi</a></li>
-                        <li><a class="dropdown-item" href="{{ url_for('finans.finans_sayfasi') }}"><i class="bi bi-cash-coin me-2"></i>Finans Yönetimi</a></li>
-                        <li><a class="dropdown-item" href="{{ url_for('main.raporlar_page') }}"><i class="bi bi-bar-chart-line-fill me-2"></i>Detaylı Raporlar</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        
-                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#hakkindaModal"><i class="bi bi-info-circle-fill me-2"></i>Uygulama Hakkında</a></li>
-                        
-                        <li id="admin-panel-link-container" style="display: {% if session.get('user', {}).get('rol') == 'admin' %}block{% else %}none{% endif %};">
-                            <a class="dropdown-item" href="{{ url_for('admin.admin_panel') }}"><i class="bi bi-shield-lock-fill me-2"></i>Admin Paneli</a>
-                        </li>
-                        <li><a class="dropdown-item" href="#" onclick="ui.sifreDegistirmeAc()"><i class="bi bi-key-fill me-2"></i>Şifre Değiştir</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-danger" href="#" onclick="guvenliCikis()"><i class="bi bi-box-arrow-right me-2"></i>Güvenli Çıkış</a></li>
-                    </ul>
-                </div>
-                
-                <button id="theme-toggle" class="btn btn-sm">
-                    <i id="sun-icon" class="bi bi-sun-fill"></i>
-                    <i id="moon-icon" class="bi bi-moon-fill"></i>
-                </button>
+                {% include '_hizli_islemler.html' %}
             </div>
         </div>
         
@@ -99,7 +75,6 @@
     <div class="modal fade" id="duzenleModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Girdiyi Düzenle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" id="edit-girdi-id"><div class="mb-2"><label for="edit-litre-input" class="form-label">Yeni Litre Değeri</label><input type="number" step="0.1" class="form-control form-control-sm" id="edit-litre-input"></div><div class="mb-2"><label for="edit-sebep-input" class="form-label">Düzenleme Sebebi</label><textarea class="form-control form-control-sm" id="edit-sebep-input" rows="2" placeholder="Neden düzenliyorsunuz?"></textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sutGirdisiDuzenle()">Kaydet</button></div></div></div></div>
     <div class="modal fade" id="gecmisModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Girdi Düzenleme Geçmişi</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="gecmis-modal-body"></div></div></div></div>
     <div class="modal fade" id="silmeOnayModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-warning">Silme Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Bu girdiyi silmek istediğinize emin misiniz?</p><input type="hidden" id="silinecek-girdi-id"></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-danger btn-sm" onclick="sutGirdisiSil()">Evet, Sil</button></div></div></div></div>
-    <div class="modal fade" id="sifreDegistirModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Şifre Değiştir</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-2"><label for="mevcut-sifre-input" class="form-label">Mevcut Şifreniz</label><input type="password" class="form-control form-control-sm" id="mevcut-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-input" class="form-label">Yeni Şifre</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-tekrar-input" class="form-label">Yeni Şifre (Tekrar)</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-tekrar-input"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sifreDegistir()">Kaydet</button></div></div></div></div>
 {% endblock %}
 
 {% block scripts %}
@@ -107,9 +82,7 @@
     <script src="https://npmcdn.com/flatpickr/dist/l10n/tr.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
     
-    <!-- YENİ SCRIPTLERİ DOĞRU SIRAYLA EKLE -->
-    <!-- Not: utils.js zaten base.html'de olduğu için tekrar eklemiyoruz -->
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
     <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script> <!-- Main en sonda olmalı -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% endblock %}
