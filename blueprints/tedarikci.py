@@ -29,6 +29,24 @@ def get_tedarikciler_for_dropdown():
     except Exception as e:
         print(f"Dropdown için tedarikçi listesi hatası: {e}")
         return jsonify({"error": "Liste alınamadı."}), 500
+    
+@tedarikci_bp.route('/tedarikci/<int:id>')
+@login_required
+def get_tedarikci_detay(id):
+    """Tek bir tedarikçinin tüm detaylarını ID ile getirir."""
+    try:
+        sirket_id = session['user']['sirket_id']
+        response = supabase.table('tedarikciler').select(
+            'id, isim, tc_no, telefon_no, adres'
+        ).eq('id', id).eq('sirket_id', sirket_id).single().execute()
+
+        if not response.data:
+            return jsonify({"error": "Tedarikçi bulunamadı veya bu tedarikçiyi görme yetkiniz yok."}), 404
+
+        return jsonify(response.data)
+    except Exception as e:
+        print(f"Tedarikçi detay hatası: {e}")
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/ozet')
 @login_required

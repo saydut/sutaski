@@ -217,10 +217,16 @@ function yeniTedarikciAc() {
 
 async function tedarikciDuzenleAc(id) {
     gosterMesaj("Tedarikçi bilgileri getiriliyor...", "info", 1500);
-    const response = await fetch(`/api/tedarikciler_liste?sayfa=1&arama=&sirala=isim&yon=asc`);
-    const data = await response.json();
-    const supplier = data.tedarikciler.find(s => s.id === id);
-    if (supplier) {
+    try {
+        // YENİ: Sadece ilgili tedarikçiyi çeken API'yi çağır
+        const response = await fetch(`/api/tedarikci/${id}`);
+        const supplier = await response.json();
+
+        if (!response.ok) {
+            throw new Error(supplier.error || "Tedarikçi bilgileri alınamadı.");
+        }
+
+        // Gelen tekil veriyle modal'ı doldur
         document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
         document.getElementById('edit-tedarikci-id').value = supplier.id;
         document.getElementById('tedarikci-isim-input').value = supplier.isim;
@@ -228,6 +234,8 @@ async function tedarikciDuzenleAc(id) {
         document.getElementById('tedarikci-tel-input').value = supplier.telefon_no || '';
         document.getElementById('tedarikci-adres-input').value = supplier.adres || '';
         tedarikciModal.show();
+    } catch (error) {
+        gosterMesaj(error.message, "danger");
     }
 }
 
