@@ -88,7 +88,6 @@ def get_detayli_rapor():
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
         
-        # Tarih aralığı kontrolü - 90 günden fazla olmasın
         if start_date > end_date or (end_date - start_date).days > 90:
             return jsonify({"error": "Geçersiz tarih aralığı. En fazla 90 günlük rapor alabilirsiniz."}), 400
             
@@ -96,24 +95,40 @@ def get_detayli_rapor():
         end_date_plus_one = end_date + timedelta(days=1)
         end_utc = turkey_tz.localize(datetime.combine(end_date_plus_one, datetime.min.time())).astimezone(pytz.utc).isoformat()
 
-        # --- DEĞİŞİKLİK BURADA: Sorguya .limit() eklendi ---
-        # 90 günlük bir rapor için yaklaşık 9000 kayıt yeterli olacaktır, biz garanti olsun diye 10000 yapalım.
-        response = supabase.table('sut_girdileri').select(
-            '*, tedarikciler(isim)'
-        ).eq('sirket_id', sirket_id).gte(
-            'taplanma_tarihi', start_utc
-        ).lt(
-            'taplanma_tarihi', end_utc
-        ).limit(10000).execute() # <-- EN ÖNEMLİ SATIR BU
-        
+        # --- YENİ: PARÇA PARÇA VERİ ÇEKME MANTIĞI ---
+        all_data = []
+        offset = 0
+        limit = 1000  # Supabase'in izin verdiği maksimum limit
+
+        while True:
+            response = supabase.table('sut_girdileri').select(
+                '*, tedarikciler(isim)'
+            ).eq('sirket_id', sirket_id).gte(
+                'taplanma_tarihi', start_utc
+            ).lt(
+                'taplanma_tarihi', end_utc
+            ).range(offset, offset + limit - 1).execute()
+            
+            # Gelen veriyi ana listemize ekliyoruz
+            all_data.extend(response.data)
+            
+            # Eğer dönen veri sayısı limitten azsa, bu son sayfa demektir. Döngüden çık.
+            if len(response.data) < limit:
+                break
+            
+            # Bir sonraki sayfa için offset'i artır
+            offset += limit
+        # --- DÖNGÜ SONU ---
+
+        # Artık response.data yerine tüm verileri içeren all_data listesini kullanıyoruz
         date_range = [start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)]
         daily_totals = {gun.strftime('%Y-%m-%d'): Decimal(0) for gun in date_range}
         supplier_totals = {}
         
-        for girdi in response.data:
+        for girdi in all_data: # <-- Değişiklik burada
             parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
             if not parsed_date:
-                continue # Hatalı tarihli kayıtları atla
+                continue
             
             girdi_gunu_str = parsed_date.astimezone(turkey_tz).strftime('%Y-%m-%d')
             if girdi_gunu_str in daily_totals:
@@ -137,7 +152,7 @@ def get_detayli_rapor():
             'totalLitre': float(total_litre), 
             'averageDailyLitre': float(total_litre / len(date_range) if date_range else 0), 
             'dayCount': len(date_range), 
-            'entryCount': len(response.data)
+            'entryCount': len(all_data) # <-- Değişiklik burada
         }
         
         breakdown = sorted([{'name': isim, 'litre': float(totals['litre']), 'entryCount': totals['entryCount']} for isim, totals in supplier_totals.items()], key=lambda x: x['litre'], reverse=True)
