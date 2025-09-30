@@ -39,6 +39,49 @@ const store = {
     },
 
     /**
+     * Önbelleğe yeni bir tedarikçi ekler ve listeyi alfabetik olarak sıralar.
+     * @param {object} tedarikci - Eklenecek tedarikçi objesi {id, isim}.
+     */
+    addTedarikci(tedarikci) {
+        // Sadece önbellek zaten doluysa (yani daha önce en az bir kez yüklendiyse) işlem yap
+        if (this.tedarikciler.length > 0) {
+            console.log('Yeni tedarikçi önbelleğe ekleniyor:', tedarikci.isim);
+            this.tedarikciler.push({id: tedarikci.id, isim: tedarikci.isim});
+            // Ekledikten sonra listeyi yeniden sırala ki dropdown'lar düzgün görünsün
+            this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim));
+        }
+    },
+
+    /**
+     * Önbellekteki bir tedarikçinin bilgilerini günceller.
+     * @param {object} tedarikci - Güncellenmiş tedarikçi objesi {id, isim}.
+     */
+    updateTedarikci(tedarikci) {
+        if (this.tedarikciler.length > 0) {
+            const index = this.tedarikciler.findIndex(t => t.id === tedarikci.id);
+            if (index !== -1) {
+                console.log('Tedarikçi önbellekte güncelleniyor:', tedarikci.isim);
+                this.tedarikciler[index].isim = tedarikci.isim;
+                this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim));
+            }
+        }
+    },
+
+    /**
+     * Önbellekten bir tedarikçiyi ID'sine göre siler.
+     * @param {number} id - Silinecek tedarikçinin ID'si.
+     */
+    removeTedarikci(id) {
+        if (this.tedarikciler.length > 0) {
+            const initialLength = this.tedarikciler.length;
+            this.tedarikciler = this.tedarikciler.filter(t => t.id !== id);
+            if(this.tedarikciler.length < initialLength){
+                console.log(`Tedarikçi (ID: ${id}) önbellekten silindi.`);
+            }
+        }
+    },
+
+    /**
      * Yem ürünleri listesini getirir.
      * Tedarikçilerle aynı mantıkta çalışır: "önce kontrol et, yoksa çek".
      * @returns {Promise<Array>} Yem ürünlerinin listesini içeren bir Promise döndürür.

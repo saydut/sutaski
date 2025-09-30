@@ -84,80 +84,52 @@ def get_detayli_rapor():
         sirket_id = session['user']['sirket_id']
         start_date_str = request.args.get('baslangic')
         end_date_str = request.args.get('bitis')
-        
+
         start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
         end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-        
+
         if start_date > end_date or (end_date - start_date).days > 90:
             return jsonify({"error": "Geçersiz tarih aralığı. En fazla 90 günlük rapor alabilirsiniz."}), 400
-            
-        start_utc = turkey_tz.localize(datetime.combine(start_date, datetime.min.time())).astimezone(pytz.utc).isoformat()
-        end_date_plus_one = end_date + timedelta(days=1)
-        end_utc = turkey_tz.localize(datetime.combine(end_date_plus_one, datetime.min.time())).astimezone(pytz.utc).isoformat()
 
-        # --- YENİ: PARÇA PARÇA VERİ ÇEKME MANTIĞI ---
-        all_data = []
-        offset = 0
-        limit = 1000  # Supabase'in izin verdiği maksimum limit
-
-        while True:
-            response = supabase.table('sut_girdileri').select(
-                '*, tedarikciler(isim)'
-            ).eq('sirket_id', sirket_id).gte(
-                'taplanma_tarihi', start_utc
-            ).lt(
-                'taplanma_tarihi', end_utc
-            ).range(offset, offset + limit - 1).execute()
-            
-            # Gelen veriyi ana listemize ekliyoruz
-            all_data.extend(response.data)
-            
-            # Eğer dönen veri sayısı limitten azsa, bu son sayfa demektir. Döngüden çık.
-            if len(response.data) < limit:
-                break
-            
-            # Bir sonraki sayfa için offset'i artır
-            offset += limit
-        # --- DÖNGÜ SONU ---
-
-        # Artık response.data yerine tüm verileri içeren all_data listesini kullanıyoruz
-        date_range = [start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)]
-        daily_totals = {gun.strftime('%Y-%m-%d'): Decimal(0) for gun in date_range}
-        supplier_totals = {}
+        # 1. VERİTABANI FONKSİYONUNU (RPC) ÇAĞIR
+        # Tüm ağır işi veritabanı burada yapıyor.
+        response = supabase.rpc('get_detailed_report_data', {
+            'p_sirket_id': sirket_id,
+            'p_start_date': start_date_str,
+            'p_end_date': end_date_str
+        }).execute()
         
-        for girdi in all_data: # <-- Değişiklik burada
-            parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
-            if not parsed_date:
-                continue
-            
-            girdi_gunu_str = parsed_date.astimezone(turkey_tz).strftime('%Y-%m-%d')
-            if girdi_gunu_str in daily_totals:
-                daily_totals[girdi_gunu_str] += Decimal(str(girdi.get('litre', '0')))
-            
-            tedarikci_bilgisi = girdi.get('tedarikciler')
-            if tedarikci_bilgisi and tedarikci_bilgisi.get('isim'):
-                isim = tedarikci_bilgisi['isim']
-                if isim not in supplier_totals: 
-                    supplier_totals[isim] = {'litre': Decimal(0), 'entryCount': 0}
-                supplier_totals[isim]['litre'] += Decimal(str(girdi.get('litre', '0')))
-                supplier_totals[isim]['entryCount'] += 1
-                
+        veri = response.data
+        if not veri:
+             return jsonify({'chartData': {'labels': [], 'data': []}, 'summaryData': {}, 'supplierBreakdown': []})
+
+        # 2. HAZIR GELEN VERİLERİ İŞLE
+        daily_totals = veri.get('daily_totals', [])
+        supplier_breakdown = veri.get('supplier_breakdown', [])
+        total_entry_count = veri.get('total_entry_count', 0)
+
+        # Grafik için etiketleri ve verileri oluştur
         turkce_aylar = {"01":"Oca","02":"Şub","03":"Mar","04":"Nis","05":"May","06":"Haz","07":"Tem","08":"Ağu","09":"Eyl","10":"Eki","11":"Kas","12":"Ara"}
-        labels = [f"{datetime.strptime(gun, '%Y-%m-%d').strftime('%d')} {turkce_aylar.get(datetime.strptime(gun, '%Y-%m-%d').strftime('%m'), '')}" for gun in sorted(daily_totals.keys())]
-        data = [float(toplam) for gun, toplam in sorted(daily_totals.items())]
+        labels = [f"{gun['gun'][8:]} {turkce_aylar.get(gun['gun'][5:7], '')}" for gun in daily_totals]
+        data = [float(gun['toplam']) for gun in daily_totals]
         
-        total_litre = sum(daily_totals.values())
+        # Özet kartları için toplamları hesapla (bu artık çok hızlı)
+        total_litre = sum(Decimal(str(item.get('toplam', '0'))) for item in daily_totals)
+        day_count = (end_date - start_date).days + 1
         
         summary = {
             'totalLitre': float(total_litre), 
-            'averageDailyLitre': float(total_litre / len(date_range) if date_range else 0), 
-            'dayCount': len(date_range), 
-            'entryCount': len(all_data) # <-- Değişiklik burada
+            'averageDailyLitre': float(total_litre / day_count if day_count > 0 else 0), 
+            'dayCount': day_count, 
+            'entryCount': total_entry_count
         }
         
-        breakdown = sorted([{'name': isim, 'litre': float(totals['litre']), 'entryCount': totals['entryCount']} for isim, totals in supplier_totals.items()], key=lambda x: x['litre'], reverse=True)
-        
-        return jsonify({'chartData': {'labels': labels, 'data': data}, 'summaryData': summary, 'supplierBreakdown': breakdown})
+        # 3. SONUCU FRONTEND'E GÖNDER
+        return jsonify({
+            'chartData': {'labels': labels, 'data': data}, 
+            'summaryData': summary, 
+            'supplierBreakdown': supplier_breakdown
+        })
         
     except Exception as e:
         import traceback

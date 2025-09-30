@@ -154,7 +154,19 @@ async function tedarikciKaydet() {
         if (response.ok) {
             gosterMesaj(result.message, "success");
             tedarikciModal.hide();
-            await tedarikcileriYukle(mevcutSayfa);
+
+        // --- AKILLI ÖNBELLEK GÜNCELLEMESİ ---
+            const tedarikci = result.tedarikci;
+            if (id) { // Eğer id varsa bu bir düzenlemedir.
+                store.updateTedarikci(tedarikci);
+            } else { // Yoksa yeni eklemedir.
+                store.addTedarikci(tedarikci);
+            }
+        // --- GÜNCELLEME SONU ---
+
+        // Tedarikçi listesi sayfasının kendi görünümünü sunucudan güncelle
+            await tedarikcileriYukle(id ? mevcutSayfa : 1); 
+
         } else {
             gosterMesaj(result.error || "Bir hata oluştu.", "danger");
         }
@@ -174,7 +186,13 @@ async function tedarikciSil() {
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             silmeOnayModal.hide();
-            await tedarikcileriYukle(1);
+
+        // --- AKILLI ÖNBELLEK GÜNCELLEMESİ ---
+            store.removeTedarikci(parseInt(id)); // id string olabilir, sayıya çevirelim
+        // --- GÜNCELLEME SONU ---
+
+        // Tedarikçi listesi sayfasının kendi görünümünü sunucudan güncelle
+            await tedarikcileriYukle(1); 
         } else {
             gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
         }

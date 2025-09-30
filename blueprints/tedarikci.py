@@ -152,8 +152,13 @@ def add_tedarikci():
         if data.get('tc_no'): yeni_veri['tc_no'] = data.get('tc_no')
         if data.get('telefon_no'): yeni_veri['telefon_no'] = data.get('telefon_no')
         if data.get('adres'): yeni_veri['adres'] = data.get('adres')
-        supabase.table('tedarikciler').insert(yeni_veri).execute()
-        return jsonify({"message": "Tedarikçi başarıyla eklendi."}), 201
+
+        # DEĞİŞİKLİK: Sunucudan dönen veriyi yakala
+        response = supabase.table('tedarikciler').insert(yeni_veri).execute()
+
+        # DEĞİŞİKLİK: Mesajla birlikte yeni eklenen tedarikçiyi de frontend'e gönder
+        return jsonify({"message": "Tedarikçi başarıyla eklendi.", "tedarikci": response.data[0]}), 201
+
     except APIError as e:
         return jsonify({"error": f"Veritabanı hatası: {e.message}"}), 500
     except Exception as e:
@@ -177,10 +182,16 @@ def update_tedarikci(id):
         if 'adres' in data: guncellenecek_veri['adres'] = data.get('adres')
         if not guncellenecek_veri:
             return jsonify({"error": "Güncellenecek veri bulunamadı."}), 400
+
+        # DEĞİŞİKLİK: Sunucudan dönen veriyi yakala
         response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', id).eq('sirket_id', sirket_id).execute()
+
         if not response.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
-        return jsonify({"message": "Tedarikçi bilgileri güncellendi."})
+
+        # DEĞİŞİKLİK: Mesajla birlikte güncellenen tedarikçiyi de frontend'e gönder
+        return jsonify({"message": "Tedarikçi bilgileri güncellendi.", "tedarikci": response.data[0]})
+
     except APIError as e:
         return jsonify({"error": f"Veritabanı hatası: {e.message}"}), 500
     except Exception as e:
