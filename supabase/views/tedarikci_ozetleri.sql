@@ -1,6 +1,6 @@
--- dosya: supabase/views/tedarikci_ozetleri.sql
-
-CREATE OR REPLACE VIEW tedarikci_ozetleri AS
+CREATE OR REPLACE VIEW tedarikci_ozetleri
+WITH (security_invoker = true) -- GÜVENLİK İÇİN BU SATIRI EKLEDİK
+AS
 SELECT
     t.id,
     t.isim,

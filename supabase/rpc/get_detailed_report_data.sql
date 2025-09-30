@@ -7,13 +7,14 @@ CREATE OR REPLACE FUNCTION get_detailed_report_data(
 )
 RETURNS json
 LANGUAGE plpgsql
+SET search_path = public -- GÜVENLİK İÇİN BU SATIRI EKLEDİK
 AS $$
 DECLARE
     daily_summary json;
     supplier_summary json;
     total_entry_count integer;
 BEGIN
-    -- Günlük Toplamları Hesapla
+    -- (Fonksiyonun geri kalanı aynı, burada değişiklik yok)
     WITH date_series AS (
         SELECT generate_series(p_start_date::date, p_end_date::date, '1 day'::interval) AS report_date
     ),
@@ -35,7 +36,6 @@ BEGIN
         ORDER BY ds.report_date
     ) t;
 
-    -- Tedarikçi Dökümünü Hesapla
     SELECT json_agg(s) INTO supplier_summary FROM (
         SELECT
             t.isim AS name,
@@ -49,13 +49,11 @@ BEGIN
         ORDER BY litre DESC
     ) s;
 
-    -- Toplam Girdi Sayısını Hesapla
     SELECT COUNT(id) INTO total_entry_count
     FROM sut_girdileri
     WHERE sirket_id = p_sirket_id
       AND (taplanma_tarihi AT TIME ZONE 'Europe/Istanbul')::date BETWEEN p_start_date::date AND p_end_date::date;
 
-    -- Tüm sonuçları tek bir JSON objesi olarak birleştir ve döndür
     RETURN json_build_object(
         'daily_totals', COALESCE(daily_summary, '[]'::json),
         'supplier_breakdown', COALESCE(supplier_summary, '[]'::json),
