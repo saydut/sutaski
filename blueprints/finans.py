@@ -32,7 +32,7 @@ def get_finansal_islemler():
         offset = (sayfa - 1) * limit
 
         query = supabase.table('finansal_islemler').select(
-            '*, tedarikciler(isim)', count='exact'
+            '*, tedarikciler(isim)', count='estimated'
         ).eq('sirket_id', sirket_id).order(
             'islem_tarihi', desc=True
         ).range(offset, offset + limit - 1)

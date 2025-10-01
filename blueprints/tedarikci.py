@@ -231,7 +231,7 @@ def get_tedarikciler_liste():
         # DEĞİŞİKLİK 2: 'select' içinden karmaşık ilişki sorgusunu kaldırdık
         query = supabase.table('tedarikci_ozetleri').select(
             'id, isim, telefon_no, tc_no, adres, toplam_litre', 
-            count='exact'
+            count='estimated'
         ).eq('sirket_id', sirket_id)
 
         if arama_terimi:
