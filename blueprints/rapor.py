@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, session, send_file, current_app, render_template
 from decorators import login_required, lisans_kontrolu
 from extensions import supabase, turkey_tz
-from utils import parse_supabase_timestamp # <-- DEĞİŞİKLİK BURADA
+from utils import parse_supabase_timestamp
 from datetime import datetime, timedelta
 import pytz
 import io
@@ -18,22 +18,19 @@ getcontext().prec = 10
 @login_required
 def get_gunluk_ozet():
     """
-    BU FONKSİYON ARTIK HESAPLAMAYI DOĞRUDAN SUPABASE'E YAPTIRIYOR.
+    Bu fonksiyon, ana paneldeki özet kartlarını doldurur.
+    Doğru çalışan `get_guncel_ozet` fonksiyonunu çağırır.
     """
     try:
         sirket_id = session['user']['sirket_id']
         tarih_str = request.args.get('tarih')
 
-        # İstenen tarihi belirle, eğer belirtilmemişse bugünü kullan
         target_date_str = tarih_str if tarih_str else datetime.now(turkey_tz).date().isoformat()
-
-        # Doğrudan RPC'yi çağıran hazır ve optimize fonksiyonumuzu kullanıyoruz
         summary = get_guncel_ozet(sirket_id, target_date_str)
         
         return jsonify(summary)
 
     except Exception as e:
-        # Hata olursa, loglara detaylı yazdır
         print(f"!!! GÜNLÜK ÖZET KRİTİK HATA: {e}")
         return jsonify({"error": "Özet hesaplanırken sunucuda bir hata oluştu."}), 500
     
@@ -76,7 +73,6 @@ def get_tedarikci_dagilimi():
     except Exception as e:
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
-# Lütfen bu fonksiyonun tamamını kopyalayıp dosyadaki mevcut olanla değiştirin.
 @rapor_bp.route('/detayli_rapor', methods=['GET'])
 @login_required
 def get_detayli_rapor():
@@ -91,8 +87,6 @@ def get_detayli_rapor():
         if start_date > end_date or (end_date - start_date).days > 90:
             return jsonify({"error": "Geçersiz tarih aralığı. En fazla 90 günlük rapor alabilirsiniz."}), 400
 
-        # 1. VERİTABANI FONKSİYONUNU (RPC) ÇAĞIR
-        # Tüm ağır işi veritabanı burada yapıyor.
         response = supabase.rpc('get_detailed_report_data', {
             'p_sirket_id': sirket_id,
             'p_start_date': start_date_str,
@@ -103,17 +97,14 @@ def get_detayli_rapor():
         if not veri:
              return jsonify({'chartData': {'labels': [], 'data': []}, 'summaryData': {}, 'supplierBreakdown': []})
 
-        # 2. HAZIR GELEN VERİLERİ İŞLE
         daily_totals = veri.get('daily_totals', [])
         supplier_breakdown = veri.get('supplier_breakdown', [])
         total_entry_count = veri.get('total_entry_count', 0)
 
-        # Grafik için etiketleri ve verileri oluştur
         turkce_aylar = {"01":"Oca","02":"Şub","03":"Mar","04":"Nis","05":"May","06":"Haz","07":"Tem","08":"Ağu","09":"Eyl","10":"Eki","11":"Kas","12":"Ara"}
         labels = [f"{gun['gun'][8:]} {turkce_aylar.get(gun['gun'][5:7], '')}" for gun in daily_totals]
         data = [float(gun['toplam']) for gun in daily_totals]
         
-        # Özet kartları için toplamları hesapla (bu artık çok hızlı)
         total_litre = sum(Decimal(str(item.get('toplam', '0'))) for item in daily_totals)
         day_count = (end_date - start_date).days + 1
         
@@ -124,7 +115,6 @@ def get_detayli_rapor():
             'entryCount': total_entry_count
         }
         
-        # 3. SONUCU FRONTEND'E GÖNDER
         return jsonify({
             'chartData': {'labels': labels, 'data': data}, 
             'summaryData': summary, 
