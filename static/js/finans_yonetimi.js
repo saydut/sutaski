@@ -79,8 +79,11 @@ function renderTable(islemler) {
     const tbody = document.getElementById('finansal-islemler-tablosu');
     islemler.forEach(islem => {
         const islemTarihi = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        
+        // --- DEĞİŞİKLİK BURADA ---
+        // Her bir tablo satırına (tr) benzersiz bir 'id' ekledik.
         tbody.innerHTML += `
-            <tr>
+            <tr id="finans-islem-${islem.id}">
                 <td>${islemTarihi}</td>
                 <td>${islem.tedarikciler ? islem.tedarikciler.isim : 'Bilinmiyor'}</td>
                 <td><span class="badge bg-${islem.islem_tipi === 'Ödeme' ? 'success' : 'warning'}">${islem.islem_tipi}</span></td>
@@ -98,8 +101,11 @@ function renderCards(islemler) {
     const container = document.getElementById('finansal-islemler-kart-listesi');
     islemler.forEach(islem => {
         const islemTarihi = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        
+        // --- DEĞİŞİKLİK BURADA ---
+        // Her bir kartın dış sarmalayıcısına (div) benzersiz bir 'id' ekledik.
         container.innerHTML += `
-            <div class="col-md-6 col-12">
+            <div class="col-md-6 col-12" id="finans-islem-${islem.id}">
                 <div class="finance-card ${islem.islem_tipi === 'Ödeme' ? 'odeme' : 'avans'}">
                     <div class="finance-card-header">
                         <h5>${islem.tedarikciler ? islem.tedarikciler.isim : 'Bilinmiyor'}</h5>
@@ -189,17 +195,33 @@ function silmeOnayiAc(islemId) {
 
 async function finansalIslemSil() {
     const id = document.getElementById('silinecek-islem-id').value;
+    silmeOnayModal.hide();
+
+    // 1. Öğeyi arayüzden anında kaldır
+    const silinecekElement = document.getElementById(`finans-islem-${id}`);
+    if (!silinecekElement) return;
+    
+    const parent = silinecekElement.parentNode;
+    const nextSibling = silinecekElement.nextSibling;
+    silinecekElement.style.transition = 'opacity 0.4s';
+    silinecekElement.style.opacity = '0';
+    setTimeout(() => silinecekElement.remove(), 400);
+
+    // 2. Arka planda API isteğini gönder
     try {
         const response = await fetch(`/finans/api/islemler/${id}`, { method: 'DELETE' });
         const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            silmeOnayModal.hide();
-            await finansalIslemleriDoldur();
-        } else {
-            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
-        }
+        if (!response.ok) throw new Error(result.error);
+
+        gosterMesaj(result.message, 'success');
+        // Listeyi yeniden çekmeye gerek yok!
+
     } catch (error) {
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+        gosterMesaj(result.error || 'Silme işlemi başarısız, işlem geri yüklendi.', 'danger');
+        // Hata olursa elemanı eski yerine geri ekle
+        silinecekElement.style.opacity = '1';
+        if (!silinecekElement.parentNode) {
+            parent.insertBefore(silinecekElement, nextSibling);
+        }
     }
 }

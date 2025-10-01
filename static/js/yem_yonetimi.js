@@ -181,8 +181,11 @@ function renderTable(urunler) {
         const uyariIconu = isKritik
             ? `<i class="bi bi-exclamation-triangle-fill text-danger me-2" title="Stok kritik seviyede: ${stokMiktari.toFixed(2)} KG"></i>`
             : '';
+        
+        // --- DEĞİŞİKLİK BURADA ---
+        // Her bir tablo satırına (tr) benzersiz bir 'id' ekledik.
         tbody.innerHTML += `
-            <tr class="${rowClass}">
+            <tr id="yem-urun-${urun.id}" class="${rowClass}">
                 <td>${uyariIconu}<strong>${urun.yem_adi}</strong></td>
                 <td class="text-end">${stokMiktari.toFixed(2)} KG</td>
                 <td class="text-end">${parseFloat(urun.birim_fiyat).toFixed(2)} TL</td>
@@ -201,8 +204,11 @@ function renderCards(urunler) {
         const stokMiktari = parseFloat(urun.stok_miktari_kg);
         const isKritik = stokMiktari <= KRITIK_STOK_SEVIYESI;
         const kartSinifi = isKritik ? 'yem-card stok-kritik' : 'yem-card';
+        
+        // --- DEĞİŞİKLİK BURADA ---
+        // Her bir kartın dış sarmalayıcısına (div) benzersiz bir 'id' ekledik.
         container.innerHTML += `
-            <div class="col-md-6 col-12">
+            <div class="col-md-6 col-12" id="yem-urun-${urun.id}">
                 <div class="${kartSinifi}">
                     <div class="yem-card-header">
                         <h5>${urun.yem_adi}</h5>
@@ -236,30 +242,50 @@ async function yemCikisiYap() {
         gosterMesaj('Lütfen tedarikçi, yem ürünü seçin ve geçerli bir miktar girin.', 'warning');
         return;
     }
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
-    try {
-        const response = await fetch('/yem/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            document.getElementById('miktar-input').value = '';
-            document.getElementById('aciklama-input').value = '';
-            tedarikciSecici.clear();
-            
-            // HEM LİSTEYİ HEM DE MENÜYÜ YENİLİYORUZ
-            await yemListesiniGoster(mevcutYemSayfasi); 
-            await yemSeciciyiDoldur(); // <-- EKLENEN SATIR BU
-            await yemIslemleriniGoster(1); // YENİ EKLENDİ - Yeni işlem sonrası ilk sayfayı göster
 
-        } else {
-            gosterMesaj(result.error || 'Bir hata oluştu.', 'danger');
-        }
+    // --- İYİMSER GÜNCELLEME ---
+    // 1. Geçici elemanı oluştur ve listeye ekle
+    const tbody = document.getElementById('yem-islemleri-listesi');
+    const geciciId = `gecici-islem-${Date.now()}`;
+    const tedarikciAdi = tedarikciSecici.options[veri.tedarikci_id].text;
+    const yemAdi = yemUrunSecici.options[veri.yem_urun_id].text.split(' (')[0];
+
+    const geciciSatir = document.createElement('tr');
+    geciciSatir.id = geciciId;
+    geciciSatir.style.opacity = '0.6';
+    geciciSatir.innerHTML = `
+        <td>Şimdi</td>
+        <td>${tedarikciAdi}</td>
+        <td>${yemAdi}</td>
+        <td class="text-end">${parseFloat(veri.miktar_kg).toFixed(2)} KG</td>
+    `;
+    tbody.prepend(geciciSatir);
+
+    // 2. Formu hemen temizle
+    const eskiFormVerisi = { ...veri }; // Hata durumunda geri yüklemek için
+    document.getElementById('miktar-input').value = '';
+    document.getElementById('aciklama-input').value = '';
+    tedarikciSecici.clear();
+    
+    // 3. Arka planda API'yi çağır
+    try {
+        const result = await fetch('/yem/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }).then(res => res.json());
+
+        // 4. BAŞARILI OLURSA: Listeleri ve menüleri sunucudan gelenle yenile
+        gosterMesaj(result.message, 'success');
+        await yemListesiniGoster(mevcutYemSayfasi); 
+        await yemSeciciyiDoldur(); 
+        await yemIslemleriniGoster(1); // Bu işlem geçici satırı silip gerçeğini koyacak
+
     } catch (error) {
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
-    } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = originalButtonText;
+        // 5. HATA OLURSA: Geçici elemanı sil, formu geri yükle
+        gosterMesaj(error.message || 'İşlem kaydedilemedi.', 'danger');
+        document.getElementById(geciciId)?.remove();
+        // Formu eski haline getir
+        tedarikciSecici.setValue(eskiFormVerisi.tedarikci_id);
+        yemUrunSecici.setValue(eskiFormVerisi.yem_urun_id);
+        document.getElementById('miktar-input').value = eskiFormVerisi.miktar_kg;
+        document.getElementById('aciklama-input').value = eskiFormVerisi.aciklama;
     }
 }
 
@@ -326,19 +352,36 @@ function yemSilmeOnayiAc(id, isim) {
 
 async function yemUrunuSil() {
     const id = document.getElementById('silinecek-yem-id').value;
+    yemSilmeOnayModal.hide();
+
+    // 1. Öğeyi UI'dan anında kaldır
+    const silinecekElement = document.getElementById(`yem-urun-${id}`);
+    if (!silinecekElement) return;
+    
+    // Hata durumunda geri eklemek için sakla
+    const parent = silinecekElement.parentNode;
+    const nextSibling = silinecekElement.nextSibling;
+    silinecekElement.style.transition = 'opacity 0.4s';
+    silinecekElement.style.opacity = '0';
+    setTimeout(() => silinecekElement.remove(), 400);
+
+    // 2. Arka planda API'yi çağır
     try {
         const response = await fetch(`/yem/api/urunler/${id}`, { method: 'DELETE' });
         const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            yemSilmeOnayModal.hide();
-            await yemListesiniGoster(1); // İlk sayfaya dön
-            await yemSeciciyiDoldur();
-        } else {
-            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
-        }
+        if (!response.ok) throw new Error(result.error);
+
+        gosterMesaj(result.message, 'success');
+        // Başarılı olunca yem seçme menüsünü de yenilemek önemli
+        await yemSeciciyiDoldur();
+
     } catch (error) {
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+        gosterMesaj(error.message || 'Silme başarısız, ürün geri yüklendi.', 'danger');
+        // Hata olursa elemanı geri ekle
+        silinecekElement.style.opacity = '1';
+        if (!silinecekElement.parentNode) {
+            parent.insertBefore(silinecekElement, nextSibling);
+        }
     }
 }
 

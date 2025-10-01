@@ -143,7 +143,7 @@ const ui = {
         return { tumGirdiler, toplamGirdi };
     },
 
-    /**
+/**
      * Verilen girdi listesini HTML'e dönüştürür ve ekranda gösterir.
      * @param {Array} girdiler - Gösterilecek girdi objeleri dizisi.
      * @param {string|null} mesaj - Liste boşsa veya hata varsa gösterilecek mesaj.
@@ -181,8 +181,10 @@ const ui = {
             const gecmisButonu = !girdi.isOffline ? `<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button>` : '';
             const fiyatBilgisi = girdi.fiyat ? `<span class="text-success">@ ${parseFloat(girdi.fiyat).toFixed(2)} TL</span>` : '';
             
+            // --- DEĞİŞİKLİK BURADA ---
+            // Her bir liste elemanına benzersiz bir 'id' ekledik.
             const girdiElementi = `
-                <div class="list-group-item">
+                <div class="list-group-item" id="girdi-${girdi.id}">
                     <div class="d-flex w-100 justify-content-between flex-wrap">
                         <h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${fiyatBilgisi} ${duzenlendiEtiketi} ${cevrimdisiEtiketi}</h5>
                         <div class="btn-group">${actionButtons} ${gecmisButonu}</div>
