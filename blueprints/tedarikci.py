@@ -255,61 +255,40 @@ def get_tedarikciler_liste():
 # --- PDF OLUŞTURMA İÇİN YARDIMCI VE ANA FONKSİYONLAR ---
 
 # --- DEĞİŞİKLİK BU FONKSİYONDA BAŞLIYOR ---
+# blueprints/tedarikci.py dosyasındaki _get_aylik_tedarikci_verileri fonksiyonunu bununla değiştir.
+
 def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
-    """Belirtilen ay içindeki tüm verileri PDF için tek seferde çeker ve süt girdilerini gruplar."""
+    """Belirtilen ay içindeki tüm verileri PDF için tek bir RPC çağrısıyla çeker."""
     _, ayin_son_gunu = calendar.monthrange(yil, ay)
-    baslangic_tarihi = datetime(yil, ay, 1).date()
-    bitis_tarihi = datetime(yil, ay, ayin_son_gunu).date()
-    start_utc = turkey_tz.localize(datetime.combine(baslangic_tarihi, datetime.min.time())).astimezone(pytz.utc).isoformat()
-    end_utc = turkey_tz.localize(datetime.combine(bitis_tarihi, datetime.max.time())).astimezone(pytz.utc).isoformat()
+    baslangic_tarihi_str = f"{yil}-{ay:02d}-01"
+    bitis_tarihi_str = f"{yil}-{ay:02d}-{ayin_son_gunu}"
 
-    sut_response = supabase.table('sut_girdileri').select('litre, fiyat, taplanma_tarihi').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).order('taplanma_tarihi', desc=False).execute()
-    yem_response = supabase.table('yem_islemleri').select('islem_tarihi, miktar_kg, islem_anindaki_birim_fiyat, toplam_tutar, yem_urunleri(yem_adi)').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
-    finans_response = supabase.table('finansal_islemler').select('islem_tarihi, islem_tipi, tutar, aciklama').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).gte('islem_tarihi', start_utc).lte('islem_tarihi', end_utc).order('islem_tarihi', desc=False).execute()
+    # Tek bir RPC çağrısı ile tüm verileri çekiyoruz
+    response = supabase.rpc('get_monthly_supplier_report_data', {
+        'p_sirket_id': sirket_id,
+        'p_tedarikci_id': tedarikci_id,
+        'p_start_date': baslangic_tarihi_str,
+        'p_end_date': bitis_tarihi_str # DÜZELTME: Saat bilgisi kaldırıldı.
+    }).execute()
 
-    # Süt girdilerini tarih ve fiyata göre gruplamak için bir sözlük (dictionary) oluşturalım.
-    gruplanmis_girdiler = defaultdict(lambda: {'litre': Decimal(0)})
+    if not response.data:
+        return {
+            "sut_girdileri": [], "yem_islemleri": [], "finansal_islemler": [],
+            "ozet": { "toplam_sut_tutari": 0, "toplam_yem_borcu": 0, "toplam_odeme": 0 }
+        }
 
-    for girdi in sut_response.data:
-        parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
-        if not parsed_date: continue
-        
-        tarih_str = parsed_date.astimezone(turkey_tz).strftime('%d.%m.%Y')
-        fiyat = Decimal(str(girdi.get('fiyat', '0')))
-        litre = Decimal(str(girdi.get('litre', '0')))
-        
-        # Anahtar olarak tarih ve fiyatı birlikte kullanıyoruz
-        grup_anahtari = (tarih_str, fiyat)
-        gruplanmis_girdiler[grup_anahtari]['litre'] += litre
+    data = response.data
+    ozet = data.get('ozet', {})
+    ozet['toplam_sut_tutari'] = Decimal(str(ozet.get('toplam_sut_tutari', '0')))
+    ozet['toplam_yem_borcu'] = Decimal(str(ozet.get('toplam_yem_borcu', '0')))
+    ozet['toplam_odeme'] = Decimal(str(ozet.get('toplam_odeme', '0')))
+    data['ozet'] = ozet
 
-    # Gruplanmış veriyi şablonun beklediği formata dönüştürelim
-    toplam_sut_tutari = Decimal('0.0')
-    islenmis_sut_girdileri = []
-    for (tarih, fiyat), data in gruplanmis_girdiler.items():
-        litre = data['litre']
-        tutar = litre * fiyat
-        toplam_sut_tutari += tutar
-        islenmis_sut_girdileri.append({
-            "tarih": tarih,
-            "litre": litre,
-            "fiyat": fiyat,
-            "toplam_tutar": tutar,
-            "tutar": tutar # Müstahsil şablonu için de ekleyelim
-        })
-    
-    # Tarihe göre sıralayalım
-    islenmis_sut_girdileri.sort(key=lambda x: datetime.strptime(x['tarih'], '%d.%m.%Y'))
-    
-    toplam_yem_borcu = sum(Decimal(str(islem.get('toplam_tutar', '0'))) for islem in yem_response.data)
-    toplam_odeme = sum(Decimal(str(islem.get('tutar', '0'))) for islem in finans_response.data)
-    
-    return {
-        "sut_girdileri": islenmis_sut_girdileri,
-        "yem_islemleri": yem_response.data,
-        "finansal_islemler": finans_response.data,
-        "ozet": { "toplam_sut_tutari": toplam_sut_tutari, "toplam_yem_borcu": toplam_yem_borcu, "toplam_odeme": toplam_odeme }
-    }
-# --- DEĞİŞİKLİK BU FONKSİYONDA BİTİYOR ---
+    for girdi in data.get('sut_girdileri', []):
+        girdi['tutar'] = girdi['toplam_tutar']
+        # Tarihi objeye çevirmeye gerek yok, zaten formatlı geliyor. Sıralama da SQL'de yapıldı.
+
+    return data
 
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/hesap_ozeti_pdf')
 @login_required
@@ -333,10 +312,6 @@ def tedarikci_hesap_ozeti_pdf(tedarikci_id):
         }
         aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
         rapor_basligi = f"{aylar[ay-1]} {yil} Hesap Özeti"
-        def format_tarih_filter(timestamp_str):
-            dt = parse_supabase_timestamp(timestamp_str)
-            return dt.astimezone(turkey_tz).strftime('%d.%m.%Y') if dt else ''
-        current_app.jinja_env.filters['format_tarih'] = format_tarih_filter
         html_out = render_template('tedarikci_hesap_ozeti_pdf.html', rapor_basligi=rapor_basligi, sirket_adi=sirket_adi, tedarikci_adi=tedarikci_res.data['isim'], olusturma_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y %H:%M'), ozet=ozet, sut_girdileri=veri["sut_girdileri"], yem_islemleri=veri["yem_islemleri"], finansal_islemler=veri["finansal_islemler"])
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
         filename = f"{yil}_{ay:02d}_{tedarikci_res.data['isim'].replace(' ', '_')}_hesap_ozeti.pdf"
@@ -363,10 +338,6 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
         net_odenecek = (veri["ozet"]["toplam_sut_tutari"] - stopaj_tutari) - veri["ozet"]["toplam_yem_borcu"] - veri["ozet"]["toplam_odeme"]
         veri["ozet"]["stopaj_tutari"] = stopaj_tutari
         veri["ozet"]["net_odenecek"] = net_odenecek
-        def format_tarih_filter(timestamp_str):
-            dt = parse_supabase_timestamp(timestamp_str)
-            return dt.astimezone(turkey_tz).strftime('%d.%m.%Y') if dt else ''
-        current_app.jinja_env.filters['format_tarih'] = format_tarih_filter
         html_out = render_template('mustahsil_makbuzu_pdf.html', sirket=sirket_res.data, tedarikci=tedarikci_res.data, makbuz_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y'), sut_girdileri=veri["sut_girdileri"], yem_islemleri=veri["yem_islemleri"], finansal_islemler=veri["finansal_islemler"], ozet=veri["ozet"], stopaj_orani=stopaj_orani)
         pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
         filename = f"{yil}_{ay:02d}_{tedarikci_res.data['isim'].replace(' ', '_')}_mustahsil.pdf"

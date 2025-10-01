@@ -84,7 +84,7 @@
             <tbody>
                 {% for islem in yem_islemleri %}
                 <tr>
-                    <td>{{ islem.islem_tarihi | format_tarih }}</td><td>{{ islem.yem_urunleri.yem_adi }}</td>
+                    <td>{{ islem.islem_tarihi }}</td><td>{{ islem.yem_adi }}</td>
                     <td class="text-right">{{ "%.2f"|format(islem.miktar_kg | float) }}</td>
                     <td class="text-right">{{ "%.2f"|format(islem.islem_anindaki_birim_fiyat | float) }} TL</td>
                     <td class="text-right">{{ "%.2f"|format(islem.toplam_tutar | float) }} TL</td>
@@ -101,7 +101,7 @@
              <tbody>
                 {% for islem in finansal_islemler %}
                 <tr>
-                    <td>{{ islem.islem_tarihi | format_tarih }}</td>
+                    <td>{{ islem.islem_tarihi }}</td>
                     <td><span class="islem-tipi-{{ 'odeme' if islem.islem_tipi == 'Ödeme' else 'avans' }}">{{ islem.islem_tipi }}</span></td>
                     <td>{{ islem.aciklama or '-' }}</td>
                     <td class="text-right">{{ "%.2f"|format(islem.tutar | float) }} TL</td>

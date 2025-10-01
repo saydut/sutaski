@@ -1,4 +1,4 @@
--- dosya: supabase/rpc/get_detailed_report_data.sql
+-- supabase/rpc/get_detailed_report_data.sql DOSYASININ YENİ İÇERİĞİ
 
 CREATE OR REPLACE FUNCTION get_detailed_report_data(
     p_sirket_id integer,
@@ -7,14 +7,13 @@ CREATE OR REPLACE FUNCTION get_detailed_report_data(
 )
 RETURNS json
 LANGUAGE plpgsql
-SET search_path = public -- GÜVENLİK İÇİN BU SATIRI EKLEDİK
+SECURITY INVOKER --<<-- BU SATIR BURAYA DA EKLENDİ.
 AS $$
 DECLARE
     daily_summary json;
     supplier_summary json;
     total_entry_count integer;
 BEGIN
-    -- (Fonksiyonun geri kalanı aynı, burada değişiklik yok)
     WITH date_series AS (
         SELECT generate_series(p_start_date::date, p_end_date::date, '1 day'::interval) AS report_date
     ),
@@ -22,7 +21,7 @@ BEGIN
         SELECT
             (taplanma_tarihi AT TIME ZONE 'Europe/Istanbul')::date AS day,
             SUM(litre) AS total_litre
-        FROM sut_girdileri
+        FROM public.sut_girdileri --<<-- "public" BURAYA DA EKLENDİ.
         WHERE sirket_id = p_sirket_id
           AND (taplanma_tarihi AT TIME ZONE 'Europe/Istanbul')::date BETWEEN p_start_date::date AND p_end_date::date
         GROUP BY day
@@ -41,8 +40,8 @@ BEGIN
             t.isim AS name,
             SUM(sg.litre) AS litre,
             COUNT(sg.id)::integer AS "entryCount"
-        FROM sut_girdileri sg
-        JOIN tedarikciler t ON sg.tedarikci_id = t.id
+        FROM public.sut_girdileri sg --<<-- "public" BURAYA DA EKLENDİ.
+        JOIN public.tedarikciler t ON sg.tedarikci_id = t.id --<<-- "public" BURAYA DA EKLENDİ.
         WHERE sg.sirket_id = p_sirket_id
           AND (sg.taplanma_tarihi AT TIME ZONE 'Europe/Istanbul')::date BETWEEN p_start_date::date AND p_end_date::date
         GROUP BY t.isim
@@ -50,7 +49,7 @@ BEGIN
     ) s;
 
     SELECT COUNT(id) INTO total_entry_count
-    FROM sut_girdileri
+    FROM public.sut_girdileri --<<-- "public" BURAYA DA EKLENDİ.
     WHERE sirket_id = p_sirket_id
       AND (taplanma_tarihi AT TIME ZONE 'Europe/Istanbul')::date BETWEEN p_start_date::date AND p_end_date::date;
 
