@@ -1,24 +1,46 @@
 // templates/service-worker.js.jinja
 
-// Önbellek adını Flask tarafından dinamik olarak alıyoruz.
-const CACHE_NAME = 'sut-takip-cache-v{{ cache_version }}'; 
-const APP_SHELL_URL = '/';
-const LOGIN_URL = '/login';
-const OFFLINE_URL = '/offline';
+const CACHE_NAME = 'sut-takip-cache-v{{ cache_version }}';
 
-const ASSETS_TO_CACHE = [
-    LOGIN_URL, OFFLINE_URL,
-    '/static/style.css', '/static/theme.js',
-    '/static/js/utils.js', '/static/js/main.js', '/static/js/login.js', '/static/js/offline.js',
+// Önbelleğe alınacak ana uygulama sayfaları (HTML)
+const APP_SHELL_URLS = [
+    '/',
+    '/login',
+    '/offline',
+    '/tedarikciler',
+    '/raporlar',
+    '/yem/yonetim',
+    '/finans/' // finans blueprint'i bu yola kayıtlı
+];
+
+// Önbelleğe alınacak statik varlıklar (CSS, JS, Resimler, Fontlar vb.)
+const STATIC_ASSETS = [
+    '/static/style.css',
+    '/static/theme.js',
+    '/static/js/utils.js',
+    '/static/js/api.js',
+    '/static/js/store.js',
+    '/static/js/ui.js',
+    '/static/js/main.js',
+    '/static/js/login.js',
+    '/static/js/offline.js',
+    '/static/js/tedarikciler.js',
+    '/static/js/tedarikci_detay.js',
+    '/static/js/yem_yonetimi.js',
+    '/static/js/finans_yonetimi.js',
+    '/static/js/reports.js',
+    '/static/js/charts.js',
+    '/static/js/chart-manager.js',
     '/static/images/icon.png',
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css',
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
-    'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js', 
+    'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/tr.js',
     'https://unpkg.com/dexie@3/dist/dexie.js',
+    'https://cdn.jsdelivr.net/npm/chart.js',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?v=1.11.3'
 ];
@@ -27,20 +49,25 @@ self.addEventListener('install', event => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
-      console.log('Cache açıldı ve temel varlıklar önbelleğe alınıyor.');
-      
-      const appShellRequest = new Request(APP_SHELL_URL, {
-        headers: { 'X-Cache-Me': 'true' }
-      });
-      try {
-        await cache.add(appShellRequest);
-      } catch (error) {
-        console.error('Uygulama kabuğu önbelleğe alınamadı:', error);
-      }
+      console.log('Cache açıldı ve varlıklar önbelleğe alınıyor.');
 
-      await cache.addAll(ASSETS_TO_CACHE);
+      // 1. Statik varlıkları önbelleğe al
+      await cache.addAll(STATIC_ASSETS);
+
+      // 2. Uygulama kabuğu sayfalarını özel başlıkla isteyerek önbelleğe al
+      const requests = APP_SHELL_URLS.map(url => new Request(url, {
+        headers: { 'X-Cache-Me': 'true' }
+      }));
+
+      // Tek tek ekleyerek bir hata olursa diğerlerinin eklenmesini sağlıyoruz
+      for (const request of requests) {
+        try {
+          await cache.add(request);
+        } catch (error) {
+          console.error(`'${request.url}' sayfası önbelleğe alınamadı:`, error);
+        }
+      }
     })()
-    .catch(err => console.error('Önbelleğe alma başarısız oldu:', err))
   );
   self.skipWaiting();
 });
@@ -65,6 +92,7 @@ self.addEventListener('fetch', event => {
     if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
         return;
     }
+
     if (event.request.mode === 'navigate') {
         event.respondWith(
             (async () => {
@@ -72,11 +100,11 @@ self.addEventListener('fetch', event => {
                     const networkResponse = await fetch(event.request);
                     return networkResponse;
                 } catch (error) {
-                    console.log('Ağ hatası, önbellekten sunuluyor.', error);
+                    console.log(`Ağ hatası: '${event.request.url}' için önbellekten sunuluyor.`);
                     const cache = await caches.open(CACHE_NAME);
-                    
-                    const cachedResponse = await cache.match(event.request);
-                    return cachedResponse || await cache.match(APP_SHELL_URL) || await cache.match(OFFLINE_URL);
+                    const cachedResponse = await cache.match(event.request.url);
+                    // Eğer istenen sayfa önbellekte varsa onu, yoksa genel offline sayfasını ver
+                    return cachedResponse || await cache.match('/offline');
                 }
             })()
         );

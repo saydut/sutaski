@@ -87,6 +87,16 @@ async function raporOlustur() {
     document.getElementById('tedarikci-dokum-tablosu').innerHTML = '';
 
     if (!baslangic || !bitis) return;
+    
+    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
+    if (!navigator.onLine) {
+        mesajElementi.innerHTML = '<p class="text-warning">Rapor oluşturmak için internet bağlantısı gereklidir.</p>';
+        mesajElementi.style.display = 'block';
+        if (detayliChart) detayliChart.destroy();
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        return;
+    }
+    // --- KONTROL SONU ---
 
     mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Rapor oluşturuluyor...</p>';
     mesajElementi.style.display = 'block';
@@ -115,7 +125,6 @@ async function raporOlustur() {
         ozetVerileriniDoldur(veri.summaryData);
         tedarikciTablosunuDoldur(veri.supplierBreakdown);
         
-        // DEĞİŞİKLİK: Chart'ı oluşturduktan sonra yöneticiye kaydet
         detayliChart = new Chart(ctx, {
             type: 'line',
             data: {

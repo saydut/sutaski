@@ -24,12 +24,18 @@ def anasayfa():
 @login_required
 @lisans_kontrolu
 def raporlar_page():
+    # BU BLOK EKLENDİ
+    if request.headers.get('X-Cache-Me') == 'true':
+        return render_template('raporlar.html', session={})
     return render_template('raporlar.html')
 
 @main_bp.route('/tedarikciler')
 @login_required
 @lisans_kontrolu
 def tedarikciler_sayfasi():
+    # BU BLOK EKLENDİ
+    if request.headers.get('X-Cache-Me') == 'true':
+        return render_template('tedarikciler.html', session={})
     return render_template('tedarikciler.html')
 
 @main_bp.route('/tedarikci/<int:tedarikci_id>')

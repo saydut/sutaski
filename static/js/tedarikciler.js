@@ -1,14 +1,17 @@
-// static/js/tedarikciler.js (SUNUCU TARAFLI SAYFALAMA, ARAMA VE SIRALAMA)
+// static/js/tedarikciler.js (ÇEVRİMDIŞI MOD İÇİN YENİDEN YAPILANDIRILDI)
 
 let tedarikciModal, silmeOnayModal;
 let mevcutSayfa = 1;
-const KAYIT_SAYISI = 15; // Backend'deki limit ile aynı olmalı
+const KAYIT_SAYISI = 15;
 
-// SIRALAMA VE ARAMA DURUMUNU TUTACAK DEĞİŞKENLER
+// Sıralama ve arama durumunu tutacak değişkenler
 let mevcutSiralamaSutunu = 'isim';
 let mevcutSiralamaYonu = 'asc';
 let mevcutAramaTerimi = '';
 let mevcutGorunum = 'tablo';
+
+// Tüm veriyi bellekte tutacağımız dizi
+let tumTedarikciler = [];
 
 window.onload = async () => {
     tedarikciModal = new bootstrap.Modal(document.getElementById('tedarikciModal'));
@@ -18,14 +21,10 @@ window.onload = async () => {
     gorunumuAyarla(mevcutGorunum);
 
     // Olay dinleyicilerini ayarla
-    document.getElementById('arama-input').addEventListener('keyup', (event) => {
-        mevcutAramaTerimi = event.target.value;
-        // Kullanıcı yazmayı bıraktıktan sonra arama yapmak için küçük bir gecikme
-        setTimeout(() => {
-            if (mevcutAramaTerimi === document.getElementById('arama-input').value) {
-                tedarikcileriYukle(1); // Arama yapıldığında her zaman ilk sayfaya git
-            }
-        }, 300);
+    document.getElementById('arama-input').addEventListener('input', (event) => {
+        mevcutAramaTerimi = event.target.value.toLowerCase();
+        // Arama yapıldığında her zaman ilk sayfaya git ve verileri yeniden işle
+        verileriIsleVeGoster(1);
     });
 
     document.querySelectorAll('.sortable').forEach(header => {
@@ -37,54 +36,84 @@ window.onload = async () => {
                 mevcutSiralamaSutunu = sutun;
                 mevcutSiralamaYonu = 'asc';
             }
-            tedarikcileriYukle(1); // Sıralama değiştiğinde ilk sayfaya git
+            // Sıralama değiştiğinde ilk sayfaya git ve verileri yeniden işle
+            verileriIsleVeGoster(1);
         });
     });
 
-    // Sayfa ilk yüklendiğinde verileri çek
-    await tedarikcileriYukle(1);
+    // Sayfa ilk yüklendiğinde verileri çek ve göster
+    await verileriYukle();
 };
 
-// API'den verileri çeken ana fonksiyon
-async function tedarikcileriYukle(sayfa = 1) {
-    mevcutSayfa = sayfa;
+// Veriyi YALNIZCA store üzerinden (online/offline fark etmeksizin) çeken fonksiyon
+async function verileriYukle() {
     const tbody = document.getElementById('tedarikciler-tablosu');
     const kartListesi = document.getElementById('tedarikciler-kart-listesi');
-    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
     kartListesi.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
-    veriYokMesaji.style.display = 'none';
-
-    // Sunucuya gönderilecek URL'i oluştur
-    const url = `/api/tedarikciler_liste?sayfa=${sayfa}&arama=${mevcutAramaTerimi}&sirala=${mevcutSiralamaSutunu}&yon=${mevcutSiralamaYonu}`;
 
     try {
-        const response = await fetch(url);
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Veriler yüklenemedi');
-        
-        // Gelen veriyi ekrana bas
-        verileriGoster(data.tedarikciler);
-        
-        // Sayfalama kontrollerini oluştur
-        ui.sayfalamaNavOlustur(
-            'tedarikci-sayfalama',
-            data.toplam_kayit,
-            sayfa,
-            KAYIT_SAYISI,
-            (yeniSayfa) => tedarikcileriYukle(yeniSayfa) // Sayfa değiştirme callback'i
-        );
-        basliklariGuncelle();
+        // YENİ MANTIK: Veriyi store'dan istiyoruz. O zaten online/offline durumuna göre en doğrusunu getirecek.
+        tumTedarikciler = await store.getTedarikciler();
+
+        // Toplam süt miktarını hesaplamak için ek bir işlem yapmamız gerekebilir.
+        // Şimdilik bu kısmı basitleştiriyoruz, çünkü offline DB'de bu bilgi yok.
+        // Bu yüzden sıralama sadece isme göre çalışacak.
+        document.querySelector('[data-sort="toplam_litre"]').style.display = 'none'; // Toplam süt kolonunu gizle
+        document.querySelector('thead th:nth-child(3)').style.display = 'none';
+
+
+        verileriIsleVeGoster(1); // Gelen tam listeyi işle ve ilk sayfayı göster
 
     } catch (error) {
         console.error("Hata:", error);
-        tbody.innerHTML = '';
-        kartListesi.innerHTML = '';
-        veriYokMesaji.innerText = error.message;
-        veriYokMesaji.style.display = 'block';
+        gosterMesaj("Tedarikçi verileri yüklenemedi.", "danger");
     }
 }
+
+// Gelen tam listeyi arama, sıralama ve sayfalama yaparak işleyen fonksiyon
+function verileriIsleVeGoster(sayfa = 1) {
+    mevcutSayfa = sayfa;
+    let islenmisVeri = [...tumTedarikciler];
+
+    // 1. Arama Filtresi Uygula
+    if (mevcutAramaTerimi) {
+        islenmisVeri = islenmisVeri.filter(supplier =>
+            supplier.isim.toLowerCase().includes(mevcutAramaTerimi) ||
+            (supplier.telefon_no && supplier.telefon_no.includes(mevcutAramaTerimi))
+        );
+    }
+
+    // 2. Sıralama Uygula (şimdilik sadece isme göre)
+    islenmisVeri.sort((a, b) => {
+        let valA = a.isim.toLocaleLowerCase('tr');
+        let valB = b.isim.toLocaleLowerCase('tr');
+        if (valA < valB) return mevcutSiralamaYonu === 'asc' ? -1 : 1;
+        if (valA > valB) return mevcutSiralamaYonu === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    // 3. Sayfalama Uygula
+    const toplamKayit = islenmisVeri.length;
+    const baslangic = (sayfa - 1) * KAYIT_SAYISI;
+    const bitis = baslangic + KAYIT_SAYISI;
+    const sayfaVerisi = islenmisVeri.slice(baslangic, bitis);
+
+    // 4. Ekrana Bas
+    verileriGoster(sayfaVerisi);
+
+    // 5. Sayfalama Navigasyonunu Oluştur
+    ui.sayfalamaNavOlustur(
+        'tedarikci-sayfalama',
+        toplamKayit,
+        sayfa,
+        KAYIT_SAYISI,
+        (yeniSayfa) => verileriIsleVeGoster(yeniSayfa) // Sayfa değiştirme callback'i
+    );
+
+    basliklariGuncelle();
+}
+
 
 function verileriGoster(suppliers) {
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
@@ -101,7 +130,7 @@ function renderTable(suppliers) {
             <tr>
                 <td><strong>${supplier.isim}</strong></td>
                 <td>${supplier.telefon_no || '-'}</td>
-                <td class="text-end">${(supplier.toplam_litre || 0).toFixed(2)} L</td>
+                <td style="display: none;"></td> 
                 <td class="text-center">
                     <a href="/tedarikci/${supplier.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
                     <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="tedarikciDuzenleAc(${supplier.id})"><i class="bi bi-pencil"></i></button>
@@ -121,7 +150,6 @@ function renderCards(suppliers) {
                     <div class="supplier-card-header"><h5>${supplier.isim}</h5></div>
                     <div class="supplier-card-body">
                         <p class="mb-2"><i class="bi bi-telephone-fill me-2"></i>${supplier.telefon_no || 'Belirtilmemiş'}</p>
-                        <p class="mb-0"><i class="bi bi-droplet-half me-2"></i>Toplam: <strong>${(supplier.toplam_litre || 0).toFixed(2)} L</strong></p>
                     </div>
                     <div class="supplier-card-footer">
                         <a href="/tedarikci/${supplier.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
@@ -144,6 +172,13 @@ async function tedarikciKaydet() {
         adres: document.getElementById('tedarikci-adres-input').value.trim()
     };
     if (!veri.isim) { gosterMesaj("Tedarikçi ismi zorunludur.", "warning"); return; }
+    
+    // Çevrimdışı kayıt desteklenmediği için kontrol ekle
+    if (!navigator.onLine) {
+        gosterMesaj("Yeni tedarikçi eklemek için internet bağlantısı gereklidir.", "danger");
+        return;
+    }
+
     kaydetButton.disabled = true;
     kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
     const url = id ? `/api/tedarikci_duzenle/${id}` : '/api/tedarikci_ekle';
@@ -154,19 +189,7 @@ async function tedarikciKaydet() {
         if (response.ok) {
             gosterMesaj(result.message, "success");
             tedarikciModal.hide();
-
-        // --- AKILLI ÖNBELLEK GÜNCELLEMESİ ---
-            const tedarikci = result.tedarikci;
-            if (id) { // Eğer id varsa bu bir düzenlemedir.
-                store.updateTedarikci(tedarikci);
-            } else { // Yoksa yeni eklemedir.
-                store.addTedarikci(tedarikci);
-            }
-        // --- GÜNCELLEME SONU ---
-
-        // Tedarikçi listesi sayfasının kendi görünümünü sunucudan güncelle
-            await tedarikcileriYukle(id ? mevcutSayfa : 1); 
-
+            await verileriYukle();
         } else {
             gosterMesaj(result.error || "Bir hata oluştu.", "danger");
         }
@@ -180,19 +203,19 @@ async function tedarikciKaydet() {
 
 async function tedarikciSil() {
     const id = document.getElementById('silinecek-tedarikci-id').value;
+
+    if (!navigator.onLine) {
+        gosterMesaj("Tedarikçi silmek için internet bağlantısı gereklidir.", "danger");
+        return;
+    }
+
     try {
         const response = await fetch(`/api/tedarikci_sil/${id}`, { method: 'DELETE' });
         const result = await response.json();
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             silmeOnayModal.hide();
-
-        // --- AKILLI ÖNBELLEK GÜNCELLEMESİ ---
-            store.removeTedarikci(parseInt(id)); // id string olabilir, sayıya çevirelim
-        // --- GÜNCELLEME SONU ---
-
-        // Tedarikçi listesi sayfasının kendi görünümünü sunucudan güncelle
-            await tedarikcileriYukle(1); 
+            await verileriYukle(); 
         } else {
             gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
         }
@@ -201,12 +224,13 @@ async function tedarikciSil() {
     }
 }
 
+// Diğer yardımcı fonksiyonlar aynı kalabilir...
 function gorunumuDegistir(yeniGorunum) {
     if (mevcutGorunum === yeniGorunum) return;
     mevcutGorunum = yeniGorunum;
     localStorage.setItem('tedarikciGorunum', yeniGorunum);
     gorunumuAyarla(yeniGorunum);
-    tedarikcileriYukle(mevcutSayfa);
+    verileriIsleVeGoster(mevcutSayfa);
 }
 
 function gorunumuAyarla(aktifGorunum) {
@@ -234,17 +258,8 @@ function yeniTedarikciAc() {
 }
 
 async function tedarikciDuzenleAc(id) {
-    gosterMesaj("Tedarikçi bilgileri getiriliyor...", "info", 1500);
-    try {
-        // YENİ: Sadece ilgili tedarikçiyi çeken API'yi çağır
-        const response = await fetch(`/api/tedarikci/${id}`);
-        const supplier = await response.json();
-
-        if (!response.ok) {
-            throw new Error(supplier.error || "Tedarikçi bilgileri alınamadı.");
-        }
-
-        // Gelen tekil veriyle modal'ı doldur
+    const supplier = tumTedarikciler.find(t => t.id === id);
+    if(supplier){
         document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
         document.getElementById('edit-tedarikci-id').value = supplier.id;
         document.getElementById('tedarikci-isim-input').value = supplier.isim;
@@ -252,8 +267,8 @@ async function tedarikciDuzenleAc(id) {
         document.getElementById('tedarikci-tel-input').value = supplier.telefon_no || '';
         document.getElementById('tedarikci-adres-input').value = supplier.adres || '';
         tedarikciModal.show();
-    } catch (error) {
-        gosterMesaj(error.message, "danger");
+    } else {
+        gosterMesaj("Tedarikçi detayı bulunamadı.", "danger");
     }
 }
 

@@ -45,6 +45,21 @@ async function tedarikcileriDoldur() {
 
 async function finansalIslemleriYukle(sayfa = 1) {
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+    const tabloBody = document.getElementById('finansal-islemler-tablosu');
+    const kartListesi = document.getElementById('finansal-islemler-kart-listesi');
+    const sayfalamaNav = document.getElementById('finans-sayfalama');
+
+    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
+    if (!navigator.onLine) {
+        veriYokMesaji.innerHTML = '<p class="text-warning">Finansal işlemleri listelemek için internet bağlantısı gereklidir.</p>';
+        veriYokMesaji.style.display = 'block';
+        tabloBody.innerHTML = '';
+        kartListesi.innerHTML = '';
+        sayfalamaNav.innerHTML = '';
+        return;
+    }
+    // --- KONTROL SONU ---
+
     veriYokMesaji.innerHTML = `<div class="spinner-border spinner-border-sm"></div> Yükleniyor...`;
     veriYokMesaji.style.display = 'block';
 

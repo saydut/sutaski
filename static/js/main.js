@@ -192,6 +192,11 @@ function filtreyiTemizle() {
 /**
  * Yeni süt girdisi ekleme formunu yönetir.
  */
+/**
+ * Yeni süt girdisi ekleme formunu yönetir. (HATA YÖNETİMİ DÜZELTİLDİ)
+ * İnternet varsa, kullanıcıyı bekletmemek için "İyimser Arayüz Güncellemesi" yapar.
+ * İnternet yoksa, veriyi çevrimdışı kaydeder.
+ */
 async function sutGirdisiEkle() {
     // 1. Formdan verileri al ve kontrol et
     const { tedarikciId, litre, fiyat } = ui.getGirdiFormVerisi();
@@ -206,7 +211,7 @@ async function sutGirdisiEkle() {
         fiyat: parseFloat(fiyat)
     };
 
-    // --- ÇEVRİMDIŞI MANTIĞI (Eğer internet yoksa eskisi gibi çalışır) ---
+    // --- ÇEVRİMDIŞI MANTIĞI ---
     if (!navigator.onLine) {
         ui.toggleGirdiKaydetButton(true);
         try {
@@ -216,7 +221,7 @@ async function sutGirdisiEkle() {
             const basarili = await kaydetCevrimdisi(yeniGirdi);
             if (basarili) {
                 ui.resetGirdiFormu();
-                await girdileriGoster(); // Çevrimdışı listeyi anında yenile
+                await girdileriGoster();
             }
         } finally {
             ui.toggleGirdiKaydetButton(false);
@@ -224,19 +229,16 @@ async function sutGirdisiEkle() {
         return;
     }
 
-    // --- İYİMSER (OPTIMISTIC) GÜNCELLEME MANTIĞI (Eğer internet varsa) ---
-    
-    // 2. Arayüze eklenecek geçici eleman için bir kimlik ve veri hazırla
+    // --- İYİMSER (OPTIMISTIC) GÜNCELLEME MANTIĞI ---
+    const listeElementi = document.getElementById('girdiler-listesi');
     const geciciId = `gecici-${Date.now()}`;
     const tedarikciAdi = ui.tedarikciSecici.options[tedarikciId].text;
     const kullaniciAdi = JSON.parse(localStorage.getItem('offlineUser'))?.kullanici_adi || 'Siz';
 
-    // 3. Geçici HTML elemanını oluştur ve listenin en başına ekle
-    const listeElementi = document.getElementById('girdiler-listesi');
     const geciciElement = document.createElement('div');
     geciciElement.className = 'list-group-item';
     geciciElement.id = geciciId;
-    geciciElement.style.opacity = '0.6'; // Geçici olduğunu belirtmek için soluk göster
+    geciciElement.style.opacity = '0.6';
     geciciElement.innerHTML = `
         <div class="d-flex w-100 justify-content-between">
             <h5 class="mb-1 girdi-baslik">${tedarikciAdi} - ${litre} Litre <span class="badge bg-info text-dark ms-2"><i class="bi bi-arrow-repeat"></i> Kaydediliyor...</span></h5>
@@ -244,44 +246,35 @@ async function sutGirdisiEkle() {
         <p class="mb-1 girdi-detay">Toplayan: ${kullaniciAdi} | Saat: ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</p>
     `;
     
-    // Eğer "Veri bulunamadı" mesajı varsa onu gizle
     const ilkEleman = listeElementi.querySelector("div:not([id])");
     if (ilkEleman && listeElementi.children.length === 1) {
         ilkEleman.style.display = 'none';
     }
-
     listeElementi.prepend(geciciElement);
 
-    // 4. Formu hemen temizle ki kullanıcı yeni veri girebilsin
-    const orjinalFormVerisi = { tedarikciId, litre, fiyat }; // Hata olursa geri yüklemek için sakla
+    const orjinalFormVerisi = { tedarikciId, litre, fiyat };
     ui.resetGirdiFormu();
 
-    // 5. Arka planda sunucuya isteği gönder
     try {
         const result = await api.postSutGirdisi(yeniGirdi);
-        
-        // 6. İSTEK BAŞARILI OLURSA:
-        // Sunucudan gelen en güncel veriyle listeyi ve özeti sessizce yenile.
-        // Bu işlem, geçici elemanı silip yerine sunucudan gelen gerçek veriyi koyacak.
         gosterMesaj("Süt girdisi başarıyla kaydedildi.", "success");
         const bugun = utils.getLocalDateString();
         ui.updateOzetPanels(result.yeni_ozet, bugun);
-        await girdileriGoster(1, bugun); // Listenin ilk sayfasını yeniden yükle
+        await girdileriGoster(1, bugun);
 
     } catch (error) {
-        // 7. HATA OLURSA:
-        gosterMesaj(`Kaydedilemedi: ${error.message}`, "danger");
+        // --- DEĞİŞİKLİK BURADA ---
+        // Teknik hatayı konsola yazdır, kullanıcıya ise anlaşılır bir mesaj göster.
+        console.error("İyimser ekleme başarısız oldu:", error);
+        gosterMesaj("Kayıt başarısız. İnternet bağlantınızı kontrol edin.", "danger");
         
-        // Eklediğimiz geçici elemanı listeden kaldır
         const silinecekElement = document.getElementById(geciciId);
         if (silinecekElement) silinecekElement.remove();
 
-        // Kullanıcının girdiği verileri kaybetmemesi için formu eski haline getir
         ui.tedarikciSecici.setValue(orjinalFormVerisi.tedarikciId);
         document.getElementById('litre-input').value = orjinalFormVerisi.litre;
         document.getElementById('fiyat-input').value = orjinalFormVerisi.fiyat;
         
-        // "Veri bulunamadı" mesajını geri getir (eğer liste boşaldıysa)
         if(listeElementi.children.length === 1 && ilkEleman) {
             ilkEleman.style.display = 'block';
         }
@@ -325,40 +318,35 @@ async function sutGirdisiSil() {
     const girdiId = ui.getSilinecekGirdiId();
     ui.silmeOnayModal.hide();
 
-    // 1. Öğeyi arayüzden anında kaldır/gizle
     const silinecekElement = document.getElementById(`girdi-${girdiId}`);
     if (!silinecekElement) return;
 
-    // Orijinal veriyi ve pozisyonunu sakla ki hata olursa geri getirebilelim
     const parent = silinecekElement.parentNode;
     const nextSibling = silinecekElement.nextSibling;
     silinecekElement.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
     silinecekElement.style.opacity = '0';
     silinecekElement.style.transform = 'translateX(-50px)';
     
-    // Animasyon bittikten sonra DOM'dan kaldır
     setTimeout(() => {
         if (silinecekElement.parentNode) {
             parent.removeChild(silinecekElement);
         }
     }, 400);
 
-    // 2. Arka planda API isteğini gönder
     try {
         const result = await api.deleteSutGirdisi(girdiId);
-        
-        // 3. BAŞARILI OLURSA: Sadece özet panelini sessizce güncelle
         gosterMesaj(result.message, 'success');
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
-        // Listeyi yeniden çekmeye gerek yok!
 
     } catch (error) {
-        // 4. HATA OLURSA: Öğeyi eski yerine geri ekle ve hata göster
-        gosterMesaj(error.message || 'Silme işlemi başarısız, girdi geri yüklendi.', 'danger');
+        // --- DEĞİŞİKLİK BURADA ---
+        // Teknik hatayı konsola yazdır, kullanıcıya ise anlaşılır bir mesaj göster.
+        console.error("İyimser silme başarısız oldu:", error);
+        gosterMesaj('Silme işlemi başarısız, girdi geri yüklendi.', 'danger');
+
         silinecekElement.style.opacity = '1';
         silinecekElement.style.transform = 'translateX(0)';
-        // DOM'dan kaldırıldıysa, eski yerine geri ekle
         if (!silinecekElement.parentNode) {
             parent.insertBefore(silinecekElement, nextSibling);
         }

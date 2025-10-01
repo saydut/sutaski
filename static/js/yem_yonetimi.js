@@ -53,6 +53,17 @@ async function yemListesiniGoster(sayfa = 1) {
     const tbody = document.getElementById('yem-urunleri-tablosu');
     const kartListesi = document.getElementById('yem-urunleri-kart-listesi');
 
+    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
+    if (!navigator.onLine) {
+        veriYokMesaji.innerHTML = '<p class="text-warning">Yem ürünlerini listelemek için internet bağlantısı gereklidir.</p>';
+        veriYokMesaji.style.display = 'block';
+        tbody.innerHTML = '';
+        kartListesi.innerHTML = '';
+        document.getElementById('yem-urunleri-sayfalama').innerHTML = ''; // Sayfalamayı temizle
+        return;
+    }
+    // --- KONTROL SONU ---
+
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
     kartListesi.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
     veriYokMesaji.style.display = 'none';
@@ -388,6 +399,15 @@ async function yemUrunuSil() {
 async function yemIslemleriniGoster(sayfa = 1) {
     mevcutIslemSayfasi = sayfa;
     const tbody = document.getElementById('yem-islemleri-listesi');
+
+    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
+    if (!navigator.onLine) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3 text-warning">Son işlemleri görmek için internet bağlantısı gereklidir.</td></tr>`;
+        document.getElementById('yem-islemleri-sayfalama').innerHTML = ''; // Sayfalamayı temizle
+        return;
+    }
+    // --- KONTROL SONU ---
+    
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3"><div class="spinner-border spinner-border-sm"></div></td></tr>`;
 
     try {

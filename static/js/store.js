@@ -1,112 +1,96 @@
 // ====================================================================================
 // MERKEZİ VERİ YÖNETİMİ (store.js)
 // Bu dosya, uygulama genelinde paylaşılan verileri (state) yönetir.
-// Verileri bir kez API'den çeker ve ihtiyaç duyulduğunda tekrar istek atmadan
-// önbellekten (cache) sunar. Bu, API trafiğini azaltır ve performansı artırır.
+// Çevrimiçi ise veriyi API'den çeker ve yerel veritabanını (IndexedDB) günceller.
+// Çevrimdışı ise veriyi yerel veritabanından okur.
 // ====================================================================================
 
 const store = {
-    // Uygulama verilerini saklayacağımız alanlar
+    // Uygulama verilerini saklayacağımız alanlar (hızlı erişim için bellek önbelleği)
     tedarikciler: [],
     yemUrunleri: [],
 
     /**
      * Tedarikçi listesini getirir.
-     * Eğer liste daha önce yüklenmemişse API'den çeker, yüklendiyse önbellekten döndürür.
+     * Online ise API'den çeker ve yerel veritabanını günceller.
+     * Offline ise yerel veritabanından çeker.
      * @returns {Promise<Array>} Tedarikçilerin listesini içeren bir Promise döndürür.
      */
     async getTedarikciler() {
-        // Eğer tedarikçiler listesi boşsa (yani daha önce çekilmemişse)
-        if (this.tedarikciler.length === 0) {
-            console.log('Tedarikçiler API\'den çekiliyor...');
-            // api.js üzerinden veriyi çek ve store'daki listeye kaydet
-            this.tedarikciler = await api.fetchTedarikciler();
+        if (navigator.onLine) {
+            console.log('Çevrimiçi mod: Tedarikçiler sunucudan çekiliyor ve yerel DB güncelleniyor...');
+            // `syncTedarikciler` fonksiyonu hem API'den çeker hem de IndexedDB'ye yazar.
+            this.tedarikciler = await syncTedarikciler();
         } else {
-            console.log('Tedarikçiler önbellekten (store) getirildi.');
+            console.log('Çevrimdışı mod: Tedarikçiler yerel veritabanından (IndexedDB) okunuyor...');
+            this.tedarikciler = await getOfflineTedarikciler();
         }
-        // Her durumda dolu listeyi döndür
+        
+        // Eğer her iki denemede de liste boşsa ve bellekte hala eski veri varsa onu kullan
+        if (this.tedarikciler.length === 0 && store.tedarikciler.length > 0) {
+            return store.tedarikciler;
+        }
+
         return this.tedarikciler;
     },
 
     /**
-     * Tedarikçi listesi önbelleğini temizler.
-     * Bir tedarikçi eklendiğinde, silindiğinde veya güncellendiğinde bu fonksiyon çağrılır.
-     * Böylece bir sonraki getTedarikciler() çağrısı güncel veriyi API'den çeker.
+     * Yem ürünleri listesini getirir.
+     * Online ise API'den çeker ve yerel veritabanını günceller.
+     * Offline ise yerel veritabanından çeker.
+     * @returns {Promise<Array>} Yem ürünlerinin listesini içeren bir Promise döndürür.
      */
-    invalidateTedarikciler() {
-        console.log('Tedarikçi önbelleği temizlendi.');
-        this.tedarikciler = [];
-    },
+    async getYemUrunleri() {
+        if (navigator.onLine) {
+            console.log('Çevrimiçi mod: Yem ürünleri sunucudan çekiliyor ve yerel DB güncelleniyor...');
+            this.yemUrunleri = await syncYemUrunleri();
+        } else {
+            console.log('Çevrimdışı mod: Yem ürünleri yerel veritabanından (IndexedDB) okunuyor...');
+            this.yemUrunleri = await getOfflineYemUrunleri();
+        }
 
-    /**
-     * Önbelleğe yeni bir tedarikçi ekler ve listeyi alfabetik olarak sıralar.
-     * @param {object} tedarikci - Eklenecek tedarikçi objesi {id, isim}.
-     */
+        if (this.yemUrunleri.length === 0 && store.yemUrunleri.length > 0) {
+            return store.yemUrunleri;
+        }
+        
+        return this.yemUrunleri;
+    },
+    
+    // invalidate, add, update, remove fonksiyonları artık doğrudan veritabanını
+    // güncellemek yerine bir sonraki yüklemede verinin yeniden çekilmesini tetiklemelidir.
+    // Şimdilik en basit yöntem, listeyi yeniden yüklemektir.
+    // Bu fonksiyonlar, online iken bir ekleme/silme/güncelleme yapıldığında çağrılır.
+    
     addTedarikci(tedarikci) {
-        // Sadece önbellek zaten doluysa (yani daha önce en az bir kez yüklendiyse) işlem yap
         if (this.tedarikciler.length > 0) {
-            console.log('Yeni tedarikçi önbelleğe ekleniyor:', tedarikci.isim);
             this.tedarikciler.push({id: tedarikci.id, isim: tedarikci.isim});
-            // Ekledikten sonra listeyi yeniden sırala ki dropdown'lar düzgün görünsün
             this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim));
+            // Yerel veritabanını da güncelle
+            db.tedarikciler.put(tedarikci);
         }
     },
 
-    /**
-     * Önbellekteki bir tedarikçinin bilgilerini günceller.
-     * @param {object} tedarikci - Güncellenmiş tedarikçi objesi {id, isim}.
-     */
     updateTedarikci(tedarikci) {
         if (this.tedarikciler.length > 0) {
             const index = this.tedarikciler.findIndex(t => t.id === tedarikci.id);
             if (index !== -1) {
-                console.log('Tedarikçi önbellekte güncelleniyor:', tedarikci.isim);
                 this.tedarikciler[index].isim = tedarikci.isim;
                 this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim));
+                db.tedarikciler.put(tedarikci);
             }
         }
     },
 
-    /**
-     * Önbellekten bir tedarikçiyi ID'sine göre siler.
-     * @param {number} id - Silinecek tedarikçinin ID'si.
-     */
     removeTedarikci(id) {
         if (this.tedarikciler.length > 0) {
-            const initialLength = this.tedarikciler.length;
             this.tedarikciler = this.tedarikciler.filter(t => t.id !== id);
-            if(this.tedarikciler.length < initialLength){
-                console.log(`Tedarikçi (ID: ${id}) önbellekten silindi.`);
-            }
+            db.tedarikciler.delete(id);
         }
-    },
-
-    /**
-     * Yem ürünleri listesini getirir.
-     * Tedarikçilerle aynı mantıkta çalışır: "önce kontrol et, yoksa çek".
-     * @returns {Promise<Array>} Yem ürünlerinin listesini içeren bir Promise döndürür.
-     */
-    async getYemUrunleri() {
-        if (this.yemUrunleri.length === 0) {
-            console.log('Yem ürünleri API\'den çekiliyor...');
-            this.yemUrunleri = await api.fetchYemUrunleri();
-        } else {
-            console.log('Yem ürünleri önbellekten (store) getirildi.');
-        }
-        return this.yemUrunleri;
-    },
-    
-    /**
-     * Yem ürünleri önbelleğini temizler.
-     */
-    invalidateYemUrunleri() {
-        console.log('Yem ürünleri önbelleği temizlendi.');
-        this.yemUrunleri = [];
     }
 };
 
-// api.js içinde yem ürünlerini çekecek yeni bir fonksiyona ihtiyacımız var.
-// Onu da buraya ekleyelim ki her şey merkezi olsun.
+// api.js'in bu fonksiyonlara erişebilmesi için global'de tanımlıyoruz.
 api.fetchYemUrunleri = function() {
-    return this.request('/yem/api/urunler');
+    // Bu endpoint tüm yemleri sayfalama olmadan liste olarak döner
+    return this.request('/yem/api/urunler/liste');
 };

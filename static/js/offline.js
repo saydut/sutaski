@@ -5,9 +5,19 @@ const db = new Dexie('sutaski_offline_db');
 
 // Veritabanı şemasını tanımlıyoruz.
 // 'sut_girdileri' adında bir tablomuz olacak ve her kaydın otomatik artan bir 'id'si olacak.
-db.version(1).stores({
-    sut_girdileri: '++id, tedarikci_id, litre, fiyat, eklendigi_zaman'
+// YENİ: tedarikciler ve yem_urunleri tablolarını ekliyoruz. 'id' alanına göre kayıt tutacağız.
+db.version(2).stores({
+    sut_girdileri: '++id, tedarikci_id, litre, fiyat, eklendigi_zaman',
+    tedarikciler: 'id, isim',
+    yem_urunleri: 'id, yem_adi, stok_miktari_kg, birim_fiyat'
+}).upgrade(tx => {
+    // Versiyon 1'den 2'ye geçerken eski veriyi korumak için bu blok gerekli olabilir.
+    // Şimdilik sadece yeni tabloları oluşturuyoruz.
+    console.log("Veritabanı 2. versiyona yükseltildi.");
 });
+
+
+// --- SÜT GİRDİSİ İŞLEMLERİ ---
 
 /**
  * Yeni bir süt girdisini, internet yokken yerel veritabanına kaydeder.
@@ -38,12 +48,23 @@ async function bekleyenGirdileriGetir() {
     return await db.sut_girdileri.toArray();
 }
 
+
+// --- VERİ SENKRONİZASYON VE ÖNBELLEKLEME FONKSİYONLARI ---
+
 /**
  * İnternet bağlantısı geldiğinde, yerelde bekleyen tüm girdileri sunucuya göndermeyi dener.
  */
 async function senkronizeEt() {
     // Sadece çevrimiçi olduğumuzda bu fonksiyonu çalıştır.
     if (!navigator.onLine) return;
+
+    // YENİ: Tedarikçi ve yem listelerini de sunucuyla senkronize et.
+    // Bu, internet varken listelerin en güncel halinin veritabanına yazılmasını sağlar.
+    Promise.all([
+        syncTedarikciler(),
+        syncYemUrunleri()
+    ]);
+
 
     const bekleyenGirdiler = await bekleyenGirdileriGetir();
     if (bekleyenGirdiler.length === 0) {
@@ -91,6 +112,73 @@ async function senkronizeEt() {
     }
      gosterMesaj('Senkronizasyon tamamlandı.', 'success');
 }
+
+
+// --- YENİ FONKSİYONLAR ---
+
+/**
+ * API'den gelen tedarikçi listesini yerel veritabanına kaydeder.
+ * Önce eski listeyi siler, sonra yenisini ekler.
+ * @param {Array} tedarikciler - API'den gelen tedarikçi listesi.
+ */
+async function syncTedarikciler() {
+    try {
+        console.log('Tedarikçi listesi sunucudan çekilip yerel veritabanına yazılıyor...');
+        const tedarikciler = await api.fetchTedarikciler();
+        await db.transaction('rw', db.tedarikciler, async () => {
+            await db.tedarikciler.clear();
+            await db.tedarikciler.bulkAdd(tedarikciler);
+        });
+        console.log(`${tedarikciler.length} tedarikçi yerel veritabanına başarıyla kaydedildi.`);
+        return tedarikciler;
+    } catch (error) {
+        console.error("Tedarikçiler yerel veritabanına kaydedilemedi:", error);
+        return []; // Hata durumunda boş liste dön
+    }
+}
+
+/**
+ * API'den gelen yem ürünleri listesini yerel veritabanına kaydeder.
+ * @param {Array} yemUrunleri - API'den gelen yem ürünleri listesi.
+ */
+async function syncYemUrunleri() {
+    try {
+        console.log('Yem ürünleri listesi sunucudan çekilip yerel veritabanına yazılıyor...');
+        const yemUrunleri = await api.fetchYemUrunleri(); // Bu fonksiyonu store.js'de oluşturacağız
+        await db.transaction('rw', db.yem_urunleri, async () => {
+            await db.yem_urunleri.clear();
+            await db.yem_urunleri.bulkAdd(yemUrunleri);
+        });
+        console.log(`${yemUrunleri.length} yem ürünü yerel veritabanına başarıyla kaydedildi.`);
+        return yemUrunleri;
+    } catch (error) {
+        console.error("Yem ürünleri yerel veritabanına kaydedilemedi:", error);
+        return [];
+    }
+}
+
+/**
+ * Çevrimdışı modda, yerel veritabanından tedarikçi listesini getirir.
+ * @returns {Promise<Array>}
+ */
+async function getOfflineTedarikciler() {
+    const tedarikciler = await db.tedarikciler.toArray();
+    console.log(`Yerel veritabanından ${tedarikciler.length} tedarikçi okundu.`);
+    return tedarikciler;
+}
+
+/**
+ * Çevrimdışı modda, yerel veritabanından yem ürünleri listesini getirir.
+ * @returns {Promise<Array>}
+ */
+async function getOfflineYemUrunleri() {
+     const yemler = await db.yem_urunleri.toArray();
+     console.log(`Yerel veritabanından ${yemler.length} yem ürünü okundu.`);
+     return yemler;
+}
+
+// ------------------------------------
+
 
 /**
  * Arayüzdeki "Çevrimdışı" ve "Bekleyen Girdi" uyarılarını günceller.
