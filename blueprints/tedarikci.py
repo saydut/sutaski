@@ -216,22 +216,46 @@ def delete_tedarikci(id):
 @tedarikci_bp.route('/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
-    """Tüm tedarikçileri liste halinde getirir."""
+    """Tüm tedarikçileri SAYFALAMALI, SIRALAMALI ve ARANABİLİR şekilde listeler."""
     try:
         sirket_id = session['user']['sirket_id']
-        
-        # 'tedarikci_ozetleri' view'ını kullanarak tüm veriyi çekiyoruz.
-        # Sayfalama, arama ve sıralama parametreleri buradan kaldırıldı.
-        query = supabase.table('tedarikci_ozetleri').select(
-            'id, isim, telefon_no, tc_no, adres, toplam_litre'
-        ).eq('sirket_id', sirket_id).order('isim', desc=False) # Sadece isme göre sıralı gelsin
-        
-        # .range() olmadan tüm sonuçları çeker
-        response = query.execute()
 
-        # Frontend'in beklemediği "toplam_kayit" alanını kaldırdık.
-        return jsonify({"tedarikciler": response.data})
-        
+        # 1. Frontend'den gelen parametreleri al
+        sayfa = int(request.args.get('sayfa', 1))
+        limit = 15 # Frontend ile aynı olmalı
+        offset = (sayfa - 1) * limit
+
+        arama = request.args.get('arama', '').strip()
+        siralama_sutun = request.args.get('siralamaSutun', 'isim')
+        siralama_yon = request.args.get('siralamaYon', 'asc')
+
+        # 2. Ana sorguyu oluştur
+        query = supabase.table('tedarikci_ozetleri').select(
+            'id, isim, telefon_no, toplam_litre', count='exact'
+        ).eq('sirket_id', sirket_id)
+
+        # 3. Arama filtresini ekle (isim veya telefonda arama yapar)
+        if arama:
+            query = query.filter('or', f'(isim.ilike.%{arama}%,telefon_no.ilike.%{arama}%)')
+
+        # 4. Sıralamayı ekle
+        is_desc = siralama_yon == 'desc'
+        # Güvenlik için sıralanabilir sütunları beyaz listeye alalım
+        izin_verilen_sutunlar = ['isim', 'toplam_litre']
+        if siralama_sutun not in izin_verilen_sutunlar:
+            siralama_sutun = 'isim' # Varsayılana dön
+            
+        query = query.order(siralama_sutun, desc=is_desc)
+
+        # 5. Sayfalamayı uygula ve sorguyu çalıştır
+        response = query.range(offset, offset + limit - 1).execute()
+
+        # 6. Sonucu frontend'e gönder
+        return jsonify({
+            "tedarikciler": response.data,
+            "toplam_kayit": response.count
+        })
+
     except Exception as e:
         print(f"Tedarikçi listesi hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500

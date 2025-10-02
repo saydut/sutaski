@@ -72,7 +72,36 @@
         </div>
     </div>
     
-    <div class="modal fade" id="duzenleModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Girdiyi Düzenle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" id="edit-girdi-id"><div class="mb-2"><label for="edit-litre-input" class="form-label">Yeni Litre Değeri</label><input type="number" step="0.1" class="form-control form-control-sm" id="edit-litre-input"></div><div class="mb-2"><label for="edit-sebep-input" class="form-label">Düzenleme Sebebi</label><textarea class="form-control form-control-sm" id="edit-sebep-input" rows="2" placeholder="Neden düzenliyorsunuz?"></textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sutGirdisiDuzenle()">Kaydet</button></div></div></div></div>
+    <div class="modal fade" id="duzenleModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Girdiyi Düzenle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="edit-girdi-id">
+                    <div class="mb-2">
+                        <label for="edit-litre-input" class="form-label">Yeni Litre Değeri</label>
+                        <input type="number" step="0.1" class="form-control form-control-sm" id="edit-litre-input">
+                    </div>
+                    <div class="mb-2">
+                        <label for="edit-fiyat-input" class="form-label">Yeni Fiyat (TL)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="edit-fiyat-input">
+                    </div>
+                    <div class="mb-2">
+                        <label for="edit-sebep-input" class="form-label">Düzenleme Sebebi (İsteğe Bağlı)</label>
+                        <textarea class="form-control form-control-sm" id="edit-sebep-input" rows="2" placeholder="Neden düzenliyorsunuz?"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="sutGirdisiDuzenle()">Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="gecmisModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Girdi Düzenleme Geçmişi</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="gecmis-modal-body"></div></div></div></div>
     <div class="modal fade" id="silmeOnayModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-warning">Silme Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Bu girdiyi silmek istediğinize emin misiniz?</p><input type="hidden" id="silinecek-girdi-id"></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-danger btn-sm" onclick="sutGirdisiSil()">Evet, Sil</button></div></div></div></div>
 {% endblock %}

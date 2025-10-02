@@ -285,20 +285,29 @@ async function sutGirdisiEkle() {
  * Mevcut bir süt girdisini düzenleme formunu yönetir.
  */
 async function sutGirdisiDuzenle() {
-    const { girdiId, yeniLitre, duzenlemeSebebi } = ui.getDuzenlemeFormVerisi();
-    if (!yeniLitre || !duzenlemeSebebi) {
-        gosterMesaj("Lütfen yeni litre değerini ve düzenleme sebebini girin.", "warning");
+    // 1. Formdan verileri al (yeni fiyat dahil)
+    const { girdiId, yeniLitre, yeniFiyat, duzenlemeSebebi } = ui.getDuzenlemeFormVerisi();
+    
+    // 2. Kontrolü güncelle: Sadece litre ve fiyatın dolu olması yeterli.
+    if (!yeniLitre || !yeniFiyat) {
+        gosterMesaj("Lütfen yeni litre ve fiyat değerlerini girin.", "warning");
         return;
     }
     
+    // 3. API'ye gönderilecek veriyi oluştur.
+    const guncelVeri = {
+        yeni_litre: parseFloat(yeniLitre),
+        yeni_fiyat: parseFloat(yeniFiyat), // Yeni fiyatı ekle
+        duzenleme_sebebi: duzenlemeSebebi // Sebep boş olsa bile gönder
+    };
+    
     try {
-        const result = await api.updateSutGirdisi(girdiId, { yeni_litre: parseFloat(yeniLitre), duzenleme_sebebi: duzenlemeSebebi });
+        const result = await api.updateSutGirdisi(girdiId, guncelVeri);
         gosterMesaj("Girdi başarıyla güncellendi.", "success");
         ui.duzenleModal.hide();
         
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
         
-        // DEĞİŞİKLİK: Özet verisini API yanıtından al, tekrar istek atma.
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
         await girdileriGoster(mevcutSayfa, formatliTarih);
 

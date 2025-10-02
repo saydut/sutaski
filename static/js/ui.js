@@ -174,7 +174,7 @@ const ui = {
             let actionButtons = '';
             if (!girdi.isOffline && document.body.dataset.userRole !== 'muhasebeci') {
                 actionButtons = `
-                    <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="ui.duzenlemeModaliniAc(${girdi.id}, ${girdi.litre})"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="ui.duzenlemeModaliniAc(${girdi.id}, ${girdi.litre}, ${girdi.fiyat})"><i class="bi bi-pencil"></i></button>
                     <button class="btn btn-sm btn-outline-danger border-0" title="Sil" onclick="ui.silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>`;
             }
             
@@ -308,9 +308,10 @@ const ui = {
         kaydetButton.innerHTML = isLoading ? `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...` : `Kaydet`;
     },
 
-    duzenlemeModaliniAc(girdiId, mevcutLitre) {
+    duzenlemeModaliniAc(girdiId, mevcutLitre, mevcutFiyat) {
         document.getElementById('edit-girdi-id').value = girdiId;
         document.getElementById('edit-litre-input').value = mevcutLitre;
+        document.getElementById('edit-fiyat-input').value = mevcutFiyat; // Bu satır eklendi
         document.getElementById('edit-sebep-input').value = '';
         this.duzenleModal.show();
     },
@@ -318,6 +319,7 @@ const ui = {
     getDuzenlemeFormVerisi: () => ({
         girdiId: document.getElementById('edit-girdi-id').value,
         yeniLitre: document.getElementById('edit-litre-input').value,
+        yeniFiyat: document.getElementById('edit-fiyat-input').value,
         duzenlemeSebebi: document.getElementById('edit-sebep-input').value.trim(),
     }),
     
@@ -328,33 +330,37 @@ const ui = {
     
     getSilinecekGirdiId: () => document.getElementById('silinecek-girdi-id').value,
 
-    renderGecmisModalContent(gecmisKayitlari, isLoading = false, error = null) {
-        const modalBody = document.getElementById('gecmis-modal-body');
-        if (isLoading) {
-            modalBody.innerHTML = '<div class="text-center p-4"><div class="spinner-border"></div></div>';
-            return;
-        }
-        if (error) {
-            modalBody.innerHTML = `<p class="text-danger p-3">Geçmiş yüklenemedi: ${error}</p>`;
-            return;
-        }
-        if (!gecmisKayitlari || gecmisKayitlari.length === 0) {
-            modalBody.innerHTML = '<p class="p-3">Bu girdi için düzenleme geçmişi bulunamadı.</p>';
-            return;
-        }
+renderGecmisModalContent(gecmisKayitlari, isLoading = false, error = null) {
+    const modalBody = document.getElementById('gecmis-modal-body');
+    if (isLoading) {
+        modalBody.innerHTML = '<div class="text-center p-4"><div class="spinner-border"></div></div>';
+        return;
+    }
+    if (error) {
+        modalBody.innerHTML = `<p class="text-danger p-3">Geçmiş yüklenemedi: ${error}</p>`;
+        return;
+    }
+    if (!gecmisKayitlari || gecmisKayitlari.length === 0) {
+        modalBody.innerHTML = '<p class="p-3">Bu girdi için düzenleme geçmişi bulunamadı.</p>';
+        return;
+    }
 
-        let content = '<ul class="list-group">';
-        gecmisKayitlari.forEach(kayit => {
-            const tarih = new Date(kayit.created_at).toLocaleString('tr-TR');
-            const eskiFiyatBilgisi = kayit.eski_fiyat_degeri ? ` | <span class="text-warning">Eski Fiyat:</span> ${parseFloat(kayit.eski_fiyat_degeri).toFixed(2)} TL` : '';
-            content += `<li class="list-group-item">
-                            <p class="mb-1 fw-bold">${tarih} - ${kayit.duzenleyen_kullanici_id.kullanici_adi} tarafından düzenlendi.</p>
-                            <p class="mb-1"><span class="text-warning">Eski Litre:</span> ${kayit.eski_litre_degeri} Litre ${eskiFiyatBilgisi}</p>
-                            <p class="mb-0"><span class="text-info">Sebep:</span> ${kayit.duzenleme_sebebi}</p>
-                        </li>`;
-        });
-        modalBody.innerHTML = content + '</ul>';
-    },
+    let content = '<ul class="list-group">';
+    gecmisKayitlari.forEach(kayit => {
+        const tarih = new Date(kayit.created_at).toLocaleString('tr-TR');
+        const eskiFiyatBilgisi = kayit.eski_fiyat_degeri ? ` | <span class="text-warning">Eski Fiyat:</span> ${parseFloat(kayit.eski_fiyat_degeri).toFixed(2)} TL` : '';
+        
+        // DEĞİŞİKLİK BURADA: Sebep alanı boş (null veya "") ise "-" yazdırıyoruz.
+        const sebepMetni = kayit.duzenleme_sebebi || '-';
+
+        content += `<li class="list-group-item">
+                        <p class="mb-1 fw-bold">${tarih} - ${kayit.duzenleyen_kullanici_id.kullanici_adi} tarafından düzenlendi.</p>
+                        <p class="mb-1"><span class="text-warning">Eski Litre:</span> ${kayit.eski_litre_degeri} Litre ${eskiFiyatBilgisi}</p>
+                        <p class="mb-0"><span class="text-info">Sebep:</span> ${sebepMetni}</p>
+                    </li>`;
+    });
+    modalBody.innerHTML = content + '</ul>';
+},
 
     sifreDegistirmeAc() {
         document.getElementById('mevcut-sifre-input').value = '';

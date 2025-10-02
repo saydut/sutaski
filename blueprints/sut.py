@@ -92,29 +92,41 @@ def update_sut_girdisi(girdi_id):
     try:
         data = request.get_json()
         mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
+        
         if not mevcut_girdi_res.data:
              return jsonify({"error": "Girdi bulunamadı veya bu işlem için yetkiniz yok."}), 404
         
         girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
         girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
 
+        # Geçmiş kaydını oluştur
         supabase.table('girdi_gecmisi').insert({
             'orijinal_girdi_id': girdi_id, 
             'duzenleyen_kullanici_id': session['user']['id'], 
-            'duzenleme_sebebi': data['duzenleme_sebebi'], 
+            'duzenleme_sebebi': data.get('duzenleme_sebebi'),
             'eski_litre_degeri': mevcut_girdi_res.data['litre'], 
             'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'), 
             'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']
         }).execute()
         
-        guncel_girdi = supabase.table('sut_girdileri').update({
-            'litre': data['yeni_litre'],
+        # Sadece gönderilen verileri güncellemek için bir dictionary oluştur
+        guncellenecek_veri = {
             'duzenlendi_mi': True
-        }).eq('id', girdi_id).execute()
+        }
+        if 'yeni_litre' in data and data['yeni_litre'] is not None:
+            guncellenecek_veri['litre'] = str(Decimal(data['yeni_litre']))
+        if 'yeni_fiyat' in data and data['yeni_fiyat'] is not None:
+            guncellenecek_veri['fiyat'] = str(Decimal(data['yeni_fiyat']))
+
+        # Veritabanını güncelle
+        guncel_girdi = supabase.table('sut_girdileri').update(guncellenecek_veri).eq('id', girdi_id).execute()
         
         yeni_ozet = get_guncel_ozet(session['user']['sirket_id'], girdi_tarihi_str)
         
         return jsonify({"status": "success", "data": guncel_girdi.data, "yeni_ozet": yeni_ozet})
+        
+    except (InvalidOperation, TypeError, ValueError):
+        return jsonify({"error": "Lütfen geçerli bir litre ve fiyat değeri girin."}), 400
     except Exception as e:
         logger.error(f"Süt girdisi düzenleme hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
