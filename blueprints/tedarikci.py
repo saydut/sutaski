@@ -216,37 +216,21 @@ def delete_tedarikci(id):
 @tedarikci_bp.route('/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
-    """Tedarikçiler sayfasındaki ana listeyi sayfalama, arama ve sıralama yaparak getirir."""
+    """Tüm tedarikçileri liste halinde getirir."""
     try:
         sirket_id = session['user']['sirket_id']
         
-        sayfa = int(request.args.get('sayfa', 1))
-        limit = 15
-        offset = (sayfa - 1) * limit
-        arama_terimi = request.args.get('arama', '')
-        sirala_sutun = request.args.get('sirala', 'isim')
-        sirala_yon = request.args.get('yon', 'asc')
-
-        # DEĞİŞİKLİK 1: 'tedarikciler' yerine yeni view'ı kullanıyoruz
-        # DEĞİŞİKLİK 2: 'select' içinden karmaşık ilişki sorgusunu kaldırdık
+        # 'tedarikci_ozetleri' view'ını kullanarak tüm veriyi çekiyoruz.
+        # Sayfalama, arama ve sıralama parametreleri buradan kaldırıldı.
         query = supabase.table('tedarikci_ozetleri').select(
-            'id, isim, telefon_no, tc_no, adres, toplam_litre', 
-            count='estimated'
-        ).eq('sirket_id', sirket_id)
-
-        if arama_terimi:
-            query = query.ilike('isim', f'%{arama_terimi}%')
-
-        descending = sirala_yon == 'desc'
-        # ÖNEMLİ NOT: Artık 'toplam_litre' sütununa göre de sıralama yapabiliriz!
-        query = query.order(sirala_sutun, desc=descending).range(offset, offset + limit - 1)
+            'id, isim, telefon_no, tc_no, adres, toplam_litre'
+        ).eq('sirket_id', sirket_id).order('isim', desc=False) # Sadece isme göre sıralı gelsin
         
+        # .range() olmadan tüm sonuçları çeker
         response = query.execute()
 
-        # DEĞİŞİKLİK 3: Python içinde ayrıca toplama yapmaya gerek kalmadı!
-        # 'response.data' zaten bize hazır hesaplanmış 'toplam_litre' verisini içeriyor.
-        
-        return jsonify({"tedarikciler": response.data, "toplam_kayit": response.count})
+        # Frontend'in beklemediği "toplam_kayit" alanını kaldırdık.
+        return jsonify({"tedarikciler": response.data})
         
     except Exception as e:
         print(f"Tedarikçi listesi hatası: {e}")

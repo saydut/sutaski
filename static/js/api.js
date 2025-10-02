@@ -12,21 +12,21 @@ const api = {
      * @param {object} options - Fetch için yapılandırma seçenekleri (method, headers, body vb.).
      * @returns {Promise<any>} - Başarılı olursa JSON verisi.
      */
-    async request(url, options = {}) {
-        try {
-            const response = await fetch(url, options);
-            const data = await response.json();
-            if (!response.ok) {
-                // Sunucudan gelen hata mesajını kullanarak bir hata fırlat
-                throw new Error(data.error || `HTTP error! status: ${response.status}`);
-            }
-            return data;
-        } catch (error) {
-            console.error(`API isteği hatası (${url}):`, error);
-            // Hata objesini yeniden fırlatarak çağıran fonksiyona iletiyoruz.
-            throw error;
+async request(url, options = {}) {
+    try {
+        const response = await fetch(url, options);
+        // DİKKAT: response.json() sonucunu doğrudan return etmeden önce bir değişkene atayacağız.
+        const data = await response.json(); 
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP error! status: ${response.status}`);
         }
-    },
+        // Artık `data` bir objedir, doğrudan onu döndürelim.
+        return data;
+    } catch (error) {
+        console.error(`API isteği hatası (${url}):`, error);
+        throw error;
+    }
+},
 
     /**
      * Belirli bir tarihin özet verilerini (toplam litre, girdi sayısı) çeker.
@@ -68,10 +68,15 @@ const api = {
      * Tüm tedarikçilerin listesini çeker.
      * @returns {Promise<Array<{id: number, isim: string}>>}
      */
-    fetchTedarikciler() {
-        // Dropdownlar için tam listeyi çeken yeni endpoint'i kullanıyoruz.
-        return this.request('/api/tedarikciler_dropdown');
-    },
+fetchTedarikciler() {
+    // Bu fonksiyon /api/tedarikciler_liste adresine istek atacak
+    return this.request('/api/tedarikciler_liste')
+        .then(data => {
+            // ve gelen { "tedarikciler": [...] } objesinden
+            // sadece "tedarikciler" dizisini döndürecek.
+            return data.tedarikciler; 
+        });
+},
 
     /**
      * Sunucuya yeni bir süt girdisi gönderir.
