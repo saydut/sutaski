@@ -1,3 +1,5 @@
+# blueprints/sut.py
+
 from flask import Blueprint, jsonify, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import supabase, turkey_tz
@@ -5,11 +7,23 @@ from decimal import Decimal, InvalidOperation
 from utils import parse_supabase_timestamp
 import logging
 from datetime import datetime, timedelta
-import pytz # <-- BU SATIRI EKLEYİN
+import pytz
 
 sut_bp = Blueprint('sut', __name__, url_prefix='/api')
 logger = logging.getLogger(__name__)
 
+# YARDIMCI FONKSİYON (EKSİK OLAN PARÇA)
+def get_guncel_ozet(sirket_id, tarih_str):
+    """Belirtilen tarih için RPC kullanarak özet veriyi çeker."""
+    try:
+        response = supabase.rpc('get_daily_summary_rpc', {
+            'target_sirket_id': sirket_id,
+            'target_date': tarih_str
+        }).execute()
+        return response.data[0] if response.data else {'toplam_litre': 0, 'girdi_sayisi': 0}
+    except Exception as e:
+        logger.error(f"!!! GÜNCEL ÖZET ÇEKİLİRKEN HATA: {e}")
+        return {'toplam_litre': 0, 'girdi_sayisi': 0}
 
 
 @sut_bp.route('/sut_girdileri', methods=['GET'])
