@@ -152,54 +152,47 @@ async function finansalIslemKaydet() {
         gosterMesaj('Lütfen işlem tipi, tedarikçi ve tutar alanlarını doldurun.', 'warning');
         return;
     }
+
+    let islemBasarili = false;
+    // 1. ADIM: Sadece KAYDETME işlemini dene ve hatasını yakala.
     try {
         const response = await fetch('/finans/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
         const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            document.getElementById('islem-tipi-sec').value = 'Ödeme';
-            tedarikciSecici.clear();
-            document.getElementById('tutar-input').value = '';
-            document.getElementById('aciklama-input').value = '';
-            tarihSecici.clear();
-            await finansalIslemleriDoldur();
-        } else {
-            gosterMesaj(result.error || 'Bir hata oluştu.', 'danger');
-        }
-    } catch (error) {
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
-    }
-}
 
-function duzenleModaliniAc(islemId, tutar, aciklama) {
-    document.getElementById('edit-islem-id').value = islemId;
-    document.getElementById('edit-tutar-input').value = parseFloat(tutar);
-    document.getElementById('edit-aciklama-input').value = aciklama;
-    duzenleModal.show();
-}
-
-async function finansalIslemGuncelle() {
-    const id = document.getElementById('edit-islem-id').value;
-    const veri = {
-        tutar: document.getElementById('edit-tutar-input').value,
-        aciklama: document.getElementById('edit-aciklama-input').value.trim()
-    };
-    if (!veri.tutar) {
-        gosterMesaj('Tutar alanı boş bırakılamaz.', 'warning');
-        return;
-    }
-    try {
-        const response = await fetch(`/finans/api/islemler/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            duzenleModal.hide();
-            await finansalIslemleriDoldur();
-        } else {
-            gosterMesaj(result.error || 'Güncelleme başarısız.', 'danger');
+        if (!response.ok) {
+            // Eğer sunucu bilerek bir hata döndürdüyse (örn: "Tutar pozitif olmalı")
+            gosterMesaj(result.error || 'İşlem kaydedilemedi.', 'danger');
+            return; // Fonksiyonu durdur.
         }
+
+        // Buraya ulaştıysak, kayıt işlemi kesinlikle başarılıdır.
+        gosterMesaj(result.message, 'success');
+        islemBasarili = true;
+
     } catch (error) {
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+        // Eğer sunucuya hiç ulaşılamadıysa bu hata çıkar.
+        gosterMesaj('İşlem kaydedilirken sunucuya bağlanılamadı.', 'danger');
+        return; // Fonksiyonu durdur.
+    }
+
+    // 2. ADIM: Eğer kaydetme başarılı olduysa, formu temizle ve listeyi yenile.
+    if (islemBasarili) {
+        // Formu temizle
+        document.getElementById('islem-tipi-sec').value = 'Ödeme';
+        tedarikciSecici.clear();
+        document.getElementById('tutar-input').value = '';
+        document.getElementById('aciklama-input').value = '';
+        tarihSecici.clear();
+        
+        // Listeyi yenileme işlemini kendi try-catch bloğu içine al.
+        try {
+            // Not: Fonksiyonun adı `finansalIslemleriYukle(1)` olabilir, kendi koduna göre düzenle.
+            await finansalIslemleriYukle(1); 
+        } catch (error) {
+            // Eğer SADECE liste yenileme başarısız olursa, kullanıcıya durumu izah eden bir uyarı ver.
+            console.error("Liste yenilenirken hata oluştu:", error);
+            gosterMesaj('İşlem kaydedildi ancak liste yenilenemedi. Lütfen sayfayı yenileyin.', 'warning');
+        }
     }
 }
 
