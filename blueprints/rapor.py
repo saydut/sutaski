@@ -9,30 +9,38 @@ import csv
 import calendar
 from weasyprint import HTML
 from decimal import Decimal, getcontext, InvalidOperation
-from blueprints.sut import get_guncel_ozet
+
 
 rapor_bp = Blueprint('rapor', __name__, url_prefix='/api/rapor')
-getcontext().prec = 10
+getcontext().prec = 10 # Decimal hassasiyeti
 
 @rapor_bp.route('/gunluk_ozet')
 @login_required
 def get_gunluk_ozet():
     """
     Bu fonksiyon, ana paneldeki özet kartlarını doldurur.
-    Doğru çalışan `get_guncel_ozet` fonksiyonunu çağırır.
+    Doğrudan ve verimli olan RPC fonksiyonunu çağırır.
     """
     try:
         sirket_id = session['user']['sirket_id']
         tarih_str = request.args.get('tarih')
-
+        
         target_date_str = tarih_str if tarih_str else datetime.now(turkey_tz).date().isoformat()
-        summary = get_guncel_ozet(sirket_id, target_date_str)
+
+        # Adım 1'de oluşturduğumuz RPC fonksiyonunu çağırıyoruz
+        response = supabase.rpc('get_daily_summary_rpc', {
+            'target_sirket_id': sirket_id,
+            'target_date': target_date_str
+        }).execute()
+        
+        summary = response.data[0] if response.data else {'toplam_litre': 0, 'girdi_sayisi': 0}
         
         return jsonify(summary)
 
     except Exception as e:
-        print(f"!!! GÜNLÜK ÖZET KRİTİK HATA: {e}")
+        print(f"!!! GÜNLÜK ÖZET (RPC) KRİTİK HATA: {e}")
         return jsonify({"error": "Özet hesaplanırken sunucuda bir hata oluştu."}), 500
+
     
     
 @rapor_bp.route('/haftalik_ozet')

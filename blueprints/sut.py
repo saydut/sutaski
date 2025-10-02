@@ -10,38 +10,7 @@ import pytz # <-- BU SATIRI EKLEYİN
 sut_bp = Blueprint('sut', __name__, url_prefix='/api')
 logger = logging.getLogger(__name__)
 
-def get_guncel_ozet(sirket_id, tarih_str):
-    try:
-        # RPC'yi kullanmak yerine, doğrudan ve çalışan sorgu mantığını kullanalım.
-        target_date = datetime.strptime(tarih_str, '%Y-%m-%d').date()
-        start_tr = turkey_tz.localize(datetime.combine(target_date, datetime.min.time()))
-        end_tr = start_tr + timedelta(days=1)
-        
-        start_utc = start_tr.astimezone(pytz.utc).isoformat()
-        end_utc = end_tr.astimezone(pytz.utc).isoformat()
 
-        response = supabase.table('sut_girdileri').select(
-            'litre', count='exact'
-        ).eq(
-            'sirket_id', sirket_id
-        ).gte(
-            'taplanma_tarihi', start_utc
-        ).lt(
-            'taplanma_tarihi', end_utc
-        ).execute()
-
-        if response.data:
-            total_litre = sum(Decimal(str(item.get('litre', '0'))) for item in response.data)
-            summary = {
-                'toplam_litre': round(float(total_litre), 2),
-                'girdi_sayisi': response.count
-            }
-            return summary
-        
-    except Exception as e:
-        logger.error(f"Doğrudan sorgu ile özet çekilirken hata: {e}", exc_info=True)
-    
-    return {'toplam_litre': 0, 'girdi_sayisi': 0}
 
 @sut_bp.route('/sut_girdileri', methods=['GET'])
 @login_required
