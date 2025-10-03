@@ -8,6 +8,7 @@ let mevcutYemSayfasi = 1;
 const YEMLER_SAYFA_BASI = 10; // Backend'deki limit ile aynı olmalı
 let mevcutIslemSayfasi = 1; // YENİ
 const ISLEMLER_SAYFA_BASI = 5; // YENİ
+let mevcutIslemGorunumu = 'tablo'; // İşlemler için ayrı görünüm değişkeni
 
 
 
@@ -24,6 +25,9 @@ window.onload = function() {
 
     mevcutGorunum = localStorage.getItem('yemGorunum') || 'tablo';
     gorunumuAyarla(mevcutGorunum);
+    mevcutIslemGorunumu = localStorage.getItem('yemIslemGorunum') || 'tablo';
+    gorunumuAyarlaIslemler(mevcutIslemGorunumu);
+
 
     // Ana veri yükleme fonksiyonlarını çağır
     tedarikcileriDoldur();
@@ -31,6 +35,28 @@ window.onload = function() {
     yemListesiniGoster(1);   // YENİ İSİM: Sağdaki tablo/kart listesini doldurur
     yemIslemleriniGoster(1); // YENİ EKLENDİ
 };
+
+
+function gorunumuAyarlaIslemler(aktifGorunum) {
+    document.querySelectorAll('.gorunum-konteyneri-islemler').forEach(el => el.style.display = 'none');
+    document.getElementById(`islemler-${aktifGorunum}-gorunumu`).style.display = 'block';
+
+    document.getElementById('btn-islemler-liste').classList.toggle('active', aktifGorunum === 'tablo');
+    document.getElementById('btn-islemler-kart').classList.toggle('active', aktifGorunum === 'kart');
+}
+
+function gorunumuDegistirIslemler(yeniGorunum) {
+    if (mevcutIslemGorunumu === yeniGorunum) return;
+    mevcutIslemGorunumu = yeniGorunum;
+    localStorage.setItem('yemIslemGorunum', yeniGorunum);
+    gorunumuAyarlaIslemler(yeniGorunum);
+    // Mevcut sayfadaki veriyi yeni görünüme göre tekrar render et
+    yemIslemleriniGoster(mevcutIslemSayfasi); 
+}
+
+
+
+
 
 // 1. Sadece soldaki yem seçme menüsünü doldurur.
 async function yemSeciciyiDoldur() {
@@ -402,66 +428,102 @@ async function yemUrunuSil() {
     }
 }
 
+
+
 async function yemIslemleriniGoster(sayfa = 1) {
     mevcutIslemSayfasi = sayfa;
-    const tbody = document.getElementById('yem-islemleri-listesi');
+    const veriYokMesaji = document.getElementById('yem-islemleri-veri-yok');
+    const tabloBody = document.getElementById('yem-islemleri-listesi');
+    const kartListesi = document.getElementById('yem-islemleri-kart-listesi');
 
-    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
     if (!navigator.onLine) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3 text-warning">Son işlemleri görmek için internet bağlantısı gereklidir.</td></tr>`;
-        document.getElementById('yem-islemleri-sayfalama').innerHTML = ''; // Sayfalamayı temizle
+        tabloBody.innerHTML = `<tr><td colspan="5" class="text-center p-3 text-warning">İşlemleri görmek için internet bağlantısı gereklidir.</td></tr>`;
+        kartListesi.innerHTML = `<div class="col-12 text-center p-3 text-warning">İşlemleri görmek için internet bağlantısı gereklidir.</div>`;
+        document.getElementById('yem-islemleri-sayfalama').innerHTML = '';
         return;
     }
-    // --- KONTROL SONU ---
-    
-    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3"><div class="spinner-border spinner-border-sm"></div></td></tr>`;
+
+    // Yükleniyor durumunu ayarla
+    veriYokMesaji.style.display = 'none';
+    if (mevcutIslemGorunumu === 'tablo') {
+        tabloBody.innerHTML = `<tr><td colspan="5" class="text-center p-3"><div class="spinner-border spinner-border-sm"></div></td></tr>`;
+    } else {
+        kartListesi.innerHTML = `<div class="col-12 text-center p-3"><div class="spinner-border spinner-border-sm"></div></div>`;
+    }
 
     try {
         const response = await fetch(`/yem/api/islemler/liste?sayfa=${sayfa}`);
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'İşlemler yüklenemedi.');
 
-        tbody.innerHTML = ''; // Temizle
-
         if (result.islemler.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center p-3 text-secondary">Kayıtlı yem çıkış işlemi bulunamadı.</td></tr>`;
-            return;
+            veriYokMesaji.style.display = 'block';
+            tabloBody.innerHTML = '';
+            kartListesi.innerHTML = '';
+        } else {
+            if (mevcutIslemGorunumu === 'tablo') {
+                renderIslemlerAsTable(result.islemler);
+            } else {
+                renderIslemlerAsCards(result.islemler);
+            }
         }
 
-        result.islemler.forEach(islem => {
-            const tarih = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
-            const miktar = parseFloat(islem.miktar_kg).toFixed(2);
-
-            const tr = `
-                <tr id="yem-islem-${islem.id}">
-                    <td>${tarih}</td>
-                    <td>${islem.tedarikciler.isim}</td>
-                    <td>${islem.yem_urunleri.yem_adi}</td>
-                    <td class="text-end">${miktar} KG</td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="yemIslemiDuzenleAc(${islem.id}, '${miktar}', '${islem.aciklama || ''}')">
-                            <i class="bi bi-pencil"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" title="İşlemi İptal Et" onclick="yemIslemiSilmeOnayiAc(${islem.id})">
-                            <i class="bi bi-x-circle"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-            tbody.innerHTML += tr;
-        });
-
-        ui.sayfalamaNavOlustur(
-            'yem-islemleri-sayfalama',
-            result.toplam_islem_sayisi,
-            sayfa,
-            ISLEMLER_SAYFA_BASI,
-            (yeniSayfa) => yemIslemleriniGoster(yeniSayfa)
-        );
+        ui.sayfalamaNavOlustur('yem-islemleri-sayfalama', result.toplam_islem_sayisi, sayfa, ISLEMLER_SAYFA_BASI, yemIslemleriniGoster);
 
     } catch (error) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3 text-danger">${error.message}</td></tr>`;
+        veriYokMesaji.innerHTML = `<p class="text-danger">${error.message}</p>`;
+        veriYokMesaji.style.display = 'block';
     }
+}
+
+function renderIslemlerAsTable(islemler) {
+    const tbody = document.getElementById('yem-islemleri-listesi');
+    tbody.innerHTML = '';
+    islemler.forEach(islem => {
+        const tarih = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
+        const miktar = parseFloat(islem.miktar_kg).toFixed(2);
+        tbody.innerHTML += `
+            <tr id="yem-islem-liste-${islem.id}">
+                <td>${tarih}</td>
+                <td>${islem.tedarikciler.isim}</td>
+                <td>${islem.yem_urunleri.yem_adi}</td>
+                <td class="text-end">${miktar} KG</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="yemIslemiDuzenleAc(${islem.id}, '${miktar}', '${islem.aciklama || ''}')"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" title="İşlemi İptal Et" onclick="yemIslemiSilmeOnayiAc(${islem.id})"><i class="bi bi-x-circle"></i></button>
+                </td>
+            </tr>`;
+    });
+}
+
+function renderIslemlerAsCards(islemler) {
+    const container = document.getElementById('yem-islemleri-kart-listesi');
+    container.innerHTML = '';
+    islemler.forEach(islem => {
+        const tarih = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
+        const miktar = parseFloat(islem.miktar_kg).toFixed(2);
+        container.innerHTML += `
+            <div class="col-lg-6 col-12" id="yem-islem-kart-${islem.id}">
+                <div class="card p-2 h-100">
+                    <div class="card-body p-2 d-flex flex-column">
+                        <div>
+                            <h6 class="card-title mb-0">${islem.tedarikciler.isim}</h6>
+                            <small class="text-secondary">${islem.yem_urunleri.yem_adi}</small>
+                        </div>
+                        <div class="my-2 flex-grow-1">
+                            <span class="fs-4 fw-bold text-primary">${miktar} KG</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-secondary">${tarih}</small>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="yemIslemiDuzenleAc(${islem.id}, '${miktar}', '${islem.aciklama || ''}')"><i class="bi bi-pencil"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" title="İşlemi İptal Et" onclick="yemIslemiSilmeOnayiAc(${islem.id})"><i class="bi bi-x-circle"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+    });
 }
 
 
