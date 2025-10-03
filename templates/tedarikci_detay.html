@@ -15,6 +15,10 @@
             </h1>
         </span>
         <div class="d-flex align-items-center gap-2">
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" id="btn-view-table" class="btn btn-sm btn-outline-primary active" onclick="gorunumuDegistir('tablo')"><i class="bi bi-list-task"></i></button>
+                <button type="button" id="btn-view-card" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('kart')"><i class="bi bi-grid-3x2-gap-fill"></i></button>
+            </div>
             <button id="theme-toggle" class="btn btn-sm">
                 <i id="sun-icon" class="bi bi-sun-fill"></i>
                 <i id="moon-icon" class="bi bi-moon-fill"></i>
@@ -62,14 +66,31 @@
         <div class="card-body p-3">
             <div class="tab-content" id="myTabContent">
                 <div class="tab-pane fade show active" id="sut-tab-pane" role="tabpanel">
-                    <div class="table-responsive"><table class="table"><thead><tr><th>Tarih</th><th class="text-end">Litre</th><th class="text-end">Fiyat (TL)</th><th class="text-end">Tutar (TL)</th><th>Giren Kullanıcı</th></tr></thead><tbody id="sut-girdileri-tablosu"></tbody></table></div>
-                    <nav id="sut-sayfalama" class="d-flex justify-content-center mt-3"></nav> </div>
+                    <div class="gorunum-konteyneri-detay" id="sut-tablo-gorunumu">
+                        <div class="table-responsive"><table class="table"><thead><tr><th>Tarih</th><th class="text-end">Litre</th><th class="text-end">Fiyat (TL)</th><th class="text-end">Tutar (TL)</th><th>Giren Kullanıcı</th></tr></thead><tbody id="sut-girdileri-tablosu"></tbody></table></div>
+                    </div>
+                    <div class="gorunum-konteyneri-detay row g-3" id="sut-kart-gorunumu" style="display: none;"></div>
+                    <div class="veri-yok-mesaji text-center p-4 text-secondary" id="sut-veri-yok" style="display: none;">Süt girdisi bulunamadı.</div>
+                    <nav id="sut-sayfalama" class="d-flex justify-content-center mt-3"></nav>
+                </div>
+        
                 <div class="tab-pane fade" id="yem-tab-pane" role="tabpanel">
-                    <div class="table-responsive"><table class="table"><thead><tr><th>İşlem Tarihi</th><th>Yem Adı</th><th class="text-end">Miktar (KG)</th><th class="text-end">Birim Fiyat (TL)</th><th class="text-end">Toplam Tutar (TL)</th><th>İşlemi Yapan</th></tr></thead><tbody id="yem-islemleri-tablosu"></tbody></table></div>
-                    <nav id="yem-sayfalama" class="d-flex justify-content-center mt-3"></nav> </div>
+                    <div class="gorunum-konteyneri-detay" id="yem-tablo-gorunumu">
+                        <div class="table-responsive"><table class="table"><thead><tr><th>İşlem Tarihi</th><th>Yem Adı</th><th class="text-end">Miktar (KG)</th><th class="text-end">Birim Fiyat (TL)</th><th class="text-end">Toplam Tutar (TL)</th><th>İşlemi Yapan</th></tr></thead><tbody id="yem-islemleri-tablosu"></tbody></table></div>
+                    </div>
+                    <div class="gorunum-konteyneri-detay row g-3" id="yem-kart-gorunumu" style="display: none;"></div>
+                    <div class="veri-yok-mesaji text-center p-4 text-secondary" id="yem-veri-yok" style="display: none;">Yem alımı bulunamadı.</div>
+                    <nav id="yem-sayfalama" class="d-flex justify-content-center mt-3"></nav>
+                </div>
+        
                 <div class="tab-pane fade" id="finans-tab-pane" role="tabpanel">
-                    <div class="table-responsive"><table class="table"><thead><tr><th>İşlem Tarihi</th><th>İşlem Tipi</th><th class="text-end">Tutar (TL)</th><th>Açıklama</th><th>İşlemi Yapan</th></tr></thead><tbody id="finansal-islemler-tablosu"></tbody></table></div>
-                    <nav id="finans-sayfalama" class="d-flex justify-content-center mt-3"></nav> </div>
+                    <div class="gorunum-konteyneri-detay" id="finans-tablo-gorunumu">
+                        <div class="table-responsive"><table class="table"><thead><tr><th>İşlem Tarihi</th><th>İşlem Tipi</th><th class="text-end">Tutar (TL)</th><th>Açıklama</th><th>İşlemi Yapan</th></tr></thead><tbody id="finansal-islemler-tablosu"></tbody></table></div>
+                    </div>
+                    <div class="gorunum-konteyneri-detay row g-3" id="finans-kart-gorunumu" style="display: none;"></div>
+                    <div class="veri-yok-mesaji text-center p-4 text-secondary" id="finans-veri-yok" style="display: none;">Finansal işlem bulunamadı.</div>
+                    <nav id="finans-sayfalama" class="d-flex justify-content-center mt-3"></nav>
+                </div>
             </div>
         </div>
     </div>
