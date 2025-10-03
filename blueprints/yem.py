@@ -220,3 +220,114 @@ def get_yem_islemleri():
     except Exception as e:
         logger.error(f"Yem işlemleri listelenirken hata: {e}", exc_info=True)
         return jsonify({"error": "İşlemler listelenemedi."}), 500
+    
+@yem_bp.route('/api/islemler/<int:id>', methods=['DELETE'])
+@login_required
+@modification_allowed
+def delete_yem_islemi(id):
+    """Bir yem çıkış işlemini siler ve stoğu iade eder."""
+    try:
+        sirket_id = session['user']['sirket_id']
+
+        # 1. Silinecek işlemi ve içerdiği bilgileri al
+        islem_res = supabase.table('yem_islemleri').select(
+            'yem_urun_id, miktar_kg'
+        ).eq('id', id).eq('sirket_id', sirket_id).single().execute()
+
+        if not islem_res.data:
+            return jsonify({"error": "İşlem bulunamadı veya bu işlem için yetkiniz yok."}), 404
+
+        islem = islem_res.data
+        iade_edilecek_miktar = Decimal(islem['miktar_kg'])
+        urun_id = islem['yem_urun_id']
+
+        # 2. İlgili ürünün mevcut stoğunu al
+        urun_res = supabase.table('yem_urunleri').select(
+            'stok_miktari_kg'
+        ).eq('id', urun_id).single().execute()
+
+        if not urun_res.data:
+             return jsonify({"error": "Stoğu güncellenecek ürün bulunamadı."}), 404
+
+        mevcut_stok = Decimal(urun_res.data['stok_miktari_kg'])
+        yeni_stok = mevcut_stok + iade_edilecek_miktar
+
+        # 3. Önce stoğu güncelle, sonra işlemi sil
+        supabase.table('yem_urunleri').update(
+            {"stok_miktari_kg": str(yeni_stok)}
+        ).eq('id', urun_id).execute()
+        
+        supabase.table('yem_islemleri').delete().eq('id', id).execute()
+
+        return jsonify({"message": "Yem çıkış işlemi başarıyla iptal edildi ve stok iade edildi."})
+
+    except Exception as e:
+        logger.error(f"Yem işlemi silinirken hata oluştu: {e}", exc_info=True)
+        return jsonify({"error": "İşlem iptal edilirken bir sunucu hatası oluştu."}), 500
+    
+@yem_bp.route('/api/islemler/<int:id>', methods=['PUT'])
+@login_required
+@modification_allowed
+def update_yem_islemi(id):
+    """Bir yem çıkış işlemini günceller ve stokları ayarlar."""
+    try:
+        data = request.get_json()
+        sirket_id = session['user']['sirket_id']
+        
+        yeni_miktar_str = data.get('yeni_miktar_kg')
+        if not yeni_miktar_str:
+            return jsonify({"error": "Yeni miktar belirtilmelidir."}), 400
+
+        yeni_miktar = Decimal(yeni_miktar_str)
+        if yeni_miktar <= 0:
+            return jsonify({"error": "Miktar pozitif bir değer olmalıdır."}), 400
+
+        # 1. Mevcut işlemi ve ürün ID'sini al
+        mevcut_islem_res = supabase.table('yem_islemleri').select(
+            'miktar_kg, yem_urun_id, islem_anindaki_birim_fiyat'
+        ).eq('id', id).eq('sirket_id', sirket_id).single().execute()
+
+        if not mevcut_islem_res.data:
+            return jsonify({"error": "Güncellenecek işlem bulunamadı."}), 404
+
+        eski_miktar = Decimal(mevcut_islem_res.data['miktar_kg'])
+        urun_id = mevcut_islem_res.data['yem_urun_id']
+        birim_fiyat = Decimal(mevcut_islem_res.data['islem_anindaki_birim_fiyat'])
+        
+        # 2. Stok farkını hesapla
+        fark = yeni_miktar - eski_miktar
+
+        # 3. Ürünün mevcut stoğunu al
+        urun_res = supabase.table('yem_urunleri').select('stok_miktari_kg').eq('id', urun_id).single().execute()
+        if not urun_res.data:
+            return jsonify({"error": "Ürün stoğu bulunamadı."}), 404
+        
+        mevcut_stok = Decimal(urun_res.data['stok_miktari_kg'])
+
+        # 4. Stok yeterliliğini kontrol et
+        if fark > 0 and mevcut_stok < fark:
+            return jsonify({"error": f"Yetersiz stok! Sadece {mevcut_stok} kg daha çıkış yapabilirsiniz."}), 400
+
+        # 5. Yeni stoğu ve yeni toplam tutarı hesapla
+        yeni_stok = mevcut_stok - fark
+        yeni_toplam_tutar = yeni_miktar * birim_fiyat
+
+        # 6. Veritabanını güncelle
+        supabase.table('yem_urunleri').update({'stok_miktari_kg': str(yeni_stok)}).eq('id', urun_id).execute()
+        
+        guncellenecek_islem = {
+            'miktar_kg': str(yeni_miktar),
+            'toplam_tutar': str(yeni_toplam_tutar)
+        }
+        if 'aciklama' in data: # Açıklama da güncellenebilsin
+             guncellenecek_islem['aciklama'] = data.get('aciklama')
+
+        supabase.table('yem_islemleri').update(guncellenecek_islem).eq('id', id).execute()
+
+        return jsonify({"message": "Yem çıkışı başarıyla güncellendi."})
+
+    except (InvalidOperation, TypeError):
+        return jsonify({"error": "Lütfen geçerli bir miktar girin."}), 400
+    except Exception as e:
+        logger.error(f"Yem işlemi güncellenirken hata: {e}", exc_info=True)
+        return jsonify({"error": "Güncelleme sırasında bir sunucu hatası oluştu."}), 500
