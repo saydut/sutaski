@@ -260,6 +260,8 @@ async function sutGirdisiEkle() {
         gosterMesaj("Süt girdisi başarıyla kaydedildi.", "success");
         const bugun = utils.getLocalDateString();
         ui.updateOzetPanels(result.yeni_ozet, bugun);
+        await charts.haftalikGrafigiOlustur();
+        await charts.tedarikciGrafigiOlustur();
         await girdileriGoster(1, bugun);
 
     } catch (error) {
