@@ -10,6 +10,29 @@
  * Tarayıcıda kayıtlı kullanıcı varsa bilgileri ekrana basar.
  * Yoksa ve internet de yoksa, giriş sayfasına yönlendirir.
  */
+
+// DOSYANIN EN BAŞINA EKLENECEK KOD
+let mevcutGorunum = 'liste';
+
+
+function gorunumuAyarla(aktifGorunum) {
+    document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
+    document.getElementById(`${aktifGorunum}-gorunumu`).style.display = 'block';
+
+    document.getElementById('btn-view-list').classList.toggle('active', aktifGorunum === 'liste');
+    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
+}
+
+function gorunumuDegistir(yeniGorunum) {
+    if (mevcutGorunum === yeniGorunum) return;
+    mevcutGorunum = yeniGorunum;
+    localStorage.setItem('anaPanelGorunum', yeniGorunum);
+    gorunumuAyarla(yeniGorunum);
+    girdileriGoster(1, ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null);
+}
+// EKLENECEK KOD SONU
+
+
 function initOfflineState() {
     const offlineUserString = localStorage.getItem('offlineUser');
     
@@ -61,6 +84,9 @@ window.onload = async function() {
 
     // UI component'lerini (modallar, tarih seçiciler vb.) başlat
     ui.init();
+
+    mevcutGorunum = localStorage.getItem('anaPanelGorunum') || 'liste';
+    gorunumuAyarla(mevcutGorunum);
 
     // Lisans durumunu kontrol et ve gerekiyorsa uyarı göster
     ui.lisansUyarisiKontrolEt();
@@ -123,6 +149,8 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
     
     ui.toggleGirdilerListLoading(true);
 
+    document.getElementById('veri-yok-mesaji').style.display = 'none';
+
     try {
         // Çevrimiçi ise sunucudan veri çek
         const sunucuVerisi = navigator.onLine ? await api.fetchSutGirdileri(tarih, sayfa) : { girdiler: [], toplam_girdi_sayisi: 0 };
@@ -134,7 +162,7 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
         const { tumGirdiler, toplamGirdi } = ui.mergeOnlineOfflineGirdiler(sunucuVerisi, bekleyenGirdiler, tarih);
         
         // Birleştirilmiş veriyi arayüzde göster
-        ui.renderGirdilerListesi(tumGirdiler);
+        ui.renderGirdiler(tumGirdiler, mevcutGorunum);
         
         // Sayfalamayı oluştur
         ui.sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, tarih));
