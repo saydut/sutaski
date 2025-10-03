@@ -403,3 +403,33 @@ h5 { font-size: 0.95rem; }
     gap: 0.5rem;
 }
 
+/* static/style.css dosyasının sonuna eklenecek kod */
+
+/* Tom-Select Koyu Tema Entegrasyonu */
+
+/* Açıklama: Bu kural, karanlık tema aktifken (:root[data-theme='dark']) 
+  Tom-Select açılır menüsündeki (.ts-dropdown) bir seçeneğin (.option)
+  üzerine gelindiğinde veya klavye ile seçildiğinde (.active) devreye girer.
+*/
+:root[data-theme='dark'] .ts-dropdown .option.active {
+    background-color: var(--primary); /* Arka plan rengi olarak ana tema rengimizi kullanır. */
+    color: #FFFFFF; /* YAZI RENGİNİ BEYAZ YAPAR. Sorunu çözen ana kural budur. */
+}
+
+/* Açıklama: Bu kural, bir seçim yapıldıktan sonra kutucuk içinde görünen 
+  etiketin (item) stilini belirler.
+*/
+:root[data-theme='dark'] .ts-control .item {
+    background-color: var(--primary);
+    color: #FFFFFF;
+}
+
+/* Açıklama: Bu kural, karanlık tema aktifken bir Bootstrap açılır menü
+  öğesinin (.dropdown-item) üzerine gelindiğinde (:hover) veya
+  klavye ile odaklanıldığında (:focus) çalışır.
+*/
+:root[data-theme='dark'] .dropdown-item:hover,
+:root[data-theme='dark'] .dropdown-item:focus {
+    background-color: var(--primary); /* Arka planı ana tema rengimiz yapar. */
+    color: #FFFFFF; /* Yazı rengini okunabilirlik için beyaz yapar. */
+}
