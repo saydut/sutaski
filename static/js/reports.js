@@ -97,9 +97,12 @@ async function raporOlustur() {
 
     // --- DEĞİŞEN ÇEVRİMDIŞI KONTROLÜ BAŞLANGICI ---
     if (!navigator.onLine) {
-        mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Çevrimdışı mod. Önbellekteki rapor aranıyor...</p>';
+        mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Rapor oluşturuluyor...</p>';
         mesajElementi.style.display = 'block';
-        if (detayliChart) detayliChart.destroy();
+        if (detayliChart) {
+            unregisterChart(detayliChart); // Yöneticinin listesinden kaldır
+            detayliChart.destroy();       // Şimdi grafiği güvenle yok et
+        }
         
         // Önbellekten veriyi çekmeyi dene
         const veri = await getCachedAnaPanelData('detayli_rapor');
