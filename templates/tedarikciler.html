@@ -13,9 +13,11 @@
         <h1 class="fw-bold">Tedarikçi Yönetimi</h1>
         
         <div class="d-flex align-items-center gap-2">
+            {% if session.get('user', {}).get('rol') != 'muhasebeci' %}
             <button class="btn btn-success btn-sm" onclick="yeniTedarikciAc()">
                 <i class="bi bi-plus-circle"></i> Yeni Tedarikçi Ekle
             </button>
+            {% endif %}
             
             {% include '_hizli_islemler.html' %}
         </div>
@@ -31,6 +33,11 @@
                 <button type="button" id="btn-view-card" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('kart')"><i class="bi bi-grid-3x2-gap-fill"></i> Kart</button>
             </div>
         </div>
+    </div>
+
+    <div id="offline-uyari-mesaji" class="alert alert-warning d-none" role="alert">
+        <i class="bi bi-cloud-slash-fill"></i>
+        <strong>Çevrimdışı Mod:</strong> Sadece önbellekteki tedarikçiler listeleniyor. Sıralama ve sayfalama özellikleri için internet bağlantısı gereklidir. Arama, sadece mevcut liste içinde yapılacaktır.
     </div>
 
     <div id="tablo-gorunumu" class="gorunum-konteyneri" style="display: none;">
@@ -96,7 +103,11 @@
             <div class="modal-header"><h5 class="modal-title text-danger">Silme Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
                 <p><strong><span id="silinecek-tedarikci-adi"></span></strong> adlı tedarikçiyi silmek istediğinize emin misiniz?</p>
-                <p class="text-danger small">Bu tedarikçiye ait tüm veriler de silinecektir ve bu işlem geri alınamaz!</p>
+                {% if session.get('user', {}).get('rol') == 'admin' %}
+                <p class="text-danger small">Bu tedarikçiye ait tüm veriler de (süt girdileri, yem alımları, finansal işlemler) kalıcı olarak silinecektir ve bu işlem geri alınamaz!</p>
+                {% else %}
+                 <p class="text-danger small">Bu tedarikçiye ait süt veya yem girdisi varsa silme işlemi başarısız olabilir.</p>
+                {% endif %}
                 <input type="hidden" id="silinecek-tedarikci-id">
             </div>
             <div class="modal-footer">

@@ -79,7 +79,6 @@ fetchTedarikciler() {
             return data.tedarikciler; 
         });
 },
-
     /**
      * Sunucuya yeni bir süt girdisi gönderir.
      * @param {object} girdiVerisi - {tedarikci_id, litre, fiyat}
@@ -90,6 +89,34 @@ fetchTedarikciler() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(girdiVerisi)
+        });
+    },
+
+    /**
+     * YENİ FONKSİYON: Sunucuya yeni bir tedarikçi gönderir.
+     * @param {object} tedarikciVerisi - {isim, tc_no, telefon_no, adres}
+     * @returns {Promise<any>}
+     */
+    postYeniTedarikci(tedarikciVerisi) {
+        return this.request('/api/tedarikci_ekle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(tedarikciVerisi)
+        });
+    },
+
+    /**
+
+    /**
+     * YENİ FONKSİYON: Sunucuya yeni bir tedarikçi gönderir.
+     * @param {object} tedarikciVerisi - {isim, tc_no, telefon_no, adres}
+     * @returns {Promise<any>}
+     */
+    postYeniTedarikci(tedarikciVerisi) {
+        return this.request('/api/tedarikci_ekle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(tedarikciVerisi)
         });
     },
 
