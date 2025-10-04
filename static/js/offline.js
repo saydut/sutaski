@@ -183,12 +183,14 @@ async function senkronizeEt() {
 async function syncTedarikciler() {
     try {
         const tedarikciler = await api.fetchTedarikciler();
+        // *** DÜZELTME 1: Orijinal diziyi bozmamak için verinin bir kopyasını oluştur. ***
+        const tedarikcilerKopya = JSON.parse(JSON.stringify(tedarikciler));
         await db.transaction('rw', db.tedarikciler, async () => {
             await db.tedarikciler.clear();
-            await db.tedarikciler.bulkAdd(tedarikciler);
+            await db.tedarikciler.bulkAdd(tedarikcilerKopya);
         });
         console.log(`${tedarikciler.length} tedarikçi yerel veritabanına kaydedildi.`);
-        return tedarikciler;
+        return tedarikciler; // Orijinal, bozulmamış diziyi geri döndür.
     } catch (error) {
         console.error("Tedarikçiler yerel veritabanına kaydedilemedi:", error);
         return [];
@@ -198,12 +200,14 @@ async function syncTedarikciler() {
 async function syncYemUrunleri() {
     try {
         const yemUrunleri = await api.fetchYemUrunleri();
+        // *** DÜZELTME 2: Aynı mantığı yem ürünleri için de uygula. ***
+        const yemUrunleriKopya = JSON.parse(JSON.stringify(yemUrunleri));
         await db.transaction('rw', db.yem_urunleri, async () => {
             await db.yem_urunleri.clear();
-            await db.yem_urunleri.bulkAdd(yemUrunleri);
+            await db.yem_urunleri.bulkAdd(yemUrunleriKopya);
         });
         console.log(`${yemUrunleri.length} yem ürünü yerel veritabanına kaydedildi.`);
-        return yemUrunleri;
+        return yemUrunleri; // Orijinal, bozulmamış diziyi geri döndür.
     } catch (error) {
         console.error("Yem ürünleri yerel veritabanına kaydedilemedi:", error);
         return [];
@@ -213,12 +217,19 @@ async function syncYemUrunleri() {
 
 async function syncFinansalIslemler(islemler) {
     try {
+        // *** DÜZELTME 3: Gelen veriyi, veritabanına kaydetmeden önce uyumsuz objelerden temizle. ***
+        const temizlenmisIslemler = islemler.map(islem => {
+            // 'tedarikciler' gibi iç içe objeler veritabanı şemasına uymadığı için kaldırılır.
+            const { tedarikciler, kullanicilar, ...kalanlar } = islem;
+            return kalanlar;
+        });
+
         await db.transaction('rw', db.finansal_islemler, async () => {
             await db.finansal_islemler.clear();
-            await db.finansal_islemler.bulkAdd(islemler);
+            await db.finansal_islemler.bulkAdd(temizlenmisIslemler); // Sadece temizlenmiş veriyi kaydet
         });
-        console.log(`${islemler.length} finansal işlem yerel veritabanına kaydedildi.`);
-        return islemler;
+        console.log(`${temizlenmisIslemler.length} finansal işlem yerel veritabanına kaydedildi.`);
+        return islemler; // Orijinal veriyi döndürmeye devam et ki arayüz bozulmasın.
     } catch (error) {
         console.error("Finansal işlemler yerel veritabanına kaydedilemedi:", error);
         return [];
@@ -238,6 +249,13 @@ async function getOfflineYemUrunleri() {
      console.log(`Yerel veritabanından ${yemler.length} yem ürünü okundu.`);
      return yemler;
 }
+
+async function getOfflineFinansalIslemler() {
+    const islemler = await db.finansal_islemler.toArray();
+    console.log(`Yerel veritabanından ${islemler.length} finansal işlem okundu.`);
+    return islemler;
+}
+
 
 /**
  * Genel bir veriyi ana panel önbelleğine kaydeder.
@@ -270,29 +288,38 @@ async function cevrimiciDurumuGuncelle() {
     const offlineBadge = document.getElementById('offline-status-badge');
     const syncBadge = document.getElementById('sync-status-badge');
     const syncCount = document.getElementById('sync-count');
+    // Yeni eklenenler
+    const bekleyenGirdiButonlari = document.querySelectorAll('.bekleyen-girdi-butonu');
+    const bekleyenGirdiSayisiSpan = document.querySelectorAll('.bekleyen-girdi-sayisi');
 
-    if (!container || !syncCount) return;
+
+    if (!container) return;
 
     const bekleyenSutSayisi = await db.sut_girdileri.count();
     const bekleyenFinansSayisi = await db.finansal_islemler.count();
     const bekleyenTedarikciSayisi = await db.yeni_tedarikciler_offline.count();
     const toplamBekleyen = bekleyenSutSayisi + bekleyenFinansSayisi + bekleyenTedarikciSayisi;
     
-    syncCount.textContent = toplamBekleyen;
+    if(syncCount) syncCount.textContent = toplamBekleyen;
+    bekleyenGirdiSayisiSpan.forEach(span => span.textContent = toplamBekleyen);
+
 
     if (navigator.onLine) {
         if(offlineBadge) offlineBadge.classList.add('d-none');
         if (toplamBekleyen > 0) {
             if(syncBadge) syncBadge.classList.remove('d-none');
             container.classList.remove('d-none');
+            bekleyenGirdiButonlari.forEach(but => but.style.display = 'inline-block');
         } else {
             if(syncBadge) syncBadge.classList.add('d-none');
             container.classList.add('d-none');
+            bekleyenGirdiButonlari.forEach(but => but.style.display = 'none');
         }
     } else {
         if(offlineBadge) offlineBadge.classList.remove('d-none');
         if(syncBadge) syncBadge.classList.remove('d-none');
         container.classList.remove('d-none');
+        bekleyenGirdiButonlari.forEach(but => but.style.display = 'inline-block');
     }
 }
 
