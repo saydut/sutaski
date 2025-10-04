@@ -3,14 +3,13 @@
 const db = new Dexie('sutaski_offline_db');
 
 // Veritabanı şemasını tanımlıyoruz.
-// Versiyonu 4'e yükseltip 'yeni_tedarikciler_offline' tablosunu ekliyoruz.
+// Versiyonu 5'e yükseltip ana_panel_cache tablosunu ekliyoruz.
 db.version(5).stores({
     sut_girdileri: '++id, tedarikci_id, litre, fiyat, eklendigi_zaman',
     tedarikciler: 'id, isim',
     yem_urunleri: 'id, yem_adi, stok_miktari_kg, birim_fiyat',
     finansal_islemler: '++id, islem_tipi, tedarikci_id, tutar, aciklama, islem_tarihi',
     yeni_tedarikciler_offline: '++id, isim, tc_no, telefon_no, adres',
-    // YENİ EKLENEN TABLO
     ana_panel_cache: 'key, data, timestamp' // Genel amaçlı önbellek tablosu
 });
 
@@ -37,13 +36,16 @@ async function kaydetCevrimdisiSutGirdisi(girdi) {
 }
 
 /**
- * Yeni bir finansal işlemi, internet yokken yerel veritabanına kaydeder.
+ * YENİ FONKSİYON: Yeni bir finansal işlemi, internet yokken yerel veritabanına kaydeder.
  * @param {object} islem - Kaydedilecek işlem verisi.
  * @returns {Promise<boolean>}
  */
 async function kaydetCevrimdisiFinansIslemi(islem) {
     try {
-        if (!islem.islem_tarihi) islem.islem_tarihi = new Date().toISOString();
+        // Eğer kullanıcı bir tarih seçmediyse, şimdiki zamanı ata.
+        if (!islem.islem_tarihi) {
+            islem.islem_tarihi = new Date().toISOString();
+        }
         await db.finansal_islemler.add(islem);
         gosterMesaj('İnternet yok. Finansal işlem yerel olarak kaydedildi.', 'info');
         await cevrimiciDurumuGuncelle();
@@ -55,8 +57,9 @@ async function kaydetCevrimdisiFinansIslemi(islem) {
     }
 }
 
+
 /**
- * YENİ FONKSİYON: Yeni bir tedarikçiyi, internet yokken yerel veritabanına kaydeder.
+ * Yeni bir tedarikçiyi, internet yokken yerel veritabanına kaydeder.
  * @param {object} tedarikci - Kaydedilecek tedarikçi verisi.
  * @returns {Promise<boolean>}
  */
@@ -142,8 +145,11 @@ async function senkronizeEt() {
     if (senkronizasyonBasarili) {
         for (const islem of bekleyenKayitlar.finans) {
             try {
-                const apiVerisi = { ...islem, islem_tarihi: new Date(islem.islem_tarihi).toISOString().slice(0, 19).replace('T', ' ') };
-                delete apiVerisi.id;
+                // Sunucuya göndermeden önce ID'yi kaldır ve tarihi formatla
+                const apiVerisi = { ...islem };
+                delete apiVerisi.id; // Otomatik artan yerel ID'yi sunucuya gönderme
+                apiVerisi.islem_tarihi = new Date(islem.islem_tarihi).toISOString().slice(0, 19).replace('T', ' ');
+
                 await api.postFinansIslemi(apiVerisi);
                 await db.finansal_islemler.delete(islem.id);
                 console.log(`Finansal İşlem (ID: ${islem.id}) başarıyla senkronize edildi.`);
@@ -164,9 +170,9 @@ async function senkronizeEt() {
     await cevrimiciDurumuGuncelle();
     if (senkronizasyonBasarili) {
         gosterMesaj('Senkronizasyon tamamlandı.', 'success');
-        if (typeof girdileriGoster === 'function') girdileriGoster();
-        if (typeof finansalIslemleriYukle === 'function') finansalIslemleriYukle(1);
-        if (typeof verileriYukle === 'function') verileriYukle(1); // Tedarikçiler sayfasını yenile
+        if (typeof girdileriGoster === 'function') girdileriGoster(); // main.js'teki fonksiyon
+        if (typeof finansalIslemleriYukle === 'function') finansalIslemleriYukle(1); // finans_yonetimi.js'teki fonksiyon
+        if (typeof verileriYukle === 'function') verileriYukle(1); // tedarikciler.js'teki fonksiyon
     } else {
         gosterMesaj('Senkronizasyon sırasında bir hata oluştu. Bazı kayıtlar gönderilemedi.', 'warning');
     }

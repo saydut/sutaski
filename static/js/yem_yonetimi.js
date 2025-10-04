@@ -377,6 +377,12 @@ function yemDuzenleAc(id) {
 }
 
 async function yemUrunuKaydet() {
+        // --- YENİ EKLENEN KONTROL (Sadece ID varsa yani düzenleme modundaysa çalışır) ---
+    if (id && !navigator.onLine) {
+        gosterMesaj("Yem ürününü düzenlemek için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
     const kaydetButton = document.querySelector('#yemUrunuModal .btn-primary');
     const originalButtonText = kaydetButton.innerHTML;
     const id = document.getElementById('edit-yem-id').value;
@@ -579,6 +585,13 @@ function yemIslemiDuzenleAc(id, miktar, aciklama) {
  * Yem çıkış işlemini güncelleme isteğini sunucuya gönderir.
  */
 async function yemIslemiGuncelle() {
+    // --- YENİ EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlemi yapmak için internet bağlantısı gereklidir.", "warning");
+        yemIslemDuzenleModal.hide();
+        return;
+    }
+    // --- KONTROL SONU ---
     const id = document.getElementById('edit-islem-id').value;
     const veri = {
         yeni_miktar_kg: document.getElementById('edit-miktar-input').value,

@@ -242,6 +242,39 @@ async function veriYukleVeGoster(config) {
     const tabloBody = document.getElementById(config.tabloBodyId);
     const kartContainer = document.getElementById(config.kartContainerId);
     const veriYok = document.getElementById(config.veriYokId);
+    
+    // --- YENİ: Her veri türü için benzersiz bir önbellek anahtarı oluştur ---
+    const cacheKey = `tedarikci_detay_${TEDARIKCI_ID}_${config.veriAnahtari}`;
+
+    // --- YENİ ÇEVRİMDIŞI MANTIĞI ---
+    if (!navigator.onLine) {
+        tabloBody.innerHTML = `<tr><td colspan="6" class="text-center p-4"><div class="spinner-border"></div><p class="mt-2 small">Önbellek aranıyor...</p></td></tr>`;
+        kartContainer.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div><p class="mt-2 small">Önbellek aranıyor...</p></div>`;
+        veriYok.style.display = 'none';
+
+        const data = await getCachedAnaPanelData(cacheKey);
+
+        if (data) {
+            gosterMesaj("Çevrimdışı mod: Önbellekteki veriler gösteriliyor.", "info");
+            tabloBody.innerHTML = '';
+            kartContainer.innerHTML = '';
+
+            const veriler = data[config.veriAnahtari];
+            if (veriler.length === 0) {
+                veriYok.style.display = 'block';
+            } else {
+                if (mevcutGorunum === 'tablo') config.tabloRenderFn(tabloBody, veriler);
+                else config.kartRenderFn(kartContainer, veriler);
+            }
+            // Çevrimdışıyken sayfalama olmaz
+            document.getElementById(config.sayfalamaId).innerHTML = '';
+        } else {
+            tabloBody.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-warning">Çevrimdışı mod. Bu bölüm için önbellekte veri bulunamadı.</td></tr>`;
+            kartContainer.innerHTML = `<div class="col-12 text-center p-4 text-warning">Çevrimdışı mod. Bu bölüm için önbellekte veri bulunamadı.</div>`;
+        }
+        return; // Fonksiyonu burada bitir
+    }
+    // --- ÇEVRİMDIŞI MANTIĞI SONU ---
 
     tabloBody.innerHTML = `<tr><td colspan="6" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
     kartContainer.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
@@ -250,6 +283,9 @@ async function veriYukleVeGoster(config) {
     try {
         const response = await fetch(config.apiURL);
         const data = await response.json();
+        
+        // --- YENİ: Başarılı API isteği sonrası veriyi önbelleğe al ---
+        await cacheAnaPanelData(cacheKey, data);
 
         tabloBody.innerHTML = '';
         kartContainer.innerHTML = '';
@@ -258,11 +294,8 @@ async function veriYukleVeGoster(config) {
         if (veriler.length === 0) {
             veriYok.style.display = 'block';
         } else {
-            if (mevcutGorunum === 'tablo') {
-                config.tabloRenderFn(tabloBody, veriler);
-            } else {
-                config.kartRenderFn(kartContainer, veriler);
-            }
+            if (mevcutGorunum === 'tablo') config.tabloRenderFn(tabloBody, veriler);
+            else config.kartRenderFn(kartContainer, veriler);
         }
         ui.sayfalamaNavOlustur(config.sayfalamaId, data.toplam_kayit, config.sayfa, KAYIT_SAYISI, config.yukleFn);
     } catch (e) {
@@ -292,6 +325,13 @@ function ozetKartlariniDoldur(ozet) {
 
 
 function hesapOzetiIndir() {
+    // --- YENİ EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("PDF oluşturmak için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
     const url = `/api/tedarikci/${TEDARIKCI_ID}/hesap_ozeti_pdf?ay=${ay}&yil=${yil}`;
@@ -303,6 +343,13 @@ function hesapOzetiIndir() {
 }
 
 function mustahsilMakbuzuIndir() {
+    // --- YENİ EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("PDF oluşturmak için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
     const url = `/api/tedarikci/${TEDARIKCI_ID}/mustahsil_makbuzu_pdf?ay=${ay}&yil=${yil}`;

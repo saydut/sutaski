@@ -87,16 +87,40 @@ async function raporOlustur() {
     document.getElementById('tedarikci-dokum-tablosu').innerHTML = '';
 
     if (!baslangic || !bitis) return;
-    
-    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
+
+    // --- DEĞİŞEN ÇEVRİMDIŞI KONTROLÜ BAŞLANGICI ---
     if (!navigator.onLine) {
-        mesajElementi.innerHTML = '<p class="text-warning">Rapor oluşturmak için internet bağlantısı gereklidir.</p>';
+        mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Çevrimdışı mod. Önbellekteki rapor aranıyor...</p>';
         mesajElementi.style.display = 'block';
         if (detayliChart) detayliChart.destroy();
-        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        
+        // Önbellekten veriyi çekmeyi dene
+        const veri = await getCachedAnaPanelData('detayli_rapor');
+
+        if (veri) {
+            gosterMesaj("Çevrimdışı mod: Önbellekten yüklenen son rapor gösteriliyor.", "info");
+            mesajElementi.style.display = 'none';
+            // Raporu önbellekteki veriyle oluştur
+            const formatliBaslangic = new Date(veri.summaryData.baslangicTarihi).toLocaleDateString('tr-TR');
+            const formatliBitis = new Date(veri.summaryData.bitisTarihi).toLocaleDateString('tr-TR');
+            grafikBaslik.textContent = `${formatliBaslangic} - ${formatliBitis} Arası Günlük Süt Toplama Raporu (Önbellek)`;
+
+            ozetVerileriniDoldur(veri.summaryData);
+            tedarikciTablosunuDoldur(veri.supplierBreakdown);
+            
+            detayliChart = new Chart(ctx, {
+                type: 'line',
+                data: veri.chartData,
+                options: { /* ... seçenekler aynı ... */ }
+            });
+            registerChart(detayliChart);
+            if (typeof updateAllChartThemes === 'function') updateAllChartThemes();
+        } else {
+            mesajElementi.innerHTML = '<p class="text-warning">Çevrimdışı mod. Bu rapor için önbellekte veri bulunamadı.</p>';
+        }
         return;
     }
-    // --- KONTROL SONU ---
+    // --- DEĞİŞEN ÇEVRİMDIŞI KONTROLÜ SONU ---
 
     mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Rapor oluşturuluyor...</p>';
     mesajElementi.style.display = 'block';
@@ -107,6 +131,14 @@ async function raporOlustur() {
         const veri = await response.json();
 
         if (!response.ok) throw new Error(veri.error || 'Rapor verisi alınamadı.');
+        
+        // --- YENİ EKLENEN ÖNBELLEĞE KAYDETME KODU ---
+        // Veriyi sunucudan başarıyla çektikten sonra önbelleğe kaydediyoruz.
+        // Tarih bilgisini de ekleyelim ki çevrimdışıyken başlığı doğru yazabilelim.
+        veri.summaryData.baslangicTarihi = baslangicDate.toISOString();
+        veri.summaryData.bitisTarihi = bitisDate.toISOString();
+        await cacheAnaPanelData('detayli_rapor', veri);
+        // --- ÖNBELLEĞE KAYDETME SONU ---
         
         if (veri.chartData.labels.length === 0) {
             mesajElementi.textContent = "Seçilen tarih aralığında veri bulunamadı.";

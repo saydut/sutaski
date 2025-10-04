@@ -1,3 +1,12 @@
+<div id="offline-status-container" class="d-flex align-items-center d-none">
+    <span id="offline-status-badge" class="badge rounded-pill bg-warning text-dark me-2">
+        <i class="bi bi-cloud-slash-fill me-1"></i> Çevrimdışı
+    </span>
+    <span id="sync-status-badge" class="badge rounded-pill bg-info me-2">
+        <i class="bi bi-arrow-repeat me-1"></i> <span id="sync-count">0</span> bekleyen girdi
+    </span>
+</div>
+
 {% if request.endpoint != 'main.anasayfa' %}
 <a href="{{ url_for('main.anasayfa') }}" class="btn btn-secondary btn-sm">Ana Panele Dön</a>
 {% endif %}

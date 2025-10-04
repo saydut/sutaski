@@ -184,7 +184,7 @@ async function finansalIslemKaydet() {
 
     // --- MEVCUT ÇEVRİMİÇİ MANTIĞI ---
     // İnternet varsa, eskisi gibi sunucuya gönder.
-    const kaydetButton = document.querySelector('.btn-primary'); // Butonu daha genel bir seçici ile bulalım
+    const kaydetButton = document.querySelector('.btn-primary');
     const originalButtonText = kaydetButton.innerHTML;
 
     kaydetButton.disabled = true;
@@ -232,6 +232,14 @@ function silmeOnayiAc(islemId) {
 }
 
 async function finansalIslemSil() {
+    // --- YENİ EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
+        silmeOnayModal.hide();
+        return;
+    }
+    // --- KONTROL SONU ---
+
     const id = document.getElementById('silinecek-islem-id').value;
     silmeOnayModal.hide();
 
@@ -253,8 +261,6 @@ async function finansalIslemSil() {
         gosterMesaj(result.message, 'success');
 
     } catch (error) {
-        // ---- DÜZELTME BURADA ----
-        // Hata mesajını 'result' yerine doğrudan 'error' nesnesinden alıyoruz.
         gosterMesaj(error.message || 'Silme işlemi başarısız, işlem geri yüklendi.', 'danger');
         
         silinecekElement.style.opacity = '1';
