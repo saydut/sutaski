@@ -1,9 +1,7 @@
-// static/js/finans_yonetimi.js (DİNAMİK GÖRÜNÜM DEĞİŞTİRME ÖZELLİKLİ TAM VERSİYON)
-
 let tedarikciSecici, tarihSecici;
 let duzenleModal, silmeOnayModal;
 let mevcutGorunum = 'tablo';
-const KAYIT_SAYISI = 5; // Backend'deki limit ile aynı olmalı
+const KAYIT_SAYISI = 5;
 
 window.onload = function() {
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
@@ -15,7 +13,7 @@ window.onload = function() {
     gorunumuAyarla(mevcutGorunum);
 
     tedarikcileriDoldur();
-    finansalIslemleriYukle(1); // İlk sayfayı yükle
+    finansalIslemleriYukle(1);
 };
 
 function gorunumuDegistir(yeniGorunum) {
@@ -23,13 +21,12 @@ function gorunumuDegistir(yeniGorunum) {
     mevcutGorunum = yeniGorunum;
     localStorage.setItem('finansGorunum', yeniGorunum);
     gorunumuAyarla(yeniGorunum);
-    finansalIslemleriYukle(1); // Görünüm değiştiğinde ilk sayfayı yükle
+    finansalIslemleriYukle(1);
 }
 
 function gorunumuAyarla(aktifGorunum) {
     document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
     document.getElementById(`${aktifGorunum}-gorunumu`).style.display = 'block';
-    
     document.getElementById('btn-view-table').classList.toggle('active', aktifGorunum === 'tablo');
     document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
 }
@@ -45,45 +42,46 @@ async function tedarikcileriDoldur() {
 
 async function finansalIslemleriYukle(sayfa = 1) {
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    const tabloBody = document.getElementById('finansal-islemler-tablosu');
-    const kartListesi = document.getElementById('finansal-islemler-kart-listesi');
     const sayfalamaNav = document.getElementById('finans-sayfalama');
 
-    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
     if (!navigator.onLine) {
-        veriYokMesaji.innerHTML = '<p class="text-warning">Çevrimdışı mod: Yalnızca önbellekteki finansal işlemler gösteriliyor.</p>';
-        veriYokMesaji.style.display = 'block';
-        
+        veriYokMesaji.innerHTML = '<p class="text-warning">Çevrimdışı mod. Yalnızca yerel olarak kaydedilmiş son işlemler listeleniyor.</p>';
+        sayfalamaNav.innerHTML = '';
         try {
-            // IndexedDB'den veriyi çek ve göster
             const islemler = await getOfflineFinansalIslemler();
             verileriGoster(islemler);
-        } catch (error) {
-            veriYokMesaji.innerHTML = `<p class="text-danger">Önbellekteki veriler okunamadı.</p>`;
+            veriYokMesaji.style.display = islemler.length > 0 ? 'none' : 'block';
+             if (islemler.length === 0) {
+                veriYokMesaji.innerHTML = '<p class="text-secondary">Önbellekte gösterilecek finansal işlem bulunamadı.</p>';
+             }
+        } catch (e) {
+            verileriGoster([]);
+            veriYokMesaji.innerHTML = '<p class="text-danger">Önbellekteki veriler okunamadı.</p>';
+            veriYokMesaji.style.display = 'block';
         }
-        
-        // Çevrimdışı modda sayfalama olmaz, temizle
-        sayfalamaNav.innerHTML = '';
         return;
     }
-    // --- KONTROL SONU ---
+    
+    document.getElementById('veri-yok-mesaji').style.display = 'none';
+    const placeholder = `<div class="text-center p-4"><div class="spinner-border"></div></div>`;
+    if(mevcutGorunum === 'tablo') document.getElementById('finansal-islemler-tablosu').innerHTML = placeholder;
+    else document.getElementById('finansal-islemler-kart-listesi').innerHTML = placeholder;
 
-    veriYokMesaji.innerHTML = `<div class="spinner-border spinner-border-sm"></div> Yükleniyor...`;
-    veriYokMesaji.style.display = 'block';
 
     try {
         const response = await fetch(`/finans/api/islemler?sayfa=${sayfa}`);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'İşlemler yüklenemedi.');
-        
-        // Sunucudan gelen veriyi hem göster hem de önbelleğe al
+
+        await syncFinansallslemler(data.islemler);
         verileriGoster(data.islemler);
-        await syncFinansalIslemler(data.islemler); // Veriyi IndexedDB'ye kaydet
         
         ui.sayfalamaNavOlustur('finans-sayfalama', data.toplam_kayit, sayfa, KAYIT_SAYISI, finansalIslemleriYukle);
 
     } catch (error) {
+         verileriGoster([]);
          veriYokMesaji.innerHTML = `<p class="text-danger">${error.message}</p>`;
+         veriYokMesaji.style.display = 'block';
     }
 }
 

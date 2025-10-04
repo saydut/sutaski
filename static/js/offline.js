@@ -210,6 +210,23 @@ async function syncYemUrunleri() {
     }
 }
 
+
+async function syncFinansalIslemler(islemler) {
+    try {
+        await db.transaction('rw', db.finansal_islemler, async () => {
+            await db.finansal_islemler.clear();
+            await db.finansal_islemler.bulkAdd(islemler);
+        });
+        console.log(`${islemler.length} finansal işlem yerel veritabanına kaydedildi.`);
+        return islemler;
+    } catch (error) {
+        console.error("Finansal işlemler yerel veritabanına kaydedilemedi:", error);
+        return [];
+    }
+}
+
+
+
 async function getOfflineTedarikciler() {
     const tedarikciler = await db.tedarikciler.toArray();
     console.log(`Yerel veritabanından ${tedarikciler.length} tedarikçi okundu.`);
@@ -280,11 +297,17 @@ async function cevrimiciDurumuGuncelle() {
 }
 
 // --- OLAY DİNLEYİCİLERİ ---
-window.addEventListener('online', senkronizeEt);
+window.addEventListener('online', () => {
+    // Sadece giriş yapılmış sayfalarda online olunca senkronize et
+    if (document.body.dataset.userRole) {
+        senkronizeEt();
+    }
+});
 window.addEventListener('offline', cevrimiciDurumuGuncelle);
 window.addEventListener('load', () => {
     cevrimiciDurumuGuncelle();
-    if (navigator.onLine) {
+    // Sadece giriş yapılmış sayfalarda ve internet varsa senkronize et
+    if (navigator.onLine && document.body.dataset.userRole) {
         senkronizeEt();
     }
 });

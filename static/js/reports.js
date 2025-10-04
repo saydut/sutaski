@@ -14,6 +14,13 @@ function formatDateToYYYYMMDD(date) {
 // static/js/reports.js
 
 async function pdfIndir() {
+    // --- KONTROLÜ BURAYA EKLEYİN ---
+    if (!navigator.onLine) {
+        gosterMesaj("PDF raporu oluşturmak için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
     const url = `/api/rapor/aylik_pdf?ay=${ay}&yil=${yil}`;
@@ -111,7 +118,18 @@ async function raporOlustur() {
             detayliChart = new Chart(ctx, {
                 type: 'line',
                 data: veri.chartData,
-                options: { /* ... seçenekler aynı ... */ }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true },
+                        x: {}
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: (context) => ` Toplam: ${context.parsed.y} Litre` } }
+                    }
+                }
             });
             registerChart(detayliChart);
             if (typeof updateAllChartThemes === 'function') updateAllChartThemes();

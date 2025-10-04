@@ -3,12 +3,7 @@ from decorators import login_required, lisans_kontrolu
 from flask import Response
 from extensions import supabase
 
-main_bp = Blueprint(
-    'main',
-    __name__,
-    template_folder='../../templates',
-    static_folder='../../static'
-)
+main_bp = Blueprint('main', __name__)
 
 # --- ARAYÜZ SAYFALARI ---
 @main_bp.route('/')
