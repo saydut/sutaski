@@ -156,7 +156,7 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
         const sunucuVerisi = navigator.onLine ? await api.fetchSutGirdileri(tarih, sayfa) : { girdiler: [], toplam_girdi_sayisi: 0 };
         
         // Çevrimdışı bekleyen girdileri al
-        const bekleyenGirdiler = await bekleyenGirdileriGetir();
+        const bekleyenGirdiler = await bekleyenKayitlariGetir().then(kayitlar => kayitlar.sut || []);
         
         // Sunucu verisi ile çevrimdışı veriyi birleştir
         const { tumGirdiler, toplamGirdi } = ui.mergeOnlineOfflineGirdiler(sunucuVerisi, bekleyenGirdiler, tarih);
@@ -169,8 +169,12 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
 
     } catch (error) {
         console.error("Girdileri gösterirken hata:", error);
-        ui.renderGirdilerListesi([], "Girdiler yüklenirken bir hata oluştu.");
+        // --- DÜZELTME BURADA ---
+        // Artık var olmayan 'renderGirdilerListesi' yerine doğru fonksiyon olan 'renderGirdiler' çağrılıyor.
+        ui.renderGirdiler([], mevcutGorunum); 
     } finally {
+        // Bu blok artık toggleGirdilerListLoading içinde bir 'else' olmadığı için gereksiz,
+        // çünkü renderGirdiler fonksiyonu zaten spinner'ı temizliyor. Ama zararı yok, kalabilir.
         ui.toggleGirdilerListLoading(false);
     }
 }
