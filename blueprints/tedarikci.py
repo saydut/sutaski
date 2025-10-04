@@ -236,7 +236,7 @@ def get_tedarikciler_liste():
 
         # 3. Arama filtresini ekle (isim veya telefonda arama yapar)
         if arama:
-            query = query.filter('or', f'(isim.ilike.%{arama}%,telefon_no.ilike.%{arama}%)')
+            query = query.or_(f'isim.ilike.%{arama}%,telefon_no.ilike.%{arama}%')
 
         # 4. Sıralamayı ekle
         is_desc = siralama_yon == 'desc'

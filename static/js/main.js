@@ -313,13 +313,16 @@ async function sutGirdisiEkle() {
         console.error("İyimser ekleme başarısız oldu:", error);
         gosterMesaj("Kayıt başarısız. İnternet bağlantınızı kontrol edin.", "danger");
         
+        // Hata durumunda geçici elemanı arayüzden kaldır.
         const silinecekElement = document.getElementById(geciciId);
         if (silinecekElement) silinecekElement.remove();
 
+        // Kullanıcının girdiği verileri forma geri yükle.
         ui.tedarikciSecici.setValue(orjinalFormVerisi.tedarikciId);
         document.getElementById('litre-input').value = orjinalFormVerisi.litre;
         document.getElementById('fiyat-input').value = orjinalFormVerisi.fiyat;
         
+        // Eğer listede başka eleman yoksa "veri yok" mesajının durumunu kontrol et.
         if(listeElementi.children.length === 1 && ilkEleman) {
             ilkEleman.style.display = 'block';
         }
@@ -385,7 +388,7 @@ async function sutGirdisiSil() {
     }
     // --- KONTROL SONU ---
 
-    const silinecekElement = document.getElementById(`girdi-${girdiId}`);
+    const silinecekElement = document.getElementById(`girdi-liste-${girdiId}`) || document.getElementById(`girdi-kart-${girdiId}`);
     if (!silinecekElement) return;
 
     const parent = silinecekElement.parentNode;
