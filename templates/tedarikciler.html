@@ -45,25 +45,18 @@
         <div class="card-body p-3">
             <div class="table-responsive">
                 <table class="table table-hover">
-                    </table>
+                    <thead> <tr>
+                            <th class="sortable" data-sort="isim">Tedarikçi Adı</th>
+                            <th>Telefon No</th>
+                            <th class="text-end sortable" data-sort="toplam_litre">Toplam Süt (Litre)</th>
+                            <th class="text-center">İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tedarikciler-tablosu"></tbody> </table>
             </div>
         </div>
     </div>
 </div>
-                        <thead>
-                            <tr>
-                                <th class="sortable" data-sort="isim">Tedarikçi Adı</th>
-                                <th>Telefon No</th>
-                                <th class="text-end sortable" data-sort="toplam_litre">Toplam Süt (Litre)</th>
-                                <th class="text-center">İşlemler</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tedarikciler-tablosu"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div id="kart-gorunumu" class="gorunum-konteyneri" style="display: none;">
         <div class="row g-3" id="tedarikciler-kart-listesi">
