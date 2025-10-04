@@ -143,56 +143,75 @@ function renderCards(islemler) {
 async function finansalIslemKaydet() {
     const veri = {
         islem_tipi: document.getElementById('islem-tipi-sec').value,
-        tedarikci_id: tedarikciSecici.getValue(),
+        tedarikci_id: parseInt(tedarikciSecici.getValue()),
         tutar: document.getElementById('tutar-input').value,
-        islem_tarihi: tarihSecici.selectedDates[0] ? tarihSecici.selectedDates[0].toISOString().slice(0, 19).replace('T', ' ') : null,
+        // Tarih seçilmişse al, seçilmemişse null bırak (offline.js bunu yönetecek)
+        islem_tarihi: tarihSecici.selectedDates[0] ? tarihSecici.selectedDates[0].toISOString() : null,
         aciklama: document.getElementById('aciklama-input').value.trim()
     };
-    if (!veri.islem_tipi || !veri.tedarikci_id || !veri.tutar) {
-        gosterMesaj('Lütfen işlem tipi, tedarikçi ve tutar alanlarını doldurun.', 'warning');
+
+    if (!veri.islem_tipi || !veri.tedarikci_id || !veri.tutar || parseFloat(veri.tutar) <= 0) {
+        gosterMesaj('Lütfen işlem tipi, tedarikçi ve pozitif bir tutar girin.', 'warning');
         return;
     }
 
-    let islemBasarili = false;
-    // 1. ADIM: Sadece KAYDETME işlemini dene ve hatasını yakala.
+    // --- YENİ ÇEVRİMDIŞI MANTIĞI ---
+    if (!navigator.onLine) {
+        // İnternet yoksa, offline.js'teki kaydetme fonksiyonunu çağır
+        const basarili = await kaydetCevrimdisiFinansIslemi(veri);
+        if (basarili) {
+            // Başarıyla yerel veritabanına kaydedildiyse formu temizle
+            document.getElementById('islem-tipi-sec').value = 'Ödeme';
+            tedarikciSecici.clear();
+            document.getElementById('tutar-input').value = '';
+            document.getElementById('aciklama-input').value = '';
+            tarihSecici.clear();
+            // Not: Liste hemen güncellenmez, sadece bekleyen kayıtlara eklenir.
+        }
+        return; // Fonksiyonu burada bitir.
+    }
+
+    // --- MEVCUT ÇEVRİMİÇİ MANTIĞI ---
+    // İnternet varsa, eskisi gibi sunucuya gönder.
+    const kaydetButton = document.querySelector('.btn-primary'); // Butonu daha genel bir seçici ile bulalım
+    const originalButtonText = kaydetButton.innerHTML;
+
+    kaydetButton.disabled = true;
+    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
+
     try {
-        const response = await fetch('/finans/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
+        const response = await fetch('/finans/api/islemler', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ...veri,
+                // Sunucuya gönderirken tarihi doğru formatla
+                islem_tarihi: veri.islem_tarihi ? new Date(veri.islem_tarihi).toISOString().slice(0, 19).replace('T', ' ') : null
+            })
+        });
+
         const result = await response.json();
 
         if (!response.ok) {
-            // Eğer sunucu bilerek bir hata döndürdüyse (örn: "Tutar pozitif olmalı")
-            gosterMesaj(result.error || 'İşlem kaydedilemedi.', 'danger');
-            return; // Fonksiyonu durdur.
+            throw new Error(result.error || 'İşlem kaydedilemedi.');
         }
 
-        // Buraya ulaştıysak, kayıt işlemi kesinlikle başarılıdır.
         gosterMesaj(result.message, 'success');
-        islemBasarili = true;
-
-    } catch (error) {
-        // Eğer sunucuya hiç ulaşılamadıysa bu hata çıkar.
-        gosterMesaj('İşlem kaydedilirken sunucuya bağlanılamadı.', 'danger');
-        return; // Fonksiyonu durdur.
-    }
-
-    // 2. ADIM: Eğer kaydetme başarılı olduysa, formu temizle ve listeyi yenile.
-    if (islemBasarili) {
         // Formu temizle
         document.getElementById('islem-tipi-sec').value = 'Ödeme';
         tedarikciSecici.clear();
         document.getElementById('tutar-input').value = '';
         document.getElementById('aciklama-input').value = '';
         tarihSecici.clear();
-        
-        // Listeyi yenileme işlemini kendi try-catch bloğu içine al.
-        try {
-            // Not: Fonksiyonun adı `finansalIslemleriYukle(1)` olabilir, kendi koduna göre düzenle.
-            await finansalIslemleriYukle(1); 
-        } catch (error) {
-            // Eğer SADECE liste yenileme başarısız olursa, kullanıcıya durumu izah eden bir uyarı ver.
-            console.error("Liste yenilenirken hata oluştu:", error);
-            gosterMesaj('İşlem kaydedildi ancak liste yenilenemedi. Lütfen sayfayı yenileyin.', 'warning');
-        }
+
+        // Listeyi yenile
+        await finansalIslemleriYukle(1);
+
+    } catch (error) {
+        gosterMesaj(error.message, 'danger');
+    } finally {
+        kaydetButton.disabled = false;
+        kaydetButton.innerHTML = originalButtonText;
     }
 }
 

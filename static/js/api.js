@@ -8,6 +8,8 @@
 const api = {
     /**
      * Genel bir API isteği yapmak için yardımcı fonksiyon.
+     * @param {object} islemVerisi - {islem_tipi, tedarikci_id, tutar, vb.}
+     * @returns {Promise<any>}
      * @param {string} url - İstek yapılacak URL.
      * @param {object} options - Fetch için yapılandırma seçenekleri (method, headers, body vb.).
      * @returns {Promise<any>} - Başarılı olursa JSON verisi.
@@ -88,6 +90,14 @@ fetchTedarikciler() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(girdiVerisi)
+        });
+    },
+
+    postFinansIslemi(islemVerisi) {
+        return this.request('/finans/api/islemler', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(islemVerisi)
         });
     },
 
