@@ -120,17 +120,26 @@ async function baslangicVerileriniYukle() {
  * @param {string|null} tarih - 'YYYY-MM-DD' formatında tarih. Boş bırakılırsa bugün.
  */
 async function ozetVerileriniYukle(tarih = null) {
-    ui.toggleOzetPanelsLoading(true); // Yükleniyor animasyonunu göster
+    ui.toggleOzetPanelsLoading(true);
     const effectiveDate = tarih || utils.getLocalDateString(new Date());
 
     try {
-        const data = await api.fetchGunlukOzet(effectiveDate);
+        let data;
+        if (navigator.onLine) {
+            data = await api.fetchGunlukOzet(effectiveDate);
+            // Sadece bugünün özetini önbelleğe al
+            if (effectiveDate === utils.getLocalDateString(new Date())) {
+                await cacheAnaPanelData('gunlukOzet', data);
+            }
+        } else {
+            data = await getCachedAnaPanelData('gunlukOzet');
+            if (!data) throw new Error("Önbellekte özet veri bulunamadı.");
+        }
         ui.updateOzetPanels(data, effectiveDate);
     } catch (error) {
         console.error("Özet yüklenirken hata:", error);
-        ui.updateOzetPanels(null, effectiveDate, true); // Hata durumunu UI'a bildir
+        ui.updateOzetPanels(null, effectiveDate, true);
     } finally {
-        // Hata olsa da olmasa da yükleniyor animasyonunu kaldır
         ui.toggleOzetPanelsLoading(false); 
     }
 }
@@ -143,38 +152,40 @@ async function ozetVerileriniYukle(tarih = null) {
  */
 async function girdileriGoster(sayfa = 1, tarih = null) {
     mevcutSayfa = sayfa;
-    if (!tarih) {
-        tarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : utils.getLocalDateString(new Date());
-    }
+    tarih = tarih || (ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : utils.getLocalDateString(new Date()));
     
     ui.toggleGirdilerListLoading(true);
-
     document.getElementById('veri-yok-mesaji').style.display = 'none';
 
     try {
-        // Çevrimiçi ise sunucudan veri çek
-        const sunucuVerisi = navigator.onLine ? await api.fetchSutGirdileri(tarih, sayfa) : { girdiler: [], toplam_girdi_sayisi: 0 };
+        let sunucuVerisi = { girdiler: [], toplam_girdi_sayisi: 0 };
+        if (navigator.onLine) {
+            sunucuVerisi = await api.fetchSutGirdileri(tarih, sayfa);
+            // Sadece bugünün ilk sayfa girdilerini önbelleğe al
+            if (tarih === utils.getLocalDateString(new Date()) && sayfa === 1) {
+                await cacheAnaPanelData('gunlukGirdiler', sunucuVerisi);
+            }
+        } else {
+            // Çevrimdışıysak sadece bugünün ilk sayfasını önbellekten göstermeye çalış
+            if (tarih === utils.getLocalDateString(new Date()) && sayfa === 1) {
+                sunucuVerisi = await getCachedAnaPanelData('gunlukGirdiler');
+                if (!sunucuVerisi) throw new Error("Önbellekte günlük girdi bulunamadı.");
+            } else {
+                 throw new Error("Çevrimdışı modda sadece bugünün ilk sayfası görüntülenebilir.");
+            }
+        }
         
-        // Çevrimdışı bekleyen girdileri al
         const bekleyenGirdiler = await bekleyenKayitlariGetir().then(kayitlar => kayitlar.sut || []);
-        
-        // Sunucu verisi ile çevrimdışı veriyi birleştir
         const { tumGirdiler, toplamGirdi } = ui.mergeOnlineOfflineGirdiler(sunucuVerisi, bekleyenGirdiler, tarih);
         
-        // Birleştirilmiş veriyi arayüzde göster
         ui.renderGirdiler(tumGirdiler, mevcutGorunum);
-        
-        // Sayfalamayı oluştur
         ui.sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, tarih));
 
     } catch (error) {
         console.error("Girdileri gösterirken hata:", error);
-        // --- DÜZELTME BURADA ---
-        // Artık var olmayan 'renderGirdilerListesi' yerine doğru fonksiyon olan 'renderGirdiler' çağrılıyor.
-        ui.renderGirdiler([], mevcutGorunum); 
+        ui.renderGirdiler([], mevcutGorunum);
+        gosterMesaj(error.message, 'warning'); // Kullanıcıya bilgi ver
     } finally {
-        // Bu blok artık toggleGirdilerListLoading içinde bir 'else' olmadığı için gereksiz,
-        // çünkü renderGirdiler fonksiyonu zaten spinner'ı temizliyor. Ama zararı yok, kalabilir.
         ui.toggleGirdilerListLoading(false);
     }
 }

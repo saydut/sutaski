@@ -51,10 +51,18 @@ async function finansalIslemleriYukle(sayfa = 1) {
 
     // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
     if (!navigator.onLine) {
-        veriYokMesaji.innerHTML = '<p class="text-warning">Finansal işlemleri listelemek için internet bağlantısı gereklidir.</p>';
+        veriYokMesaji.innerHTML = '<p class="text-warning">Çevrimdışı mod: Yalnızca önbellekteki finansal işlemler gösteriliyor.</p>';
         veriYokMesaji.style.display = 'block';
-        tabloBody.innerHTML = '';
-        kartListesi.innerHTML = '';
+        
+        try {
+            // IndexedDB'den veriyi çek ve göster
+            const islemler = await getOfflineFinansalIslemler();
+            verileriGoster(islemler);
+        } catch (error) {
+            veriYokMesaji.innerHTML = `<p class="text-danger">Önbellekteki veriler okunamadı.</p>`;
+        }
+        
+        // Çevrimdışı modda sayfalama olmaz, temizle
         sayfalamaNav.innerHTML = '';
         return;
     }
@@ -68,7 +76,10 @@ async function finansalIslemleriYukle(sayfa = 1) {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'İşlemler yüklenemedi.');
         
+        // Sunucudan gelen veriyi hem göster hem de önbelleğe al
         verileriGoster(data.islemler);
+        await syncFinansalIslemler(data.islemler); // Veriyi IndexedDB'ye kaydet
+        
         ui.sayfalamaNavOlustur('finans-sayfalama', data.toplam_kayit, sayfa, KAYIT_SAYISI, finansalIslemleriYukle);
 
     } catch (error) {

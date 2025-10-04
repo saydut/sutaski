@@ -4,14 +4,14 @@ const db = new Dexie('sutaski_offline_db');
 
 // Veritabanı şemasını tanımlıyoruz.
 // Versiyonu 4'e yükseltip 'yeni_tedarikciler_offline' tablosunu ekliyoruz.
-db.version(4).stores({
+db.version(5).stores({
     sut_girdileri: '++id, tedarikci_id, litre, fiyat, eklendigi_zaman',
-    tedarikciler: 'id, isim', // Bu tablo sunucudan gelen listenin önbelleğidir.
+    tedarikciler: 'id, isim',
     yem_urunleri: 'id, yem_adi, stok_miktari_kg, birim_fiyat',
     finansal_islemler: '++id, islem_tipi, tedarikci_id, tutar, aciklama, islem_tarihi',
-    yeni_tedarikciler_offline: '++id, isim, tc_no, telefon_no, adres' // YENİ TABLO: Sadece offline oluşturulanlar için.
-}).upgrade(tx => {
-    console.log("Veritabanı 4. versiyona yükseltildi ve yeni_tedarikciler_offline tablosu eklendi.");
+    yeni_tedarikciler_offline: '++id, isim, tc_no, telefon_no, adres',
+    // YENİ EKLENEN TABLO
+    ana_panel_cache: 'key, data, timestamp' // Genel amaçlı önbellek tablosu
 });
 
 
@@ -214,6 +214,30 @@ async function getOfflineYemUrunleri() {
      const yemler = await db.yem_urunleri.toArray();
      console.log(`Yerel veritabanından ${yemler.length} yem ürünü okundu.`);
      return yemler;
+}
+
+/**
+ * Genel bir veriyi ana panel önbelleğine kaydeder.
+ * @param {string} key - Verinin anahtarı (örn: 'gunlukOzet').
+ * @param {any} data - Kaydedilecek veri.
+ */
+async function cacheAnaPanelData(key, data) {
+    try {
+        await db.ana_panel_cache.put({ key: key, data: data, timestamp: new Date().getTime() });
+        console.log(`'${key}' verisi önbelleğe alındı.`);
+    } catch (error) {
+        console.error(`'${key}' verisi önbelleğe alınamadı:`, error);
+    }
+}
+
+/**
+ * Önbellekten bir veriyi anahtarıyla okur.
+ * @param {string} key - Okunacak verinin anahtarı.
+ * @returns {Promise<any|null>}
+ */
+async function getCachedAnaPanelData(key) {
+    const record = await db.ana_panel_cache.get(key);
+    return record ? record.data : null;
 }
 
 // --- ARAYÜZ GÜNCELLEME ---
