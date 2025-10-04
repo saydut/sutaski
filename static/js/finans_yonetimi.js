@@ -73,7 +73,7 @@ async function finansalIslemleriYukle(sayfa = 1) {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'İşlemler yüklenemedi.');
 
-        await syncFinansalIslemler(data.islemler);
+
         verileriGoster(data.islemler);
         
         ui.sayfalamaNavOlustur('finans-sayfalama', data.toplam_kayit, sayfa, KAYIT_SAYISI, finansalIslemleriYukle);
