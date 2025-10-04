@@ -16,26 +16,24 @@ main_bp = Blueprint(
 @lisans_kontrolu
 def anasayfa():
     # Service Worker'ın uygulama kabuğunu önbelleğe alması için
-    if request.headers.get('X-Cache-Me') == 'true':
-        return render_template('index.html', session={})
+    # Eğer istekte özel başlık varsa, boş session ile render et
+
     return render_template('index.html', session=session)
 
 @main_bp.route('/raporlar')
 @login_required
 @lisans_kontrolu
 def raporlar_page():
-    # BU BLOK EKLENDİ
-    if request.headers.get('X-Cache-Me') == 'true':
-        return render_template('raporlar.html', session={})
+    # Eğer istekte özel başlık varsa, boş session ile render et
+
     return render_template('raporlar.html')
 
 @main_bp.route('/tedarikciler')
 @login_required
 @lisans_kontrolu
 def tedarikciler_sayfasi():
-    # BU BLOK EKLENDİ
-    if request.headers.get('X-Cache-Me') == 'true':
-        return render_template('tedarikciler.html', session={})
+    # Eğer istekte özel başlık varsa, boş session ile render et
+
     return render_template('tedarikciler.html')
 
 @main_bp.route('/tedarikci/<int:tedarikci_id>')

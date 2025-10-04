@@ -15,9 +15,8 @@ yem_bp = Blueprint('yem', __name__, url_prefix='/yem')
 @login_required
 @lisans_kontrolu
 def yem_yonetimi_sayfasi():
-    # BU BLOK EKLENDİ
-    if request.headers.get('X-Cache-Me') == 'true':
-        return render_template('yem_yonetimi.html', session={})
+    # Eğer istekte özel başlık varsa, boş session ile render et
+
     return render_template('yem_yonetimi.html')
 
 # --- API UÇ NOKTALARI ---
