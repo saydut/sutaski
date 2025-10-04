@@ -205,7 +205,6 @@ async function finansalIslemSil() {
     const id = document.getElementById('silinecek-islem-id').value;
     silmeOnayModal.hide();
 
-    // 1. Öğeyi arayüzden anında kaldır
     const silinecekElement = document.getElementById(`finans-islem-${id}`);
     if (!silinecekElement) return;
     
@@ -215,24 +214,19 @@ async function finansalIslemSil() {
     silinecekElement.style.opacity = '0';
     setTimeout(() => silinecekElement.remove(), 400);
 
-    // 2. Arka planda API isteğini gönder
     try {
         const response = await fetch(`/finans/api/islemler/${id}`, { method: 'DELETE' });
         const result = await response.json();
         if (!response.ok) {
-            // Sunucudan gelen bilerek bir hata varsa (örn: "Yetkiniz yok"), onu fırlat
             throw new Error(result.error);
         }
-
         gosterMesaj(result.message, 'success');
-        // Başarılı olursa başka bir şey yapmaya gerek yok, çünkü arayüzden zaten silindi.
 
     } catch (error) {
         // ---- DÜZELTME BURADA ----
         // Hata mesajını 'result' yerine doğrudan 'error' nesnesinden alıyoruz.
         gosterMesaj(error.message || 'Silme işlemi başarısız, işlem geri yüklendi.', 'danger');
         
-        // Hata olursa elemanı eski yerine geri ekle
         silinecekElement.style.opacity = '1';
         if (!silinecekElement.parentNode) {
             parent.insertBefore(silinecekElement, nextSibling);

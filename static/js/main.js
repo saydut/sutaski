@@ -315,20 +315,23 @@ async function sutGirdisiEkle() {
  * Mevcut bir süt girdisini düzenleme formunu yönetir.
  */
 async function sutGirdisiDuzenle() {
-    // 1. Formdan verileri al (yeni fiyat dahil)
     const { girdiId, yeniLitre, yeniFiyat, duzenlemeSebebi } = ui.getDuzenlemeFormVerisi();
-    
-    // 2. Kontrolü güncelle: Sadece litre ve fiyatın dolu olması yeterli.
     if (!yeniLitre || !yeniFiyat) {
         gosterMesaj("Lütfen yeni litre ve fiyat değerlerini girin.", "warning");
         return;
     }
+
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Düzenleme işlemi için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
     
-    // 3. API'ye gönderilecek veriyi oluştur.
     const guncelVeri = {
         yeni_litre: parseFloat(yeniLitre),
-        yeni_fiyat: parseFloat(yeniFiyat), // Yeni fiyatı ekle
-        duzenleme_sebebi: duzenlemeSebebi // Sebep boş olsa bile gönder
+        yeni_fiyat: parseFloat(yeniFiyat),
+        duzenleme_sebebi: duzenlemeSebebi
     };
     
     try {
@@ -360,6 +363,13 @@ async function sutGirdisiSil() {
     const girdiId = ui.getSilinecekGirdiId();
     ui.silmeOnayModal.hide();
 
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Silme işlemi için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+
     const silinecekElement = document.getElementById(`girdi-${girdiId}`);
     if (!silinecekElement) return;
 
@@ -384,8 +394,6 @@ async function sutGirdisiSil() {
         await charts.tedarikciGrafigiOlustur();
 
     } catch (error) {
-        // --- DEĞİŞİKLİK BURADA ---
-        // Teknik hatayı konsola yazdır, kullanıcıya ise anlaşılır bir mesaj göster.
         console.error("İyimser silme başarısız oldu:", error);
         gosterMesaj('Silme işlemi başarısız, girdi geri yüklendi.', 'danger');
 

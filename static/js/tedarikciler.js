@@ -225,7 +225,13 @@ async function tedarikciKaydet() {
         adres: document.getElementById('tedarikci-adres-input').value.trim()
     };
     if (!veri.isim) { gosterMesaj("Tedarikçi ismi zorunludur.", "warning"); return; }
-    if (!navigator.onLine) { gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "danger"); return; }
+    
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) { 
+        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning"); 
+        return; 
+    }
+    // --- KONTROL SONU ---
 
     kaydetButton.disabled = true;
     kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
@@ -253,10 +259,15 @@ async function tedarikciKaydet() {
 
 async function tedarikciSil() {
     const id = document.getElementById('silinecek-tedarikci-id').value;
-    if (!navigator.onLine) { gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "danger"); return; }
-    
     silmeOnayModal.hide();
 
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) { 
+        gosterMesaj("Silme işlemi için internet bağlantısı gereklidir.", "warning");
+        return; 
+    }
+    // --- KONTROL SONU ---
+    
     try {
         const response = await fetch(`/api/tedarikci_sil/${id}`, { method: 'DELETE' });
         const result = await response.json();

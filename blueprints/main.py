@@ -51,13 +51,10 @@ def offline_page():
 @main_bp.route('/service-worker.js')
 def service_worker():
     try:
-        # Veritabanından en güncel cache versiyonunu çek
-        # DEĞİŞİKLİK: .single() yerine .limit(1).single() kullanılarak sorgu daha güvenli hale getirildi.
         response = supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'cache_version').limit(1).single().execute()
         version = response.data.get('ayar_degeri', '1') if response.data else '1'
     except Exception:
         version = '1' # Hata olursa varsayılan sürümü kullan
 
-    # Jinja2 şablonunu render et ve JavaScript olarak sun
     template = render_template('service-worker.js.jinja', cache_version=version)
     return Response(template, mimetype='application/javascript')

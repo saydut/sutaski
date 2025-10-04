@@ -61,18 +61,33 @@ function gorunumuDegistirIslemler(yeniGorunum) {
 // 1. Sadece soldaki yem seçme menüsünü doldurur.
 async function yemSeciciyiDoldur() {
     try {
-        // Yeni, sayfalama yapmayan API adresini çağırıyoruz
-        const response = await fetch('/yem/api/urunler/liste');
-        const urunler = await response.json();
-        if (!response.ok) throw new Error(urunler.error || 'Hata');
+        if (!navigator.onLine) {
+            // Eğer çevrimdışıysak, yerel veritabanından (IndexedDB) yüklemeyi dene
+            const urunler = await getOfflineYemUrunleri();
+            if (urunler.length === 0) {
+                 gosterMesaj('Yem menüsünü yüklemek için internet bağlantısı veya önbelleklenmiş veri gereklidir.', 'warning');
+                 return;
+            }
+            // Yerel veriden menüyü doldur
+            const options = urunler.map(u => ({
+                value: u.id,
+                text: `${u.yem_adi} (Stok: ${parseFloat(u.stok_miktari_kg).toFixed(2)} kg)`
+            }));
+            yemUrunSecici.addOptions(options);
 
-        yemUrunSecici.clearOptions();
-        const options = urunler.map(u => ({
-            value: u.id,
-            text: `${u.yem_adi} (Stok: ${parseFloat(u.stok_miktari_kg).toFixed(2)} kg)`
-        }));
-        yemUrunSecici.addOptions(options);
+        } else {
+             // Eğer çevrimiçiysek, API'den çek
+            const response = await fetch('/yem/api/urunler/liste');
+            const urunler = await response.json();
+            if (!response.ok) throw new Error(urunler.error || 'Hata');
 
+            yemUrunSecici.clearOptions();
+            const options = urunler.map(u => ({
+                value: u.id,
+                text: `${u.yem_adi} (Stok: ${parseFloat(u.stok_miktari_kg).toFixed(2)} kg)`
+            }));
+            yemUrunSecici.addOptions(options);
+        }
     } catch (error) {
         gosterMesaj('Yem ürünleri menüsü yüklenemedi.', 'danger');
     }
@@ -84,28 +99,27 @@ async function yemListesiniGoster(sayfa = 1) {
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
     const tbody = document.getElementById('yem-urunleri-tablosu');
     const kartListesi = document.getElementById('yem-urunleri-kart-listesi');
+    const sayfalamaNav = document.getElementById('yem-urunleri-sayfalama');
 
-    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
     if (!navigator.onLine) {
         veriYokMesaji.innerHTML = '<p class="text-warning">Yem ürünlerini listelemek için internet bağlantısı gereklidir.</p>';
         veriYokMesaji.style.display = 'block';
         tbody.innerHTML = '';
         kartListesi.innerHTML = '';
-        document.getElementById('yem-urunleri-sayfalama').innerHTML = ''; // Sayfalamayı temizle
+        sayfalamaNav.innerHTML = '';
         return;
     }
-    // --- KONTROL SONU ---
 
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
     kartListesi.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
     veriYokMesaji.style.display = 'none';
 
     try {
-        const response = await fetch(`/yem/api/urunler?sayfa=${sayfa}`); // Sayfalamalı API adresi
+        const response = await fetch(`/yem/api/urunler?sayfa=${sayfa}`);
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Ürünler yüklenemedi.');
 
-        store.yemUrunleri = result.urunler; // Sadece o sayfanın ürünlerini sakla
+        store.yemUrunleri = result.urunler;
         verileriGoster(result.urunler);
 
         ui.sayfalamaNavOlustur(
@@ -117,9 +131,13 @@ async function yemListesiniGoster(sayfa = 1) {
         );
 
     } catch (error) {
-        gosterMesaj(error.message, "danger");
         tbody.innerHTML = '';
         kartListesi.innerHTML = '';
+        if (!navigator.onLine) {
+            veriYokMesaji.innerHTML = '<p class="text-warning">Yem ürünleri listelenirken internet bağlantısı koptu.</p>';
+        } else {
+            veriYokMesaji.innerHTML = `<p class="text-danger">${error.message}</p>`;
+        }
         veriYokMesaji.style.display = 'block';
     }
 }
@@ -194,12 +212,19 @@ function gorunumuAyarla(aktifGorunum) {
 
 async function tedarikcileriDoldur() {
     try {
+        // store.getTedarikciler fonksiyonu zaten online/offline durumunu yönetiyor.
         const tedarikciler = await store.getTedarikciler();
         tedarikciSecici.clearOptions();
         const options = tedarikciler.map(t => ({ value: t.id, text: t.isim }));
         tedarikciSecici.addOptions(options);
     } catch (error) {
-        gosterMesaj('Tedarikçiler yüklenirken bir hata oluştu.', 'danger');
+        // Eğer store.getTedarikciler çevrimdışı olduğu için hata fırlatırsa,
+        // bunu yakalayıp kullanıcıya doğru mesajı gösteriyoruz.
+        if (!navigator.onLine) {
+            gosterMesaj('Tedarikçi menüsünü yüklemek için internet bağlantısı gereklidir.', 'warning');
+        } else {
+            gosterMesaj('Tedarikçiler yüklenirken bir hata oluştu.', 'danger');
+        }
     }
 }
 
@@ -397,11 +422,17 @@ async function yemUrunuSil() {
     const id = document.getElementById('silinecek-yem-id').value;
     yemSilmeOnayModal.hide();
 
+    // --- ÇÖZÜM: İŞLEMDEN ÖNCE İNTERNETİ KONTROL ET ---
+    if (!navigator.onLine) {
+        gosterMesaj("Silme işlemi için internet bağlantısı gereklidir.", "warning");
+        return; // İnternet yoksa fonksiyonu burada durdur.
+    }
+    // --- KONTROL SONU ---
+
     // 1. Öğeyi UI'dan anında kaldır
     const silinecekElement = document.getElementById(`yem-urun-${id}`);
     if (!silinecekElement) return;
     
-    // Hata durumunda geri eklemek için sakla
     const parent = silinecekElement.parentNode;
     const nextSibling = silinecekElement.nextSibling;
     silinecekElement.style.transition = 'opacity 0.4s';
@@ -435,21 +466,24 @@ async function yemIslemleriniGoster(sayfa = 1) {
     const veriYokMesaji = document.getElementById('yem-islemleri-veri-yok');
     const tabloBody = document.getElementById('yem-islemleri-listesi');
     const kartListesi = document.getElementById('yem-islemleri-kart-listesi');
+    const sayfalamaNav = document.getElementById('yem-islemleri-sayfalama');
 
     if (!navigator.onLine) {
-        tabloBody.innerHTML = `<tr><td colspan="5" class="text-center p-3 text-warning">İşlemleri görmek için internet bağlantısı gereklidir.</td></tr>`;
-        kartListesi.innerHTML = `<div class="col-12 text-center p-3 text-warning">İşlemleri görmek için internet bağlantısı gereklidir.</div>`;
-        document.getElementById('yem-islemleri-sayfalama').innerHTML = '';
+        tabloBody.innerHTML = '';
+        kartListesi.innerHTML = '';
+        sayfalamaNav.innerHTML = '';
+        veriYokMesaji.innerHTML = `<p class="text-warning">İşlemleri görmek için internet bağlantısı gereklidir.</p>`;
+        veriYokMesaji.style.display = 'block';
         return;
     }
 
-    // Yükleniyor durumunu ayarla
     veriYokMesaji.style.display = 'none';
     if (mevcutIslemGorunumu === 'tablo') {
         tabloBody.innerHTML = `<tr><td colspan="5" class="text-center p-3"><div class="spinner-border spinner-border-sm"></div></td></tr>`;
     } else {
         kartListesi.innerHTML = `<div class="col-12 text-center p-3"><div class="spinner-border spinner-border-sm"></div></div>`;
     }
+    sayfalamaNav.innerHTML = '';
 
     try {
         const response = await fetch(`/yem/api/islemler/liste?sayfa=${sayfa}`);
@@ -461,6 +495,7 @@ async function yemIslemleriniGoster(sayfa = 1) {
             tabloBody.innerHTML = '';
             kartListesi.innerHTML = '';
         } else {
+            veriYokMesaji.style.display = 'none';
             if (mevcutIslemGorunumu === 'tablo') {
                 renderIslemlerAsTable(result.islemler);
             } else {
@@ -471,7 +506,13 @@ async function yemIslemleriniGoster(sayfa = 1) {
         ui.sayfalamaNavOlustur('yem-islemleri-sayfalama', result.toplam_islem_sayisi, sayfa, ISLEMLER_SAYFA_BASI, yemIslemleriniGoster);
 
     } catch (error) {
-        veriYokMesaji.innerHTML = `<p class="text-danger">${error.message}</p>`;
+        tabloBody.innerHTML = '';
+        kartListesi.innerHTML = '';
+        if (!navigator.onLine) {
+            veriYokMesaji.innerHTML = `<p class="text-warning">Son işlemler listelenirken internet bağlantısı koptu.</p>`;
+        } else {
+            veriYokMesaji.innerHTML = `<p class="text-danger">${error.message}</p>`;
+        }
         veriYokMesaji.style.display = 'block';
     }
 }
@@ -590,14 +631,21 @@ async function yemIslemiSil() {
     const id = document.getElementById('silinecek-islem-id').value;
     yemIslemSilmeOnayModal.hide();
 
-    // İyimser güncelleme: Önce arayüzden kaldır
-    const silinecekSatir = document.getElementById(`yem-islem-${id}`);
-    if (!silinecekSatir) return;
+    // --- ÇÖZÜM: İŞLEMDEN ÖNCE İNTERNETİ KONTROL ET ---
+    if (!navigator.onLine) {
+        gosterMesaj("İşlemi iptal etmek için internet bağlantısı gereklidir.", "warning");
+        return; // İnternet yoksa fonksiyonu burada durdur.
+    }
+    // --- KONTROL SONU ---
 
-    const parent = silinecekSatir.parentNode;
-    const nextSibling = silinecekSatir.nextSibling;
-    silinecekSatir.style.opacity = '0';
-    setTimeout(() => silinecekSatir.remove(), 400);
+    // İyimser güncelleme: Önce arayüzden kaldır
+    const silinecekElement = document.getElementById(`yem-islem-liste-${id}`) || document.getElementById(`yem-islem-kart-${id}`);
+    if (!silinecekElement) return;
+
+    const parent = silinecekElement.parentNode;
+    const nextSibling = silinecekElement.nextSibling;
+    silinecekElement.style.opacity = '0';
+    setTimeout(() => silinecekElement.remove(), 400);
 
     try {
         const response = await fetch(`/yem/api/islemler/${id}`, { method: 'DELETE' });
@@ -612,9 +660,9 @@ async function yemIslemiSil() {
     } catch (error) {
         gosterMesaj(error.message || 'İşlem iptal edilemedi, satır geri yüklendi.', 'danger');
         // Hata olursa satırı geri ekle
-        silinecekSatir.style.opacity = '1';
-        if (!silinecekSatir.parentNode) {
-            parent.insertBefore(silinecekSatir, nextSibling);
+        silinecekElement.style.opacity = '1';
+        if (!silinecekElement.parentNode) {
+            parent.insertBefore(silinecekElement, nextSibling);
         }
     }
 }

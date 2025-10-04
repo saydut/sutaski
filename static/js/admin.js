@@ -82,6 +82,13 @@ async function adminVerileriniYukle() {
 async function surumNotuEkle(event) {
     event.preventDefault(); 
     
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+    
     const selectedDate = document.getElementById('yayin-tarihi-input')._flatpickr.selectedDates[0];
     
     const veri = {
@@ -135,6 +142,13 @@ function surumNotlariniDoldur(notlar) {
 }
 
 async function surumNotuSil(id) {
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+
     if (!confirm("Bu sürüm notunu silmek istediğinizden emin misiniz?")) return;
 
     try {
@@ -169,6 +183,13 @@ function surumDuzenlemeModaliniAc(id) {
 
 // YENİ FONKSİYON
 async function surumNotuGuncelle() {
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+
     const id = document.getElementById('edit-surum-id').value;
     const selectedDate = document.getElementById('edit-yayin-tarihi-input')._flatpickr.selectedDates[0];
 
@@ -275,6 +296,13 @@ function kullanicilariDoldur(kullanicilar) {
 }
 
 async function lisansGuncelle(sirketId) {
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+
     const fpInstance = tarihSeciciler[`lisans-tarih-${sirketId}`];
     const secilenTarih = fpInstance.selectedDates[0];
     const yeniTarih = formatDateToYYYYMMDD(secilenTarih);
@@ -295,6 +323,13 @@ async function lisansGuncelle(sirketId) {
 }
 
 async function rolGuncelle(kullaniciId) {
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+
     const yeniRol = document.getElementById(`rol-secim-${kullaniciId}`).value;
     try {
          const response = await fetch('/api/admin/update_rol', {
@@ -343,6 +378,13 @@ async function mevcutOnbellekSurumunuYukle() {
  * Sürüm artırma butonuna tıklandığında çalışır.
  */
 async function onbellekSurumunuArtir() {
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+
     if (!confirm("Önbellek sürümünü bir artırmak istediğinizden emin misiniz? Bu işlem, tüm kullanıcıların bir sonraki ziyaretlerinde uygulamayı yeniden indirmesine neden olur.")) {
         return;
     }
@@ -364,6 +406,14 @@ async function onbellekSurumunuArtir() {
 
 
 async function sirketSil() {
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
+        sirketSilmeOnayModal.hide();
+        return;
+    }
+    // --- KONTROL SONU ---
+
     const sirketId = document.getElementById('silinecek-sirket-id').value;
     try {
         const response = await fetch('/api/admin/delete_company', {
@@ -393,6 +443,13 @@ function sifreSifirlamaAc(kullaniciId, kullaniciAdi) {
 }
 
 async function sifreSifirla() {
+    // --- EKLENEN KONTROL ---
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+    // --- KONTROL SONU ---
+
     const kullaniciId = document.getElementById('sifirlanacak-kullanici-id').value;
     const yeniSifre = document.getElementById('yeni-sifre-input').value;
 
