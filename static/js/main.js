@@ -368,6 +368,7 @@ async function sutGirdisiSil() {
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
         await charts.haftalikGrafigiOlustur();
         await charts.tedarikciGrafigiOlustur();
+        await girdileriGoster(mevcutSayfa, formatliTarih);
 
     } catch (error) {
         // --- DEĞİŞİKLİK BURADA ---

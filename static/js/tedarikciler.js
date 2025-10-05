@@ -49,25 +49,37 @@ window.onload = async () => {
 async function verileriYukle() {
     const tbody = document.getElementById('tedarikciler-tablosu');
     const kartListesi = document.getElementById('tedarikciler-kart-listesi');
+    const toplamLitreBaslik = document.querySelector('[data-sort="toplam_litre"]');
+    const toplamLitreKolon = document.querySelector('thead th:nth-child(3)');
+
+    // Yükleniyor animasyonlarını başlat
     tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
     kartListesi.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
 
     try {
-        // YENİ MANTIK: Veriyi store'dan istiyoruz. O zaten online/offline durumuna göre en doğrusunu getirecek.
+        // store.getTedarikciler fonksiyonu zaten online/offline durumunu kendisi yönetiyor.
+        // Bize sadece onu çağırmak kalıyor.
         tumTedarikciler = await store.getTedarikciler();
 
-        // Toplam süt miktarını hesaplamak için ek bir işlem yapmamız gerekebilir.
-        // Şimdilik bu kısmı basitleştiriyoruz, çünkü offline DB'de bu bilgi yok.
-        // Bu yüzden sıralama sadece isme göre çalışacak.
-        document.querySelector('[data-sort="toplam_litre"]').style.display = 'none'; // Toplam süt kolonunu gizle
-        document.querySelector('thead th:nth-child(3)').style.display = 'none';
+        // Eğer gelen veride 'toplam_litre' bilgisi varsa ilgili kolonu göster, yoksa gizle.
+        // Bu, çevrimdışıyken bile önbellekte bu bilgi varsa gösterilmesini sağlar.
+        const toplamLitreMevcut = tumTedarikciler.length > 0 && tumTedarikciler[0].hasOwnProperty('toplam_litre');
+        if (toplamLitreBaslik) toplamLitreBaslik.style.display = toplamLitreMevcut ? '' : 'none';
+        if (toplamLitreKolon) toplamLitreKolon.style.display = toplamLitreMevcut ? '' : 'none';
+        
+        // Sıralama seçeneklerinden "Toplam Süt"ü de bu duruma göre ayarla
+        mevcutSiralamaSutunu = toplamLitreMevcut ? (mevcutSiralamaSutunu || 'isim') : 'isim';
 
 
         verileriIsleVeGoster(1); // Gelen tam listeyi işle ve ilk sayfayı göster
 
     } catch (error) {
         console.error("Hata:", error);
-        gosterMesaj("Tedarikçi verileri yüklenemedi.", "danger");
+        // Hata mesajını daha anlaşılır hale getiriyoruz.
+        const hataMesaji = navigator.onLine ? "Tedarikçi verileri yüklenemedi." : "Çevrimdışı modda gösterilecek tedarikçi verisi bulunamadı. Lütfen internete bağlanarak verileri güncelleyin.";
+        gosterMesaj(hataMesaji, "danger");
+        tbody.innerHTML = ''; // Hata durumunda yükleniyor animasyonunu temizle
+        kartListesi.innerHTML = '';
     }
 }
 
@@ -124,13 +136,18 @@ function verileriGoster(suppliers) {
 
 function renderTable(suppliers) {
     const tbody = document.getElementById('tedarikciler-tablosu');
+    const toplamLitreMevcut = suppliers.length > 0 && suppliers[0].hasOwnProperty('toplam_litre');
     tbody.innerHTML = '';
     suppliers.forEach(supplier => {
+        // *** DEĞİŞİKLİK BURADA ***
+        // toplam_litre verisi varsa göster, yoksa gizle
+        const toplamLitreHtml = toplamLitreMevcut ? `<td class="text-end">${parseFloat(supplier.toplam_litre || 0).toFixed(2)} L</td>` : '<td style="display: none;"></td>';
+
         tbody.innerHTML += `
             <tr>
                 <td><strong>${supplier.isim}</strong></td>
                 <td>${supplier.telefon_no || '-'}</td>
-                <td style="display: none;"></td> 
+                ${toplamLitreHtml} 
                 <td class="text-center">
                     <a href="/tedarikci/${supplier.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
                     <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="tedarikciDuzenleAc(${supplier.id})"><i class="bi bi-pencil"></i></button>
