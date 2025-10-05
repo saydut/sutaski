@@ -7,7 +7,6 @@ import pytz
 import io
 import csv
 import calendar
-from weasyprint import HTML
 from decimal import Decimal, getcontext, InvalidOperation
 
 
@@ -135,49 +134,6 @@ def get_detayli_rapor():
         traceback.print_exc()
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
-@rapor_bp.route('/aylik_pdf')
-@login_required
-@lisans_kontrolu
-def aylik_rapor_pdf():
-    try:
-        sirket_id = session['user']['sirket_id']
-        sirket_adi = session['user'].get('sirket_adi', 'Bilinmeyen Şirket')
-        ay = int(request.args.get('ay'))
-        yil = int(request.args.get('yil'))
-        _, ayin_son_gunu = calendar.monthrange(yil, ay)
-        baslangic_tarihi = datetime(yil, ay, 1).date()
-        bitis_tarihi = datetime(yil, ay, ayin_son_gunu).date()
-        start_utc = turkey_tz.localize(datetime.combine(baslangic_tarihi, datetime.min.time())).astimezone(pytz.utc).isoformat()
-        end_utc = turkey_tz.localize(datetime.combine(bitis_tarihi, datetime.max.time())).astimezone(pytz.utc).isoformat()
-        response = supabase.table('sut_girdileri').select('litre, taplanma_tarihi, tedarikciler(isim)').eq('sirket_id', sirket_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).execute()
-        girdiler = response.data
-        gunluk_dokum_dict = {i: {'toplam_litre': Decimal(0), 'girdi_sayisi': 0} for i in range(1, ayin_son_gunu + 1)}
-        tedarikci_dokumu_dict = {}
-        for girdi in girdiler:
-            parsed_date = parse_supabase_timestamp(girdi.get('taplanma_tarihi'))
-            if not parsed_date: continue
-            girdi_tarihi_tr = parsed_date.astimezone(turkey_tz)
-            gun = girdi_tarihi_tr.day
-            gunluk_dokum_dict[gun]['toplam_litre'] += Decimal(str(girdi.get('litre', '0')))
-            gunluk_dokum_dict[gun]['girdi_sayisi'] += 1
-            if girdi.get('tedarikciler') and girdi['tedarikciler'].get('isim'):
-                isim = girdi['tedarikciler']['isim']
-                if isim not in tedarikci_dokumu_dict:
-                    tedarikci_dokumu_dict[isim] = {'toplam_litre': Decimal(0), 'girdi_sayisi': 0}
-                tedarikci_dokumu_dict[isim]['toplam_litre'] += Decimal(str(girdi.get('litre', '0')))
-                tedarikci_dokumu_dict[isim]['girdi_sayisi'] += 1
-        gunluk_dokum = [{'tarih': f"{day:02d}.{ay:02d}.{yil}", 'toplam_litre': float(data['toplam_litre']), 'girdi_sayisi': data['girdi_sayisi']} for day, data in gunluk_dokum_dict.items()]
-        tedarikci_dokumu = sorted([{'isim': isim, 'toplam_litre': float(data['toplam_litre']), 'girdi_sayisi': data['girdi_sayisi']} for isim, data in tedarikci_dokumu_dict.items()], key=lambda x: x['toplam_litre'], reverse=True)
-        toplam_litre = sum(Decimal(str(g.get('litre', '0'))) for g in girdiler)
-        ozet = {'toplam_litre': float(toplam_litre), 'girdi_sayisi': len(girdiler), 'gunluk_ortalama': float(toplam_litre / ayin_son_gunu if ayin_son_gunu > 0 else 0)}
-        aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
-        rapor_basligi = f"{aylar[ay-1]} {yil} Süt Toplama Raporu"
-        html_out = render_template('aylik_rapor_pdf.html', rapor_basligi=rapor_basligi, sirket_adi=sirket_adi, olusturma_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y %H:%M'), ozet=ozet, tedarikci_dokumu=tedarikci_dokumu, gunluk_dokum=gunluk_dokum)
-        pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
-        filename = f"{yil}_{ay:02d}_{sirket_adi.replace(' ', '_')}_raporu.pdf"
-        return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
-    except Exception as e:
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @rapor_bp.route('/export_csv')
 @login_required

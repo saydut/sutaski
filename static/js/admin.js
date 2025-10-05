@@ -49,7 +49,7 @@ async function adminVerileriniYukle() {
     try {
         const [adminDataResponse, surumNotlariResponse] = await Promise.all([
             fetch('/api/admin/data'),
-            fetch('/api/admin/surum_notlari')
+            fetch('/api/versioning/surum_notlari')
         ]);
 
         const adminData = await adminDataResponse.json();
@@ -98,7 +98,7 @@ async function surumNotuEkle(event) {
     };
 
     try {
-        const response = await fetch('/api/admin/surum_notlari', {
+        const response = await fetch('/api/versioning/surum_notlari', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(veri)
@@ -152,7 +152,7 @@ async function surumNotuSil(id) {
     if (!confirm("Bu sürüm notunu silmek istediğinizden emin misiniz?")) return;
 
     try {
-        const response = await fetch(`/api/admin/surum_notlari/${id}`, { method: 'DELETE' });
+        const response = await fetch(`/api/versioning/surum_notlari/${id}`, { method: 'DELETE' });
         const result = await response.json();
         if (response.ok) {
             gosterMesaj(result.message, 'success');
@@ -205,7 +205,7 @@ async function surumNotuGuncelle() {
     }
 
     try {
-        const response = await fetch(`/api/admin/surum_notlari/${id}`, {
+        const response = await fetch(`/api/versioning/surum_notlari/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(veri)

@@ -23,7 +23,8 @@ async function pdfIndir() {
 
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
-    const url = `/api/rapor/aylik_pdf?ay=${ay}&yil=${yil}`;
+    // --- DEĞİŞEN SATIR ---
+    const url = `/api/pdf/aylik_rapor?ay=${ay}&yil=${yil}`;
     
     await indirVeAc(url, 'pdf-indir-btn', {
         success: 'Rapor indirildi ve yeni sekmede açıldı.',

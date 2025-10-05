@@ -97,96 +97,13 @@ window.onload = async function() {
     await baslangicVerileriniYukle();
 
     // --- YENİ EKLENEN BİLDİRİM KONTROL KODU ---
-    initializePushNotifications(); 
+    // subscription.js dosyasındaki fonksiyonu çağırıyoruz
+    if (typeof initializePushNotifications === 'function') {
+        initializePushNotifications();
+    }
     // --- YENİ KOD SONU ---
 };
 
-// main.js içine eklenecek YENİ kod bloğu
-
-// URL safe base64 decode/encode fonksiyonu
-function urlB64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-}
-
-// Abone olma işlemini başlatan ana fonksiyon
-async function subscribeUser() {
-    try {
-        const registration = await navigator.serviceWorker.ready;
-        // VAPID_PUBLIC_KEY değişkeni index.html'den geliyor
-        const subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY)
-        });
-
-        // Abonelik bilgisini sunucuya gönder
-        await fetch('/api/save-subscription', {
-            method: 'POST',
-            body: JSON.stringify(subscription),
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        gosterMesaj('Bildirimlere başarıyla abone oldunuz!', 'success');
-
-    } catch (error) {
-        console.error('Abonelik sırasında hata:', error);
-        gosterMesaj('Bildirimlere abone olunamadı. Tarayıcı ayarlarını kontrol edin.', 'danger');
-    }
-}
-
-// Bildirim ve abonelik durumunu yöneten ana fonksiyon
-async function initializePushNotifications() {
-    const subscribeButton = document.getElementById('subscribe-button');
-    if (!subscribeButton) {
-        console.error('Abone ol butonu HTML içinde bulunamadı.');
-        return;
-    }
-
-    if (!('serviceWorker' in navigator && 'PushManager' in window)) {
-        console.warn('Bu tarayıcı anlık bildirimleri desteklemiyor.');
-        return;
-    }
-
-    // İzin durumunu kontrol et
-    const permission = await Notification.requestPermission();
-
-    if (permission === 'granted') {
-        console.log('Bildirim izni verilmiş.');
-        // İzin var, şimdi abonelik var mı diye kontrol et
-        const registration = await navigator.serviceWorker.ready;
-        const existingSubscription = await registration.pushManager.getSubscription();
-
-        if (existingSubscription) {
-            console.log('Kullanıcı zaten abone.');
-        } else {
-            console.log('İzin verilmiş ama abonelik yok. Yeni abonelik oluşturuluyor...');
-            // İzin var ama abonelik yok, otomatik olarak abone et
-            await subscribeUser();
-        }
-    } else if (permission === 'default') {
-        console.log('Bildirim izni henüz verilmemiş. Buton gösteriliyor.');
-        // Henüz izin verilmemiş, butonu göster ve tıklamayı bekle
-        subscribeButton.style.display = 'block';
-        subscribeButton.onclick = async () => {
-            // Tekrar izin iste (bu sefer prompt açılır)
-            const newPermission = await Notification.requestPermission();
-            if (newPermission === 'granted') {
-                subscribeButton.style.display = 'none';
-                await subscribeUser();
-            }
-        };
-    } else {
-        console.log('Bildirimler kullanıcı tarafından engellenmiş.');
-    }
-}
-
-// --- YENİ FONKSİYONLARIN SONU ---
 
 /**
  * Uygulamanın ihtiyaç duyduğu tüm başlangıç verilerini paralel olarak yükler.
@@ -354,7 +271,7 @@ async function sutGirdisiEkle() {
             const isOfflineUserValid = await ui.checkOfflineUserLicense();
             if (!isOfflineUserValid) return; 
             
-            const basarili = await kaydetCevrimdisi(yeniGirdi);
+            const basarili = await kaydetCevrimdisiSutGirdisi(yeniGirdi);
             if (basarili) {
                 ui.resetGirdiFormu();
                 await girdileriGoster();
@@ -575,4 +492,3 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
-

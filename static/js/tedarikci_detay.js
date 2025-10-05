@@ -321,9 +321,6 @@ function ozetKartlariniDoldur(ozet) {
 }
 
 
-
-
-
 function hesapOzetiIndir() {
     // --- YENİ EKLENEN KONTROL ---
     if (!navigator.onLine) {
@@ -334,7 +331,8 @@ function hesapOzetiIndir() {
 
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
-    const url = `/api/tedarikci/${TEDARIKCI_ID}/hesap_ozeti_pdf?ay=${ay}&yil=${yil}`;
+    // --- DEĞİŞEN SATIR ---
+    const url = `/api/pdf/tedarikci/${TEDARIKCI_ID}/hesap_ozeti?ay=${ay}&yil=${yil}`;
     
     indirVeAc(url, 'pdf-indir-btn', {
         success: 'Hesap özeti indirildi ve yeni sekmede açıldı.',
@@ -352,7 +350,8 @@ function mustahsilMakbuzuIndir() {
 
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
-    const url = `/api/tedarikci/${TEDARIKCI_ID}/mustahsil_makbuzu_pdf?ay=${ay}&yil=${yil}`;
+    // --- DEĞİŞEN SATIR ---
+    const url = `/api/pdf/tedarikci/${TEDARIKCI_ID}/mustahsil_makbuzu?ay=${ay}&yil=${yil}`;
 
     indirVeAc(url, 'mustahsil-indir-btn', {
         success: 'Müstahsil makbuzu indirildi ve yeni sekmede açıldı.',
