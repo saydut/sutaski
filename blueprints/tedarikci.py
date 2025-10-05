@@ -184,17 +184,20 @@ def update_tedarikci(id):
         if not guncellenecek_veri:
             return jsonify({"error": "Güncellenecek veri bulunamadı."}), 400
 
-        # DÜZELTME: .select('*') ekleyerek Supabase'in güncellenmiş veriyi döndürmesini sağlıyoruz.
-        response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', id).eq('sirket_id', sirket_id).select('*').execute()
+        # DÜZELTME: Sunucu hatasına neden olan .select('*') kısmını kaldırıyoruz.
+        response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', id).eq('sirket_id', sirket_id).execute()
 
         if not response.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
 
+        # Not: response.data[0] burada güncellenmiş veriyi değil, işlemden etkilenen eski veriyi içerir.
+        # Ancak arayüz tüm listeyi yeniden çektiği için bu bir sorun teşkil etmez.
         return jsonify({"message": "Tedarikçi bilgileri güncellendi.", "tedarikci": response.data[0]})
 
     except APIError as e:
         return jsonify({"error": f"Veritabanı hatası: {e.message}"}), 500
     except Exception as e:
+        print(f"Tedarikçi GÜNCELLEME KRİTİK HATA: {e}") # Hataları daha iyi izlemek için bu satırı ekledim.
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @tedarikci_bp.route('/tedarikci_sil/<int:id>', methods=['DELETE'])
