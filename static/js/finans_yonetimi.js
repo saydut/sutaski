@@ -220,16 +220,13 @@ async function finansalIslemSil() {
         const response = await fetch(`/finans/api/islemler/${id}`, { method: 'DELETE' });
         const result = await response.json();
         if (!response.ok) {
-            // Sunucudan gelen bilerek bir hata varsa (örn: "Yetkiniz yok"), onu fırlat
             throw new Error(result.error);
         }
 
         gosterMesaj(result.message, 'success');
-        // Başarılı olursa başka bir şey yapmaya gerek yok, çünkü arayüzden zaten silindi.
 
     } catch (error) {
         // ---- DÜZELTME BURADA ----
-        // Hata mesajını 'result' yerine doğrudan 'error' nesnesinden alıyoruz.
         gosterMesaj(error.message || 'Silme işlemi başarısız, işlem geri yüklendi.', 'danger');
         
         // Hata olursa elemanı eski yerine geri ekle
