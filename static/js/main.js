@@ -101,7 +101,7 @@ window.onload = async function() {
     // --- YENİ KOD SONU ---
 };
 
-// --- YENİ EKLENEN FONKSİYONLAR ---
+// main.js içine eklenecek YENİ kod bloğu
 
 // URL safe base64 decode/encode fonksiyonu
 function urlB64ToUint8Array(base64String) {
@@ -119,58 +119,70 @@ function urlB64ToUint8Array(base64String) {
 async function subscribeUser() {
     try {
         const registration = await navigator.serviceWorker.ready;
-        // VAPID_PUBLIC_KEY değişkeni index.html'den geliyor olmalı
+        // VAPID_PUBLIC_KEY değişkeni index.html'den geliyor
         const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY)
         });
 
-        console.log('Kullanıcı başarıyla abone oldu:', subscription);
-
         // Abonelik bilgisini sunucuya gönder
         await fetch('/api/save-subscription', {
             method: 'POST',
             body: JSON.stringify(subscription),
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers: { 'Content-Type': 'application/json' }
         });
 
         gosterMesaj('Bildirimlere başarıyla abone oldunuz!', 'success');
-        document.getElementById('subscribe-button').style.display = 'none';
 
     } catch (error) {
         console.error('Abonelik sırasında hata:', error);
-        gosterMesaj('Bildirimlere abone olunamadı. Lütfen sayfa ayarlarından bildirim izinlerini kontrol edin.', 'danger');
+        gosterMesaj('Bildirimlere abone olunamadı. Tarayıcı ayarlarını kontrol edin.', 'danger');
     }
 }
 
-// Sayfa yüklendiğinde bildirim durumunu kontrol eden ana fonksiyon
-function initializePushNotifications() {
+// Bildirim ve abonelik durumunu yöneten ana fonksiyon
+async function initializePushNotifications() {
     const subscribeButton = document.getElementById('subscribe-button');
     if (!subscribeButton) {
         console.error('Abone ol butonu HTML içinde bulunamadı.');
         return;
     }
 
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-        navigator.serviceWorker.ready.then(registration => {
-            registration.pushManager.getSubscription().then(subscription => {
-                if (subscription === null && Notification.permission === 'default') {
-                    // Kullanıcı abone değil VE henüz izin vermemiş/engellememiş
-                    subscribeButton.style.display = 'block';
-                    subscribeButton.onclick = () => {
-                        Notification.requestPermission().then(permission => {
-                            if (permission === 'granted') {
-                                subscribeUser();
-                            }
-                        });
-                    };
-                }
-            });
-        });
-    } else {
+    if (!('serviceWorker' in navigator && 'PushManager' in window)) {
         console.warn('Bu tarayıcı anlık bildirimleri desteklemiyor.');
+        return;
+    }
+
+    // İzin durumunu kontrol et
+    const permission = await Notification.requestPermission();
+
+    if (permission === 'granted') {
+        console.log('Bildirim izni verilmiş.');
+        // İzin var, şimdi abonelik var mı diye kontrol et
+        const registration = await navigator.serviceWorker.ready;
+        const existingSubscription = await registration.pushManager.getSubscription();
+
+        if (existingSubscription) {
+            console.log('Kullanıcı zaten abone.');
+        } else {
+            console.log('İzin verilmiş ama abonelik yok. Yeni abonelik oluşturuluyor...');
+            // İzin var ama abonelik yok, otomatik olarak abone et
+            await subscribeUser();
+        }
+    } else if (permission === 'default') {
+        console.log('Bildirim izni henüz verilmemiş. Buton gösteriliyor.');
+        // Henüz izin verilmemiş, butonu göster ve tıklamayı bekle
+        subscribeButton.style.display = 'block';
+        subscribeButton.onclick = async () => {
+            // Tekrar izin iste (bu sefer prompt açılır)
+            const newPermission = await Notification.requestPermission();
+            if (newPermission === 'granted') {
+                subscribeButton.style.display = 'none';
+                await subscribeUser();
+            }
+        };
+    } else {
+        console.log('Bildirimler kullanıcı tarafından engellenmiş.');
     }
 }
 

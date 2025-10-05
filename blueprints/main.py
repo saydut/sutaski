@@ -12,10 +12,8 @@ main_bp = Blueprint('main', __name__)
 @login_required
 @lisans_kontrolu
 def anasayfa():
-    # Bu satır anahtarı .env dosyasından okur
     vapid_public_key = os.environ.get("VAPID_PUBLIC_KEY")
 
-    # Bu satır da okuduğu anahtarı index.html'e gönderir
     return render_template('index.html', session=session, VAPID_PUBLIC_KEY=vapid_public_key)
 
 @main_bp.route('/raporlar')
