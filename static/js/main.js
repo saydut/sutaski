@@ -346,8 +346,12 @@ async function sutGirdisiSil() {
     const girdiId = ui.getSilinecekGirdiId();
     ui.silmeOnayModal.hide();
 
-    const silinecekElement = document.getElementById(`girdi-${girdiId}`);
-    if (!silinecekElement) return;
+    // DÜZELTME: Mevcut görünüme göre doğru elemanı seçiyoruz
+    const silinecekElement = document.getElementById(mevcutGorunum === 'liste' ? `girdi-liste-${girdiId}` : `girdi-kart-${girdiId}`);
+    if (!silinecekElement) {
+        console.error("Silinecek element bulunamadı!");
+        return;
+    }
 
     const parent = silinecekElement.parentNode;
     const nextSibling = silinecekElement.nextSibling;
@@ -368,11 +372,10 @@ async function sutGirdisiSil() {
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
         await charts.haftalikGrafigiOlustur();
         await charts.tedarikciGrafigiOlustur();
-        await girdileriGoster(mevcutSayfa, formatliTarih);
+        // Silme sonrası listeyi yenilerken toplam girdi sayısı değişebileceği için ilk sayfaya dönmek en sağlıklısı
+        await girdileriGoster(1, formatliTarih);
 
     } catch (error) {
-        // --- DEĞİŞİKLİK BURADA ---
-        // Teknik hatayı konsola yazdır, kullanıcıya ise anlaşılır bir mesaj göster.
         console.error("İyimser silme başarısız oldu:", error);
         gosterMesaj('Silme işlemi başarısız, girdi geri yüklendi.', 'danger');
 

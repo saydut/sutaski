@@ -96,14 +96,28 @@ function verileriIsleVeGoster(sayfa = 1) {
         );
     }
 
-    // 2. Sıralama Uygula (şimdilik sadece isme göre)
-    islenmisVeri.sort((a, b) => {
-        let valA = a.isim.toLocaleLowerCase('tr');
-        let valB = b.isim.toLocaleLowerCase('tr');
-        if (valA < valB) return mevcutSiralamaYonu === 'asc' ? -1 : 1;
-        if (valA > valB) return mevcutSiralamaYonu === 'asc' ? 1 : -1;
-        return 0;
-    });
+// 2. Sıralama Uygula
+islenmisVeri.sort((a, b) => {
+    let valA, valB;
+
+    // Hangi sütuna göre sıralama yapılacağını kontrol et
+    if (mevcutSiralamaSutunu === 'toplam_litre') {
+        valA = parseFloat(a.toplam_litre || 0);
+        valB = parseFloat(b.toplam_litre || 0);
+    } else { // Varsayılan olarak isme göre sırala
+        valA = a.isim.toLocaleLowerCase('tr');
+        valB = b.isim.toLocaleLowerCase('tr');
+    }
+
+    // Değerleri karşılaştır
+    if (valA < valB) {
+        return mevcutSiralamaYonu === 'asc' ? -1 : 1;
+    }
+    if (valA > valB) {
+        return mevcutSiralamaYonu === 'asc' ? 1 : -1;
+    }
+    return 0;
+});
 
     // 3. Sayfalama Uygula
     const toplamKayit = islenmisVeri.length;

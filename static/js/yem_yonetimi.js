@@ -665,3 +665,16 @@ function yemIslemiSilmeOnayiAc(id) {
     document.getElementById('silinecek-islem-id').value = id;
     yemIslemSilmeOnayModal.show();
 }
+
+/**
+ * Yem çıkış işlemini düzenleme modalını açar ve verilerle doldurur.
+ * @param {number} id - Düzenlenecek işlemin ID'si.
+ * @param {string} miktar - Mevcut miktar.
+ * @param {string} aciklama - Mevcut açıklama.
+ */
+function yemIslemiDuzenleAc(id, miktar, aciklama) {
+    document.getElementById('edit-islem-id').value = id;
+    document.getElementById('edit-miktar-input').value = miktar;
+    document.getElementById('edit-aciklama-input').value = aciklama;
+    yemIslemDuzenleModal.show();
+}

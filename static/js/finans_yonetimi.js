@@ -236,3 +236,42 @@ async function finansalIslemSil() {
         }
     }
 }
+
+function duzenleModaliniAc(islemId, mevcutTutar, mevcutAciklama) {
+    document.getElementById('edit-islem-id').value = islemId;
+    document.getElementById('edit-tutar-input').value = parseFloat(mevcutTutar);
+    document.getElementById('edit-aciklama-input').value = mevcutAciklama;
+    duzenleModal.show();
+}
+
+async function finansalIslemGuncelle() {
+    const id = document.getElementById('edit-islem-id').value;
+    const veri = {
+        tutar: document.getElementById('edit-tutar-input').value,
+        aciklama: document.getElementById('edit-aciklama-input').value.trim()
+    };
+
+    if (!veri.tutar || parseFloat(veri.tutar) <= 0) {
+        gosterMesaj("Lütfen geçerli bir tutar girin.", "warning");
+        return;
+    }
+
+    try {
+        const response = await fetch(`/finans/api/islemler/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(veri)
+        });
+        const result = await response.json();
+
+        if (response.ok) {
+            gosterMesaj(result.message, 'success');
+            duzenleModal.hide();
+            await finansalIslemleriYukle(1); // Listeyi yenile
+        } else {
+            gosterMesaj(result.error || 'Güncelleme başarısız.', 'danger');
+        }
+    } catch (error) {
+        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+    }
+}

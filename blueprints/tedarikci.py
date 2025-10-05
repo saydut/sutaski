@@ -23,8 +23,9 @@ def get_tedarikciler_for_dropdown():
     """Sadece ID ve İsim içeren, sıralanmış tam tedarikçi listesini döndürür."""
     try:
         sirket_id = session['user']['sirket_id']
-        # DÜZELTME: Hatalı olan 'asc=True' kullanımı 'desc=False' olarak değiştirildi.
-        response = supabase.table('tedarikciler').select('id, isim').eq('sirket_id', sirket_id).order('isim', desc=False).execute()
+        # DÜZELTME: 'tedarikciler' tablosu yerine 'tedarikci_ozetleri' view'ını kullanıyoruz
+        # ve 'toplam_litre' alanını da seçiyoruz.
+        response = supabase.table('tedarikci_ozetleri').select('id, isim, toplam_litre').eq('sirket_id', sirket_id).order('isim', desc=False).execute()
         return jsonify(response.data)
     except Exception as e:
         print(f"Dropdown için tedarikçi listesi hatası: {e}")
