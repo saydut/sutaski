@@ -5,6 +5,22 @@
 // api.js, ui.js ve charts.js fonksiyonlarını çağırır.
 // ====================================================================================
 
+
+function gorunumuAyarla(aktifGorunum) {
+    document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
+    document.getElementById(`${aktifGorunum}-gorunumu`).style.display = 'block';
+
+    document.getElementById('btn-view-list').classList.toggle('active', aktifGorunum === 'liste');
+    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
+}
+
+function gorunumuDegistir(yeniGorunum) {
+    if (mevcutGorunum === yeniGorunum) return;
+    mevcutGorunum = yeniGorunum;
+    localStorage.setItem('anaPanelGorunum', yeniGorunum);
+    gorunumuAyarla(yeniGorunum);
+    girdileriGoster(1, ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null);
+}
 /**
  * Uygulama kabuğu yüklendiğinde çalışır.
  * Tarayıcıda kayıtlı kullanıcı varsa bilgileri ekrana basar.
@@ -50,7 +66,7 @@ function initOfflineState() {
         }
     }
 }
-
+let mevcutGorunum = 'liste';
 let mevcutSayfa = 1;
 const girdilerSayfaBasi = 6;
 
@@ -64,6 +80,9 @@ window.onload = async function() {
 
     // Lisans durumunu kontrol et ve gerekiyorsa uyarı göster
     ui.lisansUyarisiKontrolEt();
+
+    mevcutGorunum = localStorage.getItem('anaPanelGorunum') || 'liste';
+    gorunumuAyarla(mevcutGorunum);
 
     // Başlangıç verilerini yükle (özet, grafikler, tedarikçiler ve ilk sayfa girdileri)
     await baslangicVerileriniYukle();
@@ -122,7 +141,7 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
     }
     
     ui.toggleGirdilerListLoading(true);
-
+    document.getElementById('veri-yok-mesaji').style.display = 'none';
     try {
         // Çevrimiçi ise sunucudan veri çek
         const sunucuVerisi = navigator.onLine ? await api.fetchSutGirdileri(tarih, sayfa) : { girdiler: [], toplam_girdi_sayisi: 0 };
@@ -134,7 +153,7 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
         const { tumGirdiler, toplamGirdi } = ui.mergeOnlineOfflineGirdiler(sunucuVerisi, bekleyenGirdiler, tarih);
         
         // Birleştirilmiş veriyi arayüzde göster
-        ui.renderGirdilerListesi(tumGirdiler);
+        ui.renderGirdiler(tumGirdiler, mevcutGorunum);
         
         // Sayfalamayı oluştur
         ui.sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, tarih));
