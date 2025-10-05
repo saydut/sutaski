@@ -17,20 +17,24 @@ const store = {
      * @returns {Promise<Array>} Tedarikçilerin listesini içeren bir Promise döndürür.
      */
     async getTedarikciler() {
+        let fetchedData = [];
         if (navigator.onLine) {
             console.log('Çevrimiçi mod: Tedarikçiler sunucudan çekiliyor ve yerel DB güncelleniyor...');
             // `syncTedarikciler` fonksiyonu hem API'den çeker hem de IndexedDB'ye yazar.
-            this.tedarikciler = await syncTedarikciler();
+            fetchedData = await syncTedarikciler();
         } else {
             console.log('Çevrimdışı mod: Tedarikçiler yerel veritabanından (IndexedDB) okunuyor...');
-            this.tedarikciler = await getOfflineTedarikciler();
-        }
-        
-        // Eğer her iki denemede de liste boşsa ve bellekte hala eski veri varsa onu kullan
-        if (this.tedarikciler.length === 0 && store.tedarikciler.length > 0) {
-            return store.tedarikciler;
+            fetchedData = await getOfflineTedarikciler();
         }
 
+        // Eğer yeni veri (online veya offline) başarılı bir şekilde çekildiyse,
+        // bellekteki önbelleği (bu objenin içindeki `tedarikciler` dizisini) güncelle.
+        if (fetchedData && fetchedData.length > 0) {
+            this.tedarikciler = fetchedData;
+        }
+
+        // Her durumda, bellekteki listenin en güncel halini döndür.
+        // Bu, veri çekme başarısız olsa bile uygulamanın eski veriyle çalışmaya devam etmesini sağlar.
         return this.tedarikciler;
     },
 
@@ -41,56 +45,69 @@ const store = {
      * @returns {Promise<Array>} Yem ürünlerinin listesini içeren bir Promise döndürür.
      */
     async getYemUrunleri() {
+        let fetchedData = [];
         if (navigator.onLine) {
             console.log('Çevrimiçi mod: Yem ürünleri sunucudan çekiliyor ve yerel DB güncelleniyor...');
-            this.yemUrunleri = await syncYemUrunleri();
+            fetchedData = await syncYemUrunleri();
         } else {
             console.log('Çevrimdışı mod: Yem ürünleri yerel veritabanından (IndexedDB) okunuyor...');
-            this.yemUrunleri = await getOfflineYemUrunleri();
+            fetchedData = await getOfflineYemUrunleri();
         }
 
-        if (this.yemUrunleri.length === 0 && store.yemUrunleri.length > 0) {
-            return store.yemUrunleri;
+        // Eğer yeni veri çekildiyse, bellek önbelleğini güncelle.
+        if (fetchedData && fetchedData.length > 0) {
+            this.yemUrunleri = fetchedData;
         }
-        
+
+        // Her durumda güncel veya önbellekteki veriyi döndür.
         return this.yemUrunleri;
     },
-    
-    // invalidate, add, update, remove fonksiyonları artık doğrudan veritabanını
-    // güncellemek yerine bir sonraki yüklemede verinin yeniden çekilmesini tetiklemelidir.
-    // Şimdilik en basit yöntem, listeyi yeniden yüklemektir.
-    // Bu fonksiyonlar, online iken bir ekleme/silme/güncelleme yapıldığında çağrılır.
-    
+
+    // Aşağıdaki fonksiyonlar, online iken bir ekleme/silme/güncelleme yapıldığında,
+    // arayüzün anında güncellenmesi için hem bellekteki listeyi hem de IndexedDB'yi
+    // senkronize olarak günceller. Bu, sayfa yenilemeden arayüzün tutarlı kalmasını sağlar.
+
+    /**
+     * Belleğe ve yerel veritabanına yeni bir tedarikçi ekler.
+     * @param {object} tedarikci - Eklenen yeni tedarikçi objesi.
+     */
     addTedarikci(tedarikci) {
-        if (this.tedarikciler.length > 0) {
-            this.tedarikciler.push({id: tedarikci.id, isim: tedarikci.isim});
-            this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim));
-            // Yerel veritabanını da güncelle
+        // Bellekteki listeye ekle
+        this.tedarikciler.push({ id: tedarikci.id, isim: tedarikci.isim, telefon_no: tedarikci.telefon_no, tc_no: tedarikci.tc_no, adres: tedarikci.adres });
+        // Alfabetik sırayı koru
+        this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim, 'tr'));
+        // Yerel veritabanını da (IndexedDB) güncelle
+        db.tedarikciler.put(tedarikci);
+    },
+
+    /**
+     * Bellekteki ve yerel veritabanındaki bir tedarikçiyi günceller.
+     * @param {object} tedarikci - Güncellenmiş tedarikçi objesi.
+     */
+    updateTedarikci(tedarikci) {
+        const index = this.tedarikciler.findIndex(t => t.id === tedarikci.id);
+        if (index !== -1) {
+            // Bellekteki objeyi güncelle
+            this.tedarikciler[index] = { ...this.tedarikciler[index], ...tedarikci };
+            this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim, 'tr'));
+            // Yerel veritabanını güncelle
             db.tedarikciler.put(tedarikci);
         }
     },
 
-    updateTedarikci(tedarikci) {
-        if (this.tedarikciler.length > 0) {
-            const index = this.tedarikciler.findIndex(t => t.id === tedarikci.id);
-            if (index !== -1) {
-                this.tedarikciler[index].isim = tedarikci.isim;
-                this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim));
-                db.tedarikciler.put(tedarikci);
-            }
-        }
-    },
-
+    /**
+     * Bellekten ve yerel veritabanından bir tedarikçiyi siler.
+     * @param {number} id - Silinecek tedarikçinin ID'si.
+     */
     removeTedarikci(id) {
-        if (this.tedarikciler.length > 0) {
-            this.tedarikciler = this.tedarikciler.filter(t => t.id !== id);
-            db.tedarikciler.delete(id);
-        }
+        this.tedarikciler = this.tedarikciler.filter(t => t.id !== id);
+        db.tedarikciler.delete(id);
     }
 };
 
-// api.js'in bu fonksiyonlara erişebilmesi için global'de tanımlıyoruz.
+// api.js'in bu fonksiyona erişebilmesi için `api` objesine yeni bir fonksiyon ekliyoruz.
+// Bu fonksiyon, yem yönetimi sayfasındaki sol menüyü doldurmak için
+// sayfalama olmaksızın TÜM yem ürünlerini liste olarak çeker.
 api.fetchYemUrunleri = function() {
-    // Bu endpoint tüm yemleri sayfalama olmadan liste olarak döner
     return this.request('/yem/api/urunler/liste');
 };
