@@ -70,7 +70,7 @@ const api = {
      */
     fetchTedarikciler() {
         // Dropdownlar için tam listeyi çeken yeni endpoint'i kullanıyoruz.
-        return this.request('/api/tedarikciler_dropdown');
+        return this.request('/api/tedarikciler_dropdown', { cache: 'no-cache' });
     },
 
     /**

@@ -16,16 +16,16 @@ from collections import defaultdict
 tedarikci_bp = Blueprint('tedarikci', __name__, url_prefix='/api')
 
 # --- HIZLI ENDPOINT'LER (Değişiklik yok) ---
-# BU YENİ FONKSİYONU OLDUĞU GİBİ EKLE
 @tedarikci_bp.route('/tedarikciler_dropdown')
 @login_required
 def get_tedarikciler_for_dropdown():
     """Sadece ID ve İsim içeren, sıralanmış tam tedarikçi listesini döndürür."""
     try:
         sirket_id = session['user']['sirket_id']
-        # DÜZELTME: 'tedarikciler' tablosu yerine 'tedarikci_ozetleri' view'ını kullanıyoruz
-        # ve 'toplam_litre' alanını da seçiyoruz.
-        response = supabase.table('tedarikci_ozetleri').select('id, isim, toplam_litre').eq('sirket_id', sirket_id).order('isim', desc=False).execute()
+        # DÜZELTME: Tedarikçiler sayfasında gösterilecek tüm alanları seçiyoruz.
+        response = supabase.table('tedarikci_ozetleri').select(
+            'id, isim, telefon_no, tc_no, adres, toplam_litre'
+        ).eq('sirket_id', sirket_id).order('isim', desc=False).execute()
         return jsonify(response.data)
     except Exception as e:
         print(f"Dropdown için tedarikçi listesi hatası: {e}")
@@ -184,13 +184,12 @@ def update_tedarikci(id):
         if not guncellenecek_veri:
             return jsonify({"error": "Güncellenecek veri bulunamadı."}), 400
 
-        # DEĞİŞİKLİK: Sunucudan dönen veriyi yakala
-        response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', id).eq('sirket_id', sirket_id).execute()
+        # DÜZELTME: .select('*') ekleyerek Supabase'in güncellenmiş veriyi döndürmesini sağlıyoruz.
+        response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', id).eq('sirket_id', sirket_id).select('*').execute()
 
         if not response.data:
             return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
 
-        # DEĞİŞİKLİK: Mesajla birlikte güncellenen tedarikçiyi de frontend'e gönder
         return jsonify({"message": "Tedarikçi bilgileri güncellendi.", "tedarikci": response.data[0]})
 
     except APIError as e:
