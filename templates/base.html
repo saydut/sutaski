@@ -26,6 +26,10 @@
     data-app-version="{{ APP_VERSION }}"
     {% block body_attributes %}{% endblock %}
 >
+    <script>
+        // main.py'den gelen VAPID_PUBLIC_KEY'i al ve JavaScript değişkeni yap
+        const VAPID_PUBLIC_KEY = '{{ VAPID_PUBLIC_KEY }}';
+    </script>
 
     {% block content %}{% endblock %}
 

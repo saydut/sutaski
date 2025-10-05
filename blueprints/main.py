@@ -1,3 +1,4 @@
+import os
 from flask import Blueprint, render_template, session, request
 from decorators import login_required, lisans_kontrolu
 from flask import Response
@@ -6,14 +7,16 @@ from extensions import supabase
 main_bp = Blueprint('main', __name__)
 
 # --- ARAYÜZ SAYFALARI ---
+
 @main_bp.route('/')
 @login_required
 @lisans_kontrolu
 def anasayfa():
-    # Service Worker'ın uygulama kabuğunu önbelleğe alması için
-    # Eğer istekte özel başlık varsa, boş session ile render et
+    # Bu satır anahtarı .env dosyasından okur
+    vapid_public_key = os.environ.get("VAPID_PUBLIC_KEY")
 
-    return render_template('index.html', session=session)
+    # Bu satır da okuduğu anahtarı index.html'e gönderir
+    return render_template('index.html', session=session, VAPID_PUBLIC_KEY=vapid_public_key)
 
 @main_bp.route('/raporlar')
 @login_required

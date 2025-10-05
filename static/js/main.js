@@ -77,6 +77,8 @@ function initOfflineState() {
 let mevcutSayfa = 1;
 const girdilerSayfaBasi = 6;
 
+// BU KOD BLOĞUNU KOPYALAYIP MEVCUT window.onload'un YERİNE YAPIŞTIR
+
 // Uygulama başlangıç noktası
 window.onload = async function() {
     // Çevrimdışı durumu ve PWA kabuğunu başlat
@@ -93,7 +95,86 @@ window.onload = async function() {
 
     // Başlangıç verilerini yükle (özet, grafikler, tedarikçiler ve ilk sayfa girdileri)
     await baslangicVerileriniYukle();
+
+    // --- YENİ EKLENEN BİLDİRİM KONTROL KODU ---
+    initializePushNotifications(); 
+    // --- YENİ KOD SONU ---
 };
+
+// --- YENİ EKLENEN FONKSİYONLAR ---
+
+// URL safe base64 decode/encode fonksiyonu
+function urlB64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+// Abone olma işlemini başlatan ana fonksiyon
+async function subscribeUser() {
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        // VAPID_PUBLIC_KEY değişkeni index.html'den geliyor olmalı
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+
+        console.log('Kullanıcı başarıyla abone oldu:', subscription);
+
+        // Abonelik bilgisini sunucuya gönder
+        await fetch('/api/save-subscription', {
+            method: 'POST',
+            body: JSON.stringify(subscription),
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        gosterMesaj('Bildirimlere başarıyla abone oldunuz!', 'success');
+        document.getElementById('subscribe-button').style.display = 'none';
+
+    } catch (error) {
+        console.error('Abonelik sırasında hata:', error);
+        gosterMesaj('Bildirimlere abone olunamadı. Lütfen sayfa ayarlarından bildirim izinlerini kontrol edin.', 'danger');
+    }
+}
+
+// Sayfa yüklendiğinde bildirim durumunu kontrol eden ana fonksiyon
+function initializePushNotifications() {
+    const subscribeButton = document.getElementById('subscribe-button');
+    if (!subscribeButton) {
+        console.error('Abone ol butonu HTML içinde bulunamadı.');
+        return;
+    }
+
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+        navigator.serviceWorker.ready.then(registration => {
+            registration.pushManager.getSubscription().then(subscription => {
+                if (subscription === null && Notification.permission === 'default') {
+                    // Kullanıcı abone değil VE henüz izin vermemiş/engellememiş
+                    subscribeButton.style.display = 'block';
+                    subscribeButton.onclick = () => {
+                        Notification.requestPermission().then(permission => {
+                            if (permission === 'granted') {
+                                subscribeUser();
+                            }
+                        });
+                    };
+                }
+            });
+        });
+    } else {
+        console.warn('Bu tarayıcı anlık bildirimleri desteklemiyor.');
+    }
+}
+
+// --- YENİ FONKSİYONLARIN SONU ---
 
 /**
  * Uygulamanın ihtiyaç duyduğu tüm başlangıç verilerini paralel olarak yükler.

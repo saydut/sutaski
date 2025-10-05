@@ -475,3 +475,50 @@ async function sifreSifirla() {
         gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
     }
 }
+
+// Formun gönderilme olayını dinle
+document.addEventListener('DOMContentLoaded', () => {
+    const bildirimForm = document.getElementById('bildirim-formu');
+    if(bildirimForm) {
+        bildirimForm.addEventListener('submit', topluBildirimGonder);
+    }
+});
+
+async function topluBildirimGonder(event) {
+    event.preventDefault(); // Sayfanın yeniden yüklenmesini engelle
+
+    const baslik = document.getElementById('bildirim-baslik').value;
+    const mesaj = document.getElementById('bildirim-mesaj').value;
+    const button = document.getElementById('bildirim-gonder-btn');
+    const originalButtonHTML = button.innerHTML;
+
+    if (!baslik || !mesaj) {
+        gosterMesaj('Başlık ve mesaj boş bırakılamaz.', 'warning');
+        return;
+    }
+
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Gönderiliyor...`;
+
+    try {
+        const response = await fetch('/api/bildirim/gonder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ baslik: baslik, mesaj: mesaj })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            gosterMesaj(result.message, 'success');
+            document.getElementById('bildirim-formu').reset(); // Formu temizle
+        } else {
+            throw new Error(result.error || 'Bilinmeyen bir hata oluştu.');
+        }
+    } catch (error) {
+        gosterMesaj(`Hata: ${error.message}`, 'danger');
+    } finally {
+        button.disabled = false;
+        button.innerHTML = originalButtonHTML;
+    }
+}
