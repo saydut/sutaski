@@ -1,5 +1,6 @@
 // static/js/yem_yonetimi.js (SAYFALAMA EKLENMİŞ TAM VERSİYON)
-
+let yemIslemSilmeOnayModal;
+let yemIslemDuzenleModal;
 let tedarikciSecici, yemUrunSecici;
 let yemUrunuModal, yemSilmeOnayModal;
 let mevcutGorunum = 'tablo';
@@ -12,6 +13,8 @@ const ISLEMLER_SAYFA_BASI = 5; // YENİ
 window.onload = function() {
     yemUrunuModal = new bootstrap.Modal(document.getElementById('yemUrunuModal'));
     yemSilmeOnayModal = new bootstrap.Modal(document.getElementById('yemSilmeOnayModal'));
+    yemIslemSilmeOnayModal = new bootstrap.Modal(document.getElementById('yemIslemSilmeOnayModal'));
+    yemIslemDuzenleModal = new bootstrap.Modal(document.getElementById('yemIslemDuzenleModal'));
 
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
     yemUrunSecici = new TomSelect("#yem-urun-sec", { create: false, sortField: { field: "text", direction: "asc" } });
@@ -402,7 +405,7 @@ async function yemIslemleriniGoster(sayfa = 1) {
 
     // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
     if (!navigator.onLine) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3 text-warning">Son işlemleri görmek için internet bağlantısı gereklidir.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center p-3 text-warning">Son işlemleri görmek için internet bağlantısı gereklidir.</td></tr>`;
         document.getElementById('yem-islemleri-sayfalama').innerHTML = ''; // Sayfalamayı temizle
         return;
     }
@@ -418,7 +421,7 @@ async function yemIslemleriniGoster(sayfa = 1) {
         tbody.innerHTML = ''; // Temizle
 
         if (result.islemler.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3 text-secondary">Kayıtlı yem çıkış işlemi bulunamadı.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center p-3 text-secondary">Kayıtlı yem çıkış işlemi bulunamadı.</td></tr>`;
             return;
         }
 
@@ -427,11 +430,19 @@ async function yemIslemleriniGoster(sayfa = 1) {
             const miktar = parseFloat(islem.miktar_kg).toFixed(2);
 
             const tr = `
-                <tr>
+                <tr id="yem-islem-${islem.id}">
                     <td>${tarih}</td>
                     <td>${islem.tedarikciler.isim}</td>
                     <td>${islem.yem_urunleri.yem_adi}</td>
                     <td class="text-end">${miktar} KG</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="yemIslemiDuzenleAc(${islem.id}, '${miktar}', '${islem.aciklama || ''}')">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" title="İşlemi İptal Et" onclick="yemIslemiSilmeOnayiAc(${islem.id})">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                    </td>
                 </tr>
             `;
             tbody.innerHTML += tr;
@@ -446,6 +457,105 @@ async function yemIslemleriniGoster(sayfa = 1) {
         );
 
     } catch (error) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center p-3 text-danger">${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center p-3 text-danger">${error.message}</td></tr>`;
     }
+}
+
+// BU İKİ YENİ FONKSİYONU dosyanın en sonuna ekleyin
+/**
+ * Yem çıkış işlemini iptal etmek için onay modalını açar.
+ * @param {number} id - İptal edilecek işlemin ID'si.
+ */
+function yemIslemiSilmeOnayiAc(id) {
+    document.getElementById('silinecek-islem-id').value = id;
+    yemIslemSilmeOnayModal.show();
+}
+
+/**
+ * Yem çıkış işlemini siler (iyimser güncelleme ile).
+ */
+async function yemIslemiSil() {
+    const id = document.getElementById('silinecek-islem-id').value;
+    yemIslemSilmeOnayModal.hide();
+
+    // İyimser güncelleme: Önce arayüzden kaldır
+    const silinecekSatir = document.getElementById(`yem-islem-${id}`);
+    if (!silinecekSatir) return;
+
+    const parent = silinecekSatir.parentNode;
+    const nextSibling = silinecekSatir.nextSibling;
+    silinecekSatir.style.opacity = '0';
+    setTimeout(() => silinecekSatir.remove(), 400);
+
+    try {
+        const response = await fetch(`/yem/api/islemler/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+
+        gosterMesaj(result.message, 'success');
+        // Stoklar değiştiği için ürün listesini ve seçiciyi yenile
+        await yemListesiniGoster(mevcutYemSayfasi);
+        await yemSeciciyiDoldur();
+
+    } catch (error) {
+        gosterMesaj(error.message || 'İşlem iptal edilemedi, satır geri yüklendi.', 'danger');
+        // Hata olursa satırı geri ekle
+        silinecekSatir.style.opacity = '1';
+        if (!silinecekSatir.parentNode) {
+            parent.insertBefore(silinecekSatir, nextSibling);
+        }
+    }
+}
+
+function yemIslemiDuzenleAc(id, miktar, aciklama) {
+    document.getElementById('edit-islem-id').value = id;
+    document.getElementById('edit-miktar-input').value = parseFloat(miktar);
+    document.getElementById('edit-aciklama-input').value = aciklama;
+    yemIslemDuzenleModal.show();
+}
+
+/**
+ * Yem çıkış işlemini güncelleme isteğini sunucuya gönderir.
+ */
+async function yemIslemiGuncelle() {
+    const id = document.getElementById('edit-islem-id').value;
+    const veri = {
+        yeni_miktar_kg: document.getElementById('edit-miktar-input').value,
+        aciklama: document.getElementById('edit-aciklama-input').value.trim()
+    };
+
+    if (!veri.yeni_miktar_kg || parseFloat(veri.yeni_miktar_kg) <= 0) {
+        gosterMesaj("Lütfen geçerli bir miktar girin.", "warning");
+        return;
+    }
+
+    try {
+        const response = await fetch(`/yem/api/islemler/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(veri)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+
+        gosterMesaj(result.message, 'success');
+        yemIslemDuzenleModal.hide();
+        
+        // Tüm listeleri yenile
+        await yemIslemleriniGoster(mevcutIslemSayfasi);
+        await yemListesiniGoster(mevcutYemSayfasi);
+        await yemSeciciyiDoldur();
+
+    } catch (error) {
+        gosterMesaj(error.message || "Güncelleme sırasında bir hata oluştu.", "danger");
+    }
+}
+
+/**
+ * Yem çıkış işlemini iptal etmek için onay modalını açar.
+ * @param {number} id - İptal edilecek işlemin ID'si.
+ */
+function yemIslemiSilmeOnayiAc(id) {
+    document.getElementById('silinecek-islem-id').value = id;
+    yemIslemSilmeOnayModal.show();
 }

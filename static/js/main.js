@@ -260,6 +260,13 @@ async function sutGirdisiEkle() {
         gosterMesaj("Süt girdisi başarıyla kaydedildi.", "success");
         const bugun = utils.getLocalDateString();
         ui.updateOzetPanels(result.yeni_ozet, bugun);
+        
+        // --- DEĞİŞİKLİK BURADA BAŞLIYOR ---
+        // Grafiklerin yeniden yüklenmesi için fonksiyonları çağırıyoruz.
+        await charts.haftalikGrafigiOlustur();
+        await charts.tedarikciGrafigiOlustur();
+        // --- DEĞİŞİKLİK BURADA BİTİYOR ---
+
         await girdileriGoster(1, bugun);
 
     } catch (error) {
@@ -300,6 +307,8 @@ async function sutGirdisiDuzenle() {
         
         // DEĞİŞİKLİK: Özet verisini API yanıtından al, tekrar istek atma.
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
+        await charts.haftalikGrafigiOlustur();
+        await charts.tedarikciGrafigiOlustur();
         await girdileriGoster(mevcutSayfa, formatliTarih);
 
     } catch (error) {
@@ -338,6 +347,8 @@ async function sutGirdisiSil() {
         gosterMesaj(result.message, 'success');
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
+        await charts.haftalikGrafigiOlustur();
+        await charts.tedarikciGrafigiOlustur();
 
     } catch (error) {
         // --- DEĞİŞİKLİK BURADA ---

@@ -59,35 +59,64 @@ const charts = {
         }
     },
 
+
     /**
      * Son 30 günlük tedarikçi dağılımı grafiğini (doughnut) oluşturur.
      */
     async tedarikciGrafigiOlustur() {
         const veriYokMesaji = document.getElementById('tedarikci-veri-yok');
+        const canvas = document.getElementById('tedarikciDagilimGrafigi');
+        const ctx = canvas.getContext('2d');
+
+        // Adım 1: Önceki grafiği temizle ve "Yükleniyor..." durumunu ayarla
+        if (this.tedarikciChart) {
+            this.tedarikciChart.destroy();
+        }
+        canvas.style.display = 'none'; // Canvas'ı (grafik alanı) tamamen gizle
+        veriYokMesaji.style.display = 'block'; // Mesaj/yükleniyor alanını göster
+        veriYokMesaji.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>'; // İçine spinner koy
+
         try {
             const veri = await api.fetchTedarikciDagilimi();
-            const ctx = document.getElementById('tedarikciDagilimGrafigi').getContext('2d');
-            
-            if (this.tedarikciChart) {
-                this.tedarikciChart.destroy();
-            }
             
             if (veri.labels.length === 0) {
-                veriYokMesaji.style.display = 'block';
-                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-                return;
+                veriYokMesaji.textContent = 'Son 30 günde veri bulunamadı.';
+                return; // Canvas gizli kalacak, sadece bu yazı görünecek.
+            }
+
+            // Adım 2: Veriyi işle (Çok fazla tedarikçiyi "Diğerleri" altında grupla)
+            const GRAFIKTE_GOSTERILECEK_SAYI = 9; // En büyük 9 dilimi göster
+            let islenmisVeri = {
+                labels: veri.labels,
+                data: veri.data
+            };
+
+            // Eğer gösterilecek sayıdan daha fazla tedarikçi varsa gruplama yap
+            if (veri.labels.length > GRAFIKTE_GOSTERILECEK_SAYI + 1) {
+                const digerleriToplami = veri.data.slice(GRAFIKTE_GOSTERILECEK_SAYI).reduce((a, b) => a + b, 0);
+                
+                islenmisVeri.labels = veri.labels.slice(0, GRAFIKTE_GOSTERILECEK_SAYI);
+                islenmisVeri.labels.push('Diğerleri'); // Yeni bir etiket ekle
+                
+                islenmisVeri.data = veri.data.slice(0, GRAFIKTE_GOSTERILECEK_SAYI);
+                islenmisVeri.data.push(digerleriToplami); // Diğerlerinin toplamını ekle
             }
             
-            veriYokMesaji.style.display = 'none';
+            // Adım 3: Grafiği oluştur ve göster
+            veriYokMesaji.style.display = 'none'; // Yükleniyor alanını gizle
+            canvas.style.display = 'block'; // Grafik alanını göster
 
             this.tedarikciChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: veri.labels,
+                    labels: islenmisVeri.labels, // İşlenmiş etiketleri kullan
                     datasets: [{
                         label: 'Litre',
-                        data: veri.data,
-                        backgroundColor: ['rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'],
+                        data: islenmisVeri.data, // İşlenmiş veriyi kullan
+                        backgroundColor: [ // Daha canlı ve ayırt edici bir renk paleti
+                            '#3B82F6', '#EF4444', '#F59E0B', '#10B981', '#6366F1', 
+                            '#8B5CF6', '#EC4899', '#F97316', '#06B6D4', '#64748B'
+                        ],
                         borderWidth: 2
                     }]
                 },
@@ -110,8 +139,7 @@ const charts = {
 
         } catch (error) {
             console.error("Tedarikçi grafiği oluşturulurken hata:", error.message);
-            veriYokMesaji.textContent = 'Grafik yüklenemedi.';
-            veriYokMesaji.style.display = 'block';
+            veriYokMesaji.textContent = 'Grafik yüklenemedi.'; // Hata mesajını ayarla
         }
     }
 };
