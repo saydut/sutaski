@@ -8,27 +8,25 @@
 const api = {
     /**
      * Genel bir API isteği yapmak için yardımcı fonksiyon.
-     * @param {object} islemVerisi - {islem_tipi, tedarikci_id, tutar, vb.}
-     * @returns {Promise<any>}
      * @param {string} url - İstek yapılacak URL.
      * @param {object} options - Fetch için yapılandırma seçenekleri (method, headers, body vb.).
      * @returns {Promise<any>} - Başarılı olursa JSON verisi.
      */
-async request(url, options = {}) {
-    try {
-        const response = await fetch(url, options);
-        // DİKKAT: response.json() sonucunu doğrudan return etmeden önce bir değişkene atayacağız.
-        const data = await response.json(); 
-        if (!response.ok) {
-            throw new Error(data.error || `HTTP error! status: ${response.status}`);
+    async request(url, options = {}) {
+        try {
+            const response = await fetch(url, options);
+            const data = await response.json();
+            if (!response.ok) {
+                // Sunucudan gelen hata mesajını kullanarak bir hata fırlat
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+            }
+            return data;
+        } catch (error) {
+            console.error(`API isteği hatası (${url}):`, error);
+            // Hata objesini yeniden fırlatarak çağıran fonksiyona iletiyoruz.
+            throw error;
         }
-        // Artık `data` bir objedir, doğrudan onu döndürelim.
-        return data;
-    } catch (error) {
-        console.error(`API isteği hatası (${url}):`, error);
-        throw error;
-    }
-},
+    },
 
     /**
      * Belirli bir tarihin özet verilerini (toplam litre, girdi sayısı) çeker.
@@ -70,15 +68,11 @@ async request(url, options = {}) {
      * Tüm tedarikçilerin listesini çeker.
      * @returns {Promise<Array<{id: number, isim: string}>>}
      */
-fetchTedarikciler() {
-    // Bu fonksiyon /api/tedarikciler_liste adresine istek atacak
-    return this.request('/api/tedarikciler_liste')
-        .then(data => {
-            // ve gelen { "tedarikciler": [...] } objesinden
-            // sadece "tedarikciler" dizisini döndürecek.
-            return data.tedarikciler; 
-        });
-},
+    fetchTedarikciler() {
+        // Dropdownlar için tam listeyi çeken yeni endpoint'i kullanıyoruz.
+        return this.request('/api/tedarikciler_dropdown');
+    },
+
     /**
      * Sunucuya yeni bir süt girdisi gönderir.
      * @param {object} girdiVerisi - {tedarikci_id, litre, fiyat}
@@ -89,42 +83,6 @@ fetchTedarikciler() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(girdiVerisi)
-        });
-    },
-
-    /**
-     * YENİ FONKSİYON: Sunucuya yeni bir tedarikçi gönderir.
-     * @param {object} tedarikciVerisi - {isim, tc_no, telefon_no, adres}
-     * @returns {Promise<any>}
-     */
-    postYeniTedarikci(tedarikciVerisi) {
-        return this.request('/api/tedarikci_ekle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(tedarikciVerisi)
-        });
-    },
-
-    /**
-
-    /**
-     * YENİ FONKSİYON: Sunucuya yeni bir tedarikçi gönderir.
-     * @param {object} tedarikciVerisi - {isim, tc_no, telefon_no, adres}
-     * @returns {Promise<any>}
-     */
-    postYeniTedarikci(tedarikciVerisi) {
-        return this.request('/api/tedarikci_ekle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(tedarikciVerisi)
-        });
-    },
-
-    postFinansIslemi(islemVerisi) {
-        return this.request('/finans/api/islemler', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(islemVerisi)
         });
     },
 

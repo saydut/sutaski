@@ -17,8 +17,9 @@ finans_bp = Blueprint('finans', __name__, url_prefix='/finans')
 @lisans_kontrolu
 def finans_sayfasi():
     """Finansal işlemlerin listelendiği ana sayfa."""
-    # Eğer istekte özel başlık varsa, boş session ile render et
-
+    # BU BLOK EKLENDİ
+    if request.headers.get('X-Cache-Me') == 'true':
+        return render_template('finans_yonetimi.html', session={})
     return render_template('finans_yonetimi.html')
 
 # --- API UÇ NOKTALARI ---

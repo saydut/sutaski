@@ -10,29 +10,6 @@
  * Tarayıcıda kayıtlı kullanıcı varsa bilgileri ekrana basar.
  * Yoksa ve internet de yoksa, giriş sayfasına yönlendirir.
  */
-
-// DOSYANIN EN BAŞINA EKLENECEK KOD
-let mevcutGorunum = 'liste';
-
-
-function gorunumuAyarla(aktifGorunum) {
-    document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
-    document.getElementById(`${aktifGorunum}-gorunumu`).style.display = 'block';
-
-    document.getElementById('btn-view-list').classList.toggle('active', aktifGorunum === 'liste');
-    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
-}
-
-function gorunumuDegistir(yeniGorunum) {
-    if (mevcutGorunum === yeniGorunum) return;
-    mevcutGorunum = yeniGorunum;
-    localStorage.setItem('anaPanelGorunum', yeniGorunum);
-    gorunumuAyarla(yeniGorunum);
-    girdileriGoster(1, ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null);
-}
-// EKLENECEK KOD SONU
-
-
 function initOfflineState() {
     const offlineUserString = localStorage.getItem('offlineUser');
     
@@ -77,8 +54,6 @@ function initOfflineState() {
 let mevcutSayfa = 1;
 const girdilerSayfaBasi = 6;
 
-// BU KOD BLOĞUNU KOPYALAYIP MEVCUT window.onload'un YERİNE YAPIŞTIR
-
 // Uygulama başlangıç noktası
 window.onload = async function() {
     // Çevrimdışı durumu ve PWA kabuğunu başlat
@@ -87,23 +62,12 @@ window.onload = async function() {
     // UI component'lerini (modallar, tarih seçiciler vb.) başlat
     ui.init();
 
-    mevcutGorunum = localStorage.getItem('anaPanelGorunum') || 'liste';
-    gorunumuAyarla(mevcutGorunum);
-
     // Lisans durumunu kontrol et ve gerekiyorsa uyarı göster
     ui.lisansUyarisiKontrolEt();
 
     // Başlangıç verilerini yükle (özet, grafikler, tedarikçiler ve ilk sayfa girdileri)
     await baslangicVerileriniYukle();
-
-    // --- YENİ EKLENEN BİLDİRİM KONTROL KODU ---
-    // subscription.js dosyasındaki fonksiyonu çağırıyoruz
-    if (typeof initializePushNotifications === 'function') {
-        initializePushNotifications();
-    }
-    // --- YENİ KOD SONU ---
 };
-
 
 /**
  * Uygulamanın ihtiyaç duyduğu tüm başlangıç verilerini paralel olarak yükler.
@@ -130,26 +94,17 @@ async function baslangicVerileriniYukle() {
  * @param {string|null} tarih - 'YYYY-MM-DD' formatında tarih. Boş bırakılırsa bugün.
  */
 async function ozetVerileriniYukle(tarih = null) {
-    ui.toggleOzetPanelsLoading(true);
+    ui.toggleOzetPanelsLoading(true); // Yükleniyor animasyonunu göster
     const effectiveDate = tarih || utils.getLocalDateString(new Date());
 
     try {
-        let data;
-        if (navigator.onLine) {
-            data = await api.fetchGunlukOzet(effectiveDate);
-            // Sadece bugünün özetini önbelleğe al
-            if (effectiveDate === utils.getLocalDateString(new Date())) {
-                await cacheAnaPanelData('gunlukOzet', data);
-            }
-        } else {
-            data = await getCachedAnaPanelData('gunlukOzet');
-            if (!data) throw new Error("Önbellekte özet veri bulunamadı.");
-        }
+        const data = await api.fetchGunlukOzet(effectiveDate);
         ui.updateOzetPanels(data, effectiveDate);
     } catch (error) {
         console.error("Özet yüklenirken hata:", error);
-        ui.updateOzetPanels(null, effectiveDate, true);
+        ui.updateOzetPanels(null, effectiveDate, true); // Hata durumunu UI'a bildir
     } finally {
+        // Hata olsa da olmasa da yükleniyor animasyonunu kaldır
         ui.toggleOzetPanelsLoading(false); 
     }
 }
@@ -162,39 +117,31 @@ async function ozetVerileriniYukle(tarih = null) {
  */
 async function girdileriGoster(sayfa = 1, tarih = null) {
     mevcutSayfa = sayfa;
-    tarih = tarih || (ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : utils.getLocalDateString(new Date()));
+    if (!tarih) {
+        tarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : utils.getLocalDateString(new Date());
+    }
     
     ui.toggleGirdilerListLoading(true);
-    document.getElementById('veri-yok-mesaji').style.display = 'none';
 
     try {
-        let sunucuVerisi = { girdiler: [], toplam_girdi_sayisi: 0 };
-        if (navigator.onLine) {
-            sunucuVerisi = await api.fetchSutGirdileri(tarih, sayfa);
-            // Sadece bugünün ilk sayfa girdilerini önbelleğe al
-            if (tarih === utils.getLocalDateString(new Date()) && sayfa === 1) {
-                await cacheAnaPanelData('gunlukGirdiler', sunucuVerisi);
-            }
-        } else {
-            // Çevrimdışıysak sadece bugünün ilk sayfasını önbellekten göstermeye çalış
-            if (tarih === utils.getLocalDateString(new Date()) && sayfa === 1) {
-                sunucuVerisi = await getCachedAnaPanelData('gunlukGirdiler');
-                if (!sunucuVerisi) throw new Error("Önbellekte günlük girdi bulunamadı.");
-            } else {
-                 throw new Error("Çevrimdışı modda sadece bugünün ilk sayfası görüntülenebilir.");
-            }
-        }
+        // Çevrimiçi ise sunucudan veri çek
+        const sunucuVerisi = navigator.onLine ? await api.fetchSutGirdileri(tarih, sayfa) : { girdiler: [], toplam_girdi_sayisi: 0 };
         
-        const bekleyenGirdiler = await bekleyenKayitlariGetir().then(kayitlar => kayitlar.sut || []);
+        // Çevrimdışı bekleyen girdileri al
+        const bekleyenGirdiler = await bekleyenGirdileriGetir();
+        
+        // Sunucu verisi ile çevrimdışı veriyi birleştir
         const { tumGirdiler, toplamGirdi } = ui.mergeOnlineOfflineGirdiler(sunucuVerisi, bekleyenGirdiler, tarih);
         
-        ui.renderGirdiler(tumGirdiler, mevcutGorunum);
+        // Birleştirilmiş veriyi arayüzde göster
+        ui.renderGirdilerListesi(tumGirdiler);
+        
+        // Sayfalamayı oluştur
         ui.sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, tarih));
 
     } catch (error) {
         console.error("Girdileri gösterirken hata:", error);
-        ui.renderGirdiler([], mevcutGorunum);
-        gosterMesaj(error.message, 'warning'); // Kullanıcıya bilgi ver
+        ui.renderGirdilerListesi([], "Girdiler yüklenirken bir hata oluştu.");
     } finally {
         ui.toggleGirdilerListLoading(false);
     }
@@ -271,7 +218,7 @@ async function sutGirdisiEkle() {
             const isOfflineUserValid = await ui.checkOfflineUserLicense();
             if (!isOfflineUserValid) return; 
             
-            const basarili = await kaydetCevrimdisiSutGirdisi(yeniGirdi);
+            const basarili = await kaydetCevrimdisi(yeniGirdi);
             if (basarili) {
                 ui.resetGirdiFormu();
                 await girdileriGoster();
@@ -313,8 +260,6 @@ async function sutGirdisiEkle() {
         gosterMesaj("Süt girdisi başarıyla kaydedildi.", "success");
         const bugun = utils.getLocalDateString();
         ui.updateOzetPanels(result.yeni_ozet, bugun);
-        await charts.haftalikGrafigiOlustur();
-        await charts.tedarikciGrafigiOlustur();
         await girdileriGoster(1, bugun);
 
     } catch (error) {
@@ -323,16 +268,13 @@ async function sutGirdisiEkle() {
         console.error("İyimser ekleme başarısız oldu:", error);
         gosterMesaj("Kayıt başarısız. İnternet bağlantınızı kontrol edin.", "danger");
         
-        // Hata durumunda geçici elemanı arayüzden kaldır.
         const silinecekElement = document.getElementById(geciciId);
         if (silinecekElement) silinecekElement.remove();
 
-        // Kullanıcının girdiği verileri forma geri yükle.
         ui.tedarikciSecici.setValue(orjinalFormVerisi.tedarikciId);
         document.getElementById('litre-input').value = orjinalFormVerisi.litre;
         document.getElementById('fiyat-input').value = orjinalFormVerisi.fiyat;
         
-        // Eğer listede başka eleman yoksa "veri yok" mesajının durumunu kontrol et.
         if(listeElementi.children.length === 1 && ilkEleman) {
             ilkEleman.style.display = 'block';
         }
@@ -343,36 +285,21 @@ async function sutGirdisiEkle() {
  * Mevcut bir süt girdisini düzenleme formunu yönetir.
  */
 async function sutGirdisiDuzenle() {
-    const { girdiId, yeniLitre, yeniFiyat, duzenlemeSebebi } = ui.getDuzenlemeFormVerisi();
-    if (!yeniLitre || !yeniFiyat) {
-        gosterMesaj("Lütfen yeni litre ve fiyat değerlerini girin.", "warning");
+    const { girdiId, yeniLitre, duzenlemeSebebi } = ui.getDuzenlemeFormVerisi();
+    if (!yeniLitre || !duzenlemeSebebi) {
+        gosterMesaj("Lütfen yeni litre değerini ve düzenleme sebebini girin.", "warning");
         return;
     }
-
-    // --- EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Düzenleme işlemi için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    // --- KONTROL SONU ---
-    
-    const guncelVeri = {
-        yeni_litre: parseFloat(yeniLitre),
-        yeni_fiyat: parseFloat(yeniFiyat),
-        duzenleme_sebebi: duzenlemeSebebi
-    };
     
     try {
-        const result = await api.updateSutGirdisi(girdiId, guncelVeri);
+        const result = await api.updateSutGirdisi(girdiId, { yeni_litre: parseFloat(yeniLitre), duzenleme_sebebi: duzenlemeSebebi });
         gosterMesaj("Girdi başarıyla güncellendi.", "success");
         ui.duzenleModal.hide();
         
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
         
+        // DEĞİŞİKLİK: Özet verisini API yanıtından al, tekrar istek atma.
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
-
-        await charts.haftalikGrafigiOlustur();
-        await charts.tedarikciGrafigiOlustur();
         await girdileriGoster(mevcutSayfa, formatliTarih);
 
     } catch (error) {
@@ -391,14 +318,7 @@ async function sutGirdisiSil() {
     const girdiId = ui.getSilinecekGirdiId();
     ui.silmeOnayModal.hide();
 
-    // --- EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Silme işlemi için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    // --- KONTROL SONU ---
-
-    const silinecekElement = document.getElementById(`girdi-liste-${girdiId}`) || document.getElementById(`girdi-kart-${girdiId}`);
+    const silinecekElement = document.getElementById(`girdi-${girdiId}`);
     if (!silinecekElement) return;
 
     const parent = silinecekElement.parentNode;
@@ -418,10 +338,10 @@ async function sutGirdisiSil() {
         gosterMesaj(result.message, 'success');
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
-        await charts.haftalikGrafigiOlustur();
-        await charts.tedarikciGrafigiOlustur();
 
     } catch (error) {
+        // --- DEĞİŞİKLİK BURADA ---
+        // Teknik hatayı konsola yazdır, kullanıcıya ise anlaşılır bir mesaj göster.
         console.error("İyimser silme başarısız oldu:", error);
         gosterMesaj('Silme işlemi başarısız, girdi geri yüklendi.', 'danger');
 
@@ -492,3 +412,4 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
+

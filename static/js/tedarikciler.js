@@ -1,16 +1,17 @@
-// static/js/tedarikciler.js DOSYASININ SON VE TAM HALİ
+// static/js/tedarikciler.js (ÇEVRİMDIŞI MOD İÇİN YENİDEN YAPILANDIRILDI)
 
 let tedarikciModal, silmeOnayModal;
-
-// Sayfa durumunu tutacak değişkenler
 let mevcutSayfa = 1;
 const KAYIT_SAYISI = 15;
+
+// Sıralama ve arama durumunu tutacak değişkenler
 let mevcutSiralamaSutunu = 'isim';
 let mevcutSiralamaYonu = 'asc';
 let mevcutAramaTerimi = '';
 let mevcutGorunum = 'tablo';
-let debounceTimer; // Arama için zamanlayıcı
-let tumCevrimdisiTedarikciler = []; // Çevrimdışı listeyi tutmak için
+
+// Tüm veriyi bellekte tutacağımız dizi
+let tumTedarikciler = [];
 
 window.onload = async () => {
     tedarikciModal = new bootstrap.Modal(document.getElementById('tedarikciModal'));
@@ -21,31 +22,13 @@ window.onload = async () => {
 
     // Olay dinleyicilerini ayarla
     document.getElementById('arama-input').addEventListener('input', (event) => {
-        // Arama mantığı artık online/offline durumuna göre değişiyor
-        if (navigator.onLine) {
-            // ÇEVRİMİÇİ ARAMA (DEBOUNCE İLE)
-            mevcutAramaTerimi = event.target.value;
-            clearTimeout(debounceTimer); // Önceki zamanlayıcıyı temizle
-            // Yeni bir zamanlayıcı ayarla
-            debounceTimer = setTimeout(() => {
-                verileriYukle(1); // Sunucu tabanlı arama yap
-            }, 300); // Kullanıcı yazmayı bıraktıktan 300ms sonra ara
-        } else {
-            // ÇEVRİMDIŞI ARAMA (ANINDA FİLTRELEME)
-            const aramaTerimi = event.target.value.toLowerCase();
-            const filtrelenmisListe = tumCevrimdisiTedarikciler.filter(t => 
-                (t.isim && t.isim.toLowerCase().includes(aramaTerimi)) ||
-                (t.telefon_no && t.telefon_no.includes(aramaTerimi))
-            );
-            verileriGoster(filtrelenmisListe);
-        }
+        mevcutAramaTerimi = event.target.value.toLowerCase();
+        // Arama yapıldığında her zaman ilk sayfaya git ve verileri yeniden işle
+        verileriIsleVeGoster(1);
     });
 
     document.querySelectorAll('.sortable').forEach(header => {
         header.addEventListener('click', () => {
-            // Sıralama sadece online iken çalışır
-            if (!navigator.onLine) return; 
-            
             const sutun = header.dataset.sort;
             if (mevcutSiralamaSutunu === sutun) {
                 mevcutSiralamaYonu = mevcutSiralamaYonu === 'asc' ? 'desc' : 'asc';
@@ -53,135 +36,201 @@ window.onload = async () => {
                 mevcutSiralamaSutunu = sutun;
                 mevcutSiralamaYonu = 'asc';
             }
-            verileriYukle(1);
+            // Sıralama değiştiğinde ilk sayfaya git ve verileri yeniden işle
+            verileriIsleVeGoster(1);
         });
     });
 
-    // Sayfa ilk yüklendiğinde verileri yükle
-    await verileriYukle(1);
+    // Sayfa ilk yüklendiğinde verileri çek ve göster
+    await verileriYukle();
 };
 
-
-// Ana veri yükleme fonksiyonu artık hibrit çalışıyor
-async function verileriYukle(sayfa = 1) {
-    const offlineUyari = document.getElementById('offline-uyari-mesaji');
-    const sayfalamaNav = document.getElementById('tedarikci-sayfalama');
-    const siralamaBasliklari = document.querySelectorAll('.sortable');
-
-    // --- ÇEVRİMDIŞI BLOK ---
-    if (!navigator.onLine) {
-        offlineUyari.classList.remove('d-none'); // Uyarıyı göster
-        sayfalamaNav.innerHTML = ''; // Sayfalamayı gizle
-        siralamaBasliklari.forEach(h => h.style.cursor = 'not-allowed'); // Sıralama imlecini değiştir
-
-        try {
-            // Yerel veritabanından önbelleklenmiş listeyi çek
-            tumCevrimdisiTedarikciler = await getOfflineTedarikciler();
-            verileriGoster(tumCevrimdisiTedarikciler);
-        } catch (e) {
-            gosterMesaj("Önbellekteki tedarikçiler yüklenemedi.", "danger");
-            verileriGoster([]);
-        }
-        return; // Fonksiyonu burada bitir, online koda geçme
-    }
-    // --- ÇEVRİMDIŞI BLOK SONU ---
-
-    // --- ÇEVRİMİÇİ BLOK ---
-    offlineUyari.classList.add('d-none'); // Uyarıyı gizle
-    siralamaBasliklari.forEach(h => h.style.cursor = 'pointer'); // Sıralama imlecini düzelt
-    
-    mevcutSayfa = sayfa;
+// Veriyi YALNIZCA store üzerinden (online/offline fark etmeksizin) çeken fonksiyon
+async function verileriYukle() {
     const tbody = document.getElementById('tedarikciler-tablosu');
     const kartListesi = document.getElementById('tedarikciler-kart-listesi');
-    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    
-    veriYokMesaji.style.display = 'none';
-    if (mevcutGorunum === 'tablo') {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
-    } else {
-        kartListesi.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
-    }
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
+    kartListesi.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
 
     try {
-        const url = `/api/tedarikciler_liste?sayfa=${sayfa}&arama=${mevcutAramaTerimi}&siralamaSutun=${mevcutSiralamaSutunu}&siralamaYon=${mevcutSiralamaYonu}`;
-        const response = await fetch(url);
-        const data = await response.json();
+        // YENİ MANTIK: Veriyi store'dan istiyoruz. O zaten online/offline durumuna göre en doğrusunu getirecek.
+        tumTedarikciler = await store.getTedarikciler();
 
-        if (!response.ok) throw new Error(data.error);
-        
-        verileriGoster(data.tedarikciler);
-        
-        ui.sayfalamaNavOlustur('tedarikci-sayfalama', data.toplam_kayit, sayfa, KAYIT_SAYISI, verileriYukle);
-        basliklariGuncelle();
+        // Toplam süt miktarını hesaplamak için ek bir işlem yapmamız gerekebilir.
+        // Şimdilik bu kısmı basitleştiriyoruz, çünkü offline DB'de bu bilgi yok.
+        // Bu yüzden sıralama sadece isme göre çalışacak.
+        document.querySelector('[data-sort="toplam_litre"]').style.display = 'none'; // Toplam süt kolonunu gizle
+        document.querySelector('thead th:nth-child(3)').style.display = 'none';
+
+
+        verileriIsleVeGoster(1); // Gelen tam listeyi işle ve ilk sayfayı göster
 
     } catch (error) {
         console.error("Hata:", error);
-        gosterMesaj(error.message || "Tedarikçi verileri yüklenemedi.", "danger");
+        gosterMesaj("Tedarikçi verileri yüklenemedi.", "danger");
     }
 }
 
-// Bu fonksiyonlar artık eksik veriyle de (çevrimdışı) çalışabiliyor
-function renderTable(tedarikciler) {
+// Gelen tam listeyi arama, sıralama ve sayfalama yaparak işleyen fonksiyon
+function verileriIsleVeGoster(sayfa = 1) {
+    mevcutSayfa = sayfa;
+    let islenmisVeri = [...tumTedarikciler];
+
+    // 1. Arama Filtresi Uygula
+    if (mevcutAramaTerimi) {
+        islenmisVeri = islenmisVeri.filter(supplier =>
+            supplier.isim.toLowerCase().includes(mevcutAramaTerimi) ||
+            (supplier.telefon_no && supplier.telefon_no.includes(mevcutAramaTerimi))
+        );
+    }
+
+    // 2. Sıralama Uygula (şimdilik sadece isme göre)
+    islenmisVeri.sort((a, b) => {
+        let valA = a.isim.toLocaleLowerCase('tr');
+        let valB = b.isim.toLocaleLowerCase('tr');
+        if (valA < valB) return mevcutSiralamaYonu === 'asc' ? -1 : 1;
+        if (valA > valB) return mevcutSiralamaYonu === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    // 3. Sayfalama Uygula
+    const toplamKayit = islenmisVeri.length;
+    const baslangic = (sayfa - 1) * KAYIT_SAYISI;
+    const bitis = baslangic + KAYIT_SAYISI;
+    const sayfaVerisi = islenmisVeri.slice(baslangic, bitis);
+
+    // 4. Ekrana Bas
+    verileriGoster(sayfaVerisi);
+
+    // 5. Sayfalama Navigasyonunu Oluştur
+    ui.sayfalamaNavOlustur(
+        'tedarikci-sayfalama',
+        toplamKayit,
+        sayfa,
+        KAYIT_SAYISI,
+        (yeniSayfa) => verileriIsleVeGoster(yeniSayfa) // Sayfa değiştirme callback'i
+    );
+
+    basliklariGuncelle();
+}
+
+
+function verileriGoster(suppliers) {
+    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+    veriYokMesaji.style.display = suppliers.length === 0 ? 'block' : 'none';
+    if (mevcutGorunum === 'tablo') renderTable(suppliers);
+    else renderCards(suppliers);
+}
+
+function renderTable(suppliers) {
     const tbody = document.getElementById('tedarikciler-tablosu');
     tbody.innerHTML = '';
-    tedarikciler.forEach(tedarikci => {
+    suppliers.forEach(supplier => {
         tbody.innerHTML += `
             <tr>
-                <td><strong>${tedarikci.isim}</strong></td>
-                <td>${tedarikci.telefon_no || '-'}</td>
-                <td class="text-end">${parseFloat(tedarikci.toplam_litre || 0).toFixed(2)} L</td>
+                <td><strong>${supplier.isim}</strong></td>
+                <td>${supplier.telefon_no || '-'}</td>
+                <td style="display: none;"></td> 
                 <td class="text-center">
-                    <a href="/tedarikci/${tedarikci.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
-                    <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="tedarikciDuzenleAc(${tedarikci.id})"><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="silmeOnayiAc(${tedarikci.id}, '${tedarikci.isim}')"><i class="bi bi-trash"></i></button>
+                    <a href="/tedarikci/${supplier.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
+                    <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="tedarikciDuzenleAc(${supplier.id})"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="silmeOnayiAc(${supplier.id}, '${supplier.isim}')"><i class="bi bi-trash"></i></button>
                 </td>
             </tr>`;
     });
 }
 
-function renderCards(tedarikciler) {
+function renderCards(suppliers) {
     const container = document.getElementById('tedarikciler-kart-listesi');
     container.innerHTML = '';
-    tedarikciler.forEach(tedarikci => {
+    suppliers.forEach(supplier => {
         container.innerHTML += `
             <div class="col-lg-4 col-md-6 col-12">
                 <div class="supplier-card">
-                    <div class="supplier-card-header">
-                        <h5>${tedarikci.isim}</h5>
-                        <small class="text-secondary">${tedarikci.telefon_no || 'Telefon yok'}</small>
-                    </div>
+                    <div class="supplier-card-header"><h5>${supplier.isim}</h5></div>
                     <div class="supplier-card-body">
-                        <p class="mb-1">Toplam Süt</p>
-                        <h4 class="fw-bold text-primary">${parseFloat(tedarikci.toplam_litre || 0).toFixed(2)} L</h4>
+                        <p class="mb-2"><i class="bi bi-telephone-fill me-2"></i>${supplier.telefon_no || 'Belirtilmemiş'}</p>
                     </div>
                     <div class="supplier-card-footer">
-                        <a href="/tedarikci/${tedarikci.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
-                        <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="tedarikciDuzenleAc(${tedarikci.id})"><i class="bi bi-pencil"></i></button>
-                        <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="silmeOnayiAc(${tedarikci.id}, '${tedarikci.isim}')"><i class="bi bi-trash"></i></button>
+                        <a href="/tedarikci/${supplier.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
+                        <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="tedarikciDuzenleAc(${supplier.id})"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="silmeOnayiAc(${supplier.id}, '${supplier.isim}')"><i class="bi bi-trash"></i></button>
                     </div>
                 </div>
             </div>`;
     });
 }
 
-// Veri gösterme ve görünüm değiştirme fonksiyonları
-function verileriGoster(tedarikciler) {
-    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    veriYokMesaji.style.display = tedarikciler.length === 0 ? 'block' : 'none';
+async function tedarikciKaydet() {
+    const kaydetButton = document.querySelector('#kaydet-tedarikci-btn');
+    const originalButtonText = kaydetButton.innerHTML;
+    const id = document.getElementById('edit-tedarikci-id').value;
+    const veri = {
+        isim: document.getElementById('tedarikci-isim-input').value.trim(),
+        tc_no: document.getElementById('tedarikci-tc-input').value.trim(),
+        telefon_no: document.getElementById('tedarikci-tel-input').value.trim(),
+        adres: document.getElementById('tedarikci-adres-input').value.trim()
+    };
+    if (!veri.isim) { gosterMesaj("Tedarikçi ismi zorunludur.", "warning"); return; }
     
-    if (mevcutGorunum === 'tablo') {
-        renderTable(tedarikciler);
-    } else {
-        renderCards(tedarikciler);
+    // Çevrimdışı kayıt desteklenmediği için kontrol ekle
+    if (!navigator.onLine) {
+        gosterMesaj("Yeni tedarikçi eklemek için internet bağlantısı gereklidir.", "danger");
+        return;
+    }
+
+    kaydetButton.disabled = true;
+    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
+    const url = id ? `/api/tedarikci_duzenle/${id}` : '/api/tedarikci_ekle';
+    const method = id ? 'PUT' : 'POST';
+    try {
+        const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
+        const result = await response.json();
+        if (response.ok) {
+            gosterMesaj(result.message, "success");
+            tedarikciModal.hide();
+            await verileriYukle();
+        } else {
+            gosterMesaj(result.error || "Bir hata oluştu.", "danger");
+        }
+    } catch (error) {
+        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+    } finally {
+        kaydetButton.disabled = false;
+        kaydetButton.innerHTML = originalButtonText;
     }
 }
 
+async function tedarikciSil() {
+    const id = document.getElementById('silinecek-tedarikci-id').value;
+
+    if (!navigator.onLine) {
+        gosterMesaj("Tedarikçi silmek için internet bağlantısı gereklidir.", "danger");
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/tedarikci_sil/${id}`, { method: 'DELETE' });
+        const result = await response.json();
+        if (response.ok) {
+            gosterMesaj(result.message, 'success');
+            silmeOnayModal.hide();
+            await verileriYukle(); 
+        } else {
+            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
+        }
+    } catch (error) {
+        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+    }
+}
+
+// Diğer yardımcı fonksiyonlar aynı kalabilir...
 function gorunumuDegistir(yeniGorunum) {
     if (mevcutGorunum === yeniGorunum) return;
     mevcutGorunum = yeniGorunum;
     localStorage.setItem('tedarikciGorunum', yeniGorunum);
     gorunumuAyarla(yeniGorunum);
-    verileriYukle(mevcutSayfa);
+    verileriIsleVeGoster(mevcutSayfa);
 }
 
 function gorunumuAyarla(aktifGorunum) {
@@ -201,7 +250,6 @@ function basliklariGuncelle() {
     });
 }
 
-// Modal işlemleri
 function yeniTedarikciAc() {
     document.getElementById('tedarikciModalLabel').innerText = 'Yeni Tedarikçi Ekle';
     document.getElementById('edit-tedarikci-id').value = '';
@@ -210,24 +258,17 @@ function yeniTedarikciAc() {
 }
 
 async function tedarikciDuzenleAc(id) {
-    if (!navigator.onLine) {
-        gosterMesaj("Düzenleme işlemi için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    try {
-        const response = await fetch(`/api/tedarikci/${id}`);
-        const tedarikci = await response.json();
-        if (!response.ok) throw new Error(tedarikci.error);
-
+    const supplier = tumTedarikciler.find(t => t.id === id);
+    if(supplier){
         document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
-        document.getElementById('edit-tedarikci-id').value = tedarikci.id;
-        document.getElementById('tedarikci-isim-input').value = tedarikci.isim;
-        document.getElementById('tedarikci-tc-input').value = tedarikci.tc_no || '';
-        document.getElementById('tedarikci-tel-input').value = tedarikci.telefon_no || '';
-        document.getElementById('tedarikci-adres-input').value = tedarikci.adres || '';
+        document.getElementById('edit-tedarikci-id').value = supplier.id;
+        document.getElementById('tedarikci-isim-input').value = supplier.isim;
+        document.getElementById('tedarikci-tc-input').value = supplier.tc_no || '';
+        document.getElementById('tedarikci-tel-input').value = supplier.telefon_no || '';
+        document.getElementById('tedarikci-adres-input').value = supplier.adres || '';
         tedarikciModal.show();
-    } catch (error) {
-        gosterMesaj(error.message || "Tedarikçi detayı bulunamadı.", "danger");
+    } else {
+        gosterMesaj("Tedarikçi detayı bulunamadı.", "danger");
     }
 }
 
@@ -235,77 +276,4 @@ function silmeOnayiAc(id, isim) {
     document.getElementById('silinecek-tedarikci-id').value = id;
     document.getElementById('silinecek-tedarikci-adi').innerText = isim;
     silmeOnayModal.show();
-}
-
-async function tedarikciKaydet() {
-    const kaydetButton = document.querySelector('#kaydet-tedarikci-btn');
-    const originalButtonText = kaydetButton.innerHTML;
-    const id = document.getElementById('edit-tedarikci-id').value;
-    const veri = {
-        isim: document.getElementById('tedarikci-isim-input').value.trim(),
-        tc_no: document.getElementById('tedarikci-tc-input').value.trim(),
-        telefon_no: document.getElementById('tedarikci-tel-input').value.trim(),
-        adres: document.getElementById('tedarikci-adres-input').value.trim()
-    };
-    if (!veri.isim) { gosterMesaj("Tedarikçi ismi zorunludur.", "warning"); return; }
-    
-    if (!id && !navigator.onLine) { 
-        const basarili = await kaydetCevrimdisiYeniTedarikci(veri);
-        if (basarili) {
-            tedarikciModal.hide();
-            document.getElementById('tedarikci-form').reset();
-        }
-        return; 
-    }
-    
-    if (id && !navigator.onLine) {
-        gosterMesaj("Tedarikçi düzenleme işlemi için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
-    
-    const url = id ? `/api/tedarikci_duzenle/${id}` : '/api/tedarikci_ekle';
-    const method = id ? 'PUT' : 'POST';
-    
-    try {
-        const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, "success");
-            tedarikciModal.hide();
-            await verileriYukle(id ? mevcutSayfa : 1);
-        } else {
-            gosterMesaj(result.error || "Bir hata oluştu.", "danger");
-        }
-    } catch (error) {
-        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
-    } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = originalButtonText;
-    }
-}
-
-async function tedarikciSil() {
-    const id = document.getElementById('silinecek-tedarikci-id').value;
-    silmeOnayModal.hide();
-
-    if (!navigator.onLine) { 
-        gosterMesaj("Silme işlemi için internet bağlantısı gereklidir.", "warning");
-        return; 
-    }
-    
-    try {
-        const response = await fetch(`/api/tedarikci_sil/${id}`, { method: 'DELETE' });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            await verileriYukle(mevcutSayfa);
-        } else {
-            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
-        }
-    } catch (error) {
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
-    }
 }

@@ -148,108 +148,52 @@ const ui = {
      * @param {Array} girdiler - Gösterilecek girdi objeleri dizisi.
      * @param {string|null} mesaj - Liste boşsa veya hata varsa gösterilecek mesaj.
      */
-// ESKİ renderGirdilerListesi FONKSİYONUNU SİLİP YERİNE BU ÜÇ FONKSİYONU EKLE
+    renderGirdilerListesi(girdiler, mesaj = null) {
+        const listeElementi = document.getElementById('girdiler-listesi');
+        listeElementi.innerHTML = '';
 
-/**
- * Girdileri seçilen görünüme göre yönlendiren ana render fonksiyonu.
- * @param {Array} girdiler - Gösterilecek girdi objeleri dizisi.
- * @param {string} gorunum - 'liste' veya 'kart'.
- */
-renderGirdiler(girdiler, gorunum) {
-    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    const listeKonteyneri = document.getElementById('liste-gorunumu');
-    const kartKonteyneri = document.getElementById('kart-gorunumu');
+        if (mesaj) {
+             listeElementi.innerHTML = `<div class="list-group-item text-danger">${mesaj}</div>`;
+             return;
+        }
+        if (girdiler.length === 0) {
+            const defaultMesaj = !navigator.onLine 
+                ? 'Çevrimdışısınız. Bu tarih için gösterilecek yerel girdi bulunamadı.'
+                : 'Bu tarih için girdi bulunamadı.';
+            listeElementi.innerHTML = `<div class="list-group-item">${defaultMesaj}</div>`;
+            return;
+        }
 
-    // Önce tüm alanları temizle
-    document.getElementById('girdiler-listesi').innerHTML = '';
-    document.getElementById('girdiler-kart-listesi').innerHTML = '';
-    veriYokMesaji.style.display = 'none';
-
-    if (girdiler.length === 0) {
-        veriYokMesaji.style.display = 'block';
-        listeKonteyneri.style.display = 'none';
-        kartKonteyneri.style.display = 'none';
-        return;
-    }
-
-    if (gorunum === 'liste') {
-        this.renderGirdilerAsList(girdiler);
-    } else {
-        this.renderGirdilerAsCards(girdiler);
-    }
-},
-
-/**
- * Girdileri liste formatında (list-group) render eder.
- * @param {Array} girdiler - Gösterilecek girdi objeleri dizisi.
- */
-renderGirdilerAsList(girdiler) {
-    const listeElementi = document.getElementById('girdiler-listesi');
-    girdiler.forEach(girdi => {
-        const tarihObj = new Date(girdi.taplanma_tarihi);
-        const formatliTarih = !isNaN(tarihObj.getTime()) ? `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}` : 'Geçersiz Saat';
-        const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark ms-2">Düzenlendi</span>` : '';
-        const cevrimdisiEtiketi = girdi.isOffline ? `<span class="badge bg-info text-dark ms-2" title="İnternet geldiğinde gönderilecek"><i class="bi bi-cloud-upload"></i> Beklemede</span>` : '';
-        let actionButtons = !girdi.isOffline && document.body.dataset.userRole !== 'muhasebeci' ? `
-            <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="ui.duzenlemeModaliniAc(${girdi.id}, ${girdi.litre}, ${girdi.fiyat})"><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-sm btn-outline-danger border-0" title="Sil" onclick="ui.silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>` : '';
-        const gecmisButonu = !girdi.isOffline ? `<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button>` : '';
-        const fiyatBilgisi = girdi.fiyat ? `<span class="text-success">@ ${parseFloat(girdi.fiyat).toFixed(2)} TL</span>` : '';
-
-        const girdiElementi = `
-            <div class="list-group-item" id="girdi-liste-${girdi.id}">
-                <div class="d-flex w-100 justify-content-between flex-wrap">
-                    <h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${fiyatBilgisi} ${duzenlendiEtiketi} ${cevrimdisiEtiketi}</h5>
-                    <div class="btn-group">${actionButtons} ${gecmisButonu}</div>
-                </div>
-                <p class="mb-1 girdi-detay">Toplayan: ${girdi.kullanicilar.kullanici_adi} | Saat: ${formatliTarih}</p>
-            </div>`;
-        listeElementi.innerHTML += girdiElementi;
-    });
-},
-
-/**
- * Girdileri kart formatında (grid) render eder.
- * @param {Array} girdiler - Gösterilecek girdi objeleri dizisi.
- */
-renderGirdilerAsCards(girdiler) {
-    const kartListesi = document.getElementById('girdiler-kart-listesi');
-    girdiler.forEach(girdi => {
-        const tarihObj = new Date(girdi.taplanma_tarihi);
-        const formatliTarih = !isNaN(tarihObj.getTime()) ? `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}` : 'Geçersiz Saat';
-        const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark">Düzenlendi</span>` : '';
-        const cevrimdisiEtiketi = girdi.isOffline ? `<span class="badge bg-info text-dark" title="Beklemede"><i class="bi bi-cloud-upload"></i></span>` : '';
-        let actionButtons = !girdi.isOffline && document.body.dataset.userRole !== 'muhasebeci' ? `
-            <button class="btn btn-sm btn-outline-primary" title="Düzenle" onclick="ui.duzenlemeModaliniAc(${girdi.id}, ${girdi.litre}, ${girdi.fiyat})"><i class="bi bi-pencil"></i></button>
-            <button class="btn btn-sm btn-outline-danger" title="Sil" onclick="ui.silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>` : '';
-        const gecmisButonu = !girdi.isOffline ? `<button class="btn btn-sm btn-outline-secondary" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button>` : '';
-        const tutar = parseFloat(girdi.litre || 0) * parseFloat(girdi.fiyat || 0);
-
-        const kartElementi = `
-        <div class="col-xl-6 col-12" id="girdi-kart-${girdi.id}">
-            <div class="card p-2 h-100">
-                <div class="card-body p-2">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="card-title mb-0">${girdi.tedarikciler.isim}</h6>
-                            <small class="text-secondary">Toplayan: ${girdi.kullanicilar.kullanici_adi}</small>
-                        </div>
-                        <div class="d-flex gap-2">${cevrimdisiEtiketi} ${duzenlendiEtiketi}</div>
+        girdiler.forEach(girdi => {
+            const tarihObj = new Date(girdi.taplanma_tarihi);
+            const formatliTarih = !isNaN(tarihObj.getTime()) ? `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}` : 'Geçersiz Saat';
+            
+            const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark ms-2">Düzenlendi</span>` : '';
+            const cevrimdisiEtiketi = girdi.isOffline ? `<span class="badge bg-info text-dark ms-2" title="İnternet geldiğinde gönderilecek"><i class="bi bi-cloud-upload"></i> Beklemede</span>` : '';
+            
+            let actionButtons = '';
+            if (!girdi.isOffline && document.body.dataset.userRole !== 'muhasebeci') {
+                actionButtons = `
+                    <button class="btn btn-sm btn-outline-info border-0" title="Düzenle" onclick="ui.duzenlemeModaliniAc(${girdi.id}, ${girdi.litre})"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-danger border-0" title="Sil" onclick="ui.silmeOnayiAc(${girdi.id})"><i class="bi bi-trash"></i></button>`;
+            }
+            
+            const gecmisButonu = !girdi.isOffline ? `<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button>` : '';
+            const fiyatBilgisi = girdi.fiyat ? `<span class="text-success">@ ${parseFloat(girdi.fiyat).toFixed(2)} TL</span>` : '';
+            
+            // --- DEĞİŞİKLİK BURADA ---
+            // Her bir liste elemanına benzersiz bir 'id' ekledik.
+            const girdiElementi = `
+                <div class="list-group-item" id="girdi-${girdi.id}">
+                    <div class="d-flex w-100 justify-content-between flex-wrap">
+                        <h5 class="mb-1 girdi-baslik">${girdi.tedarikciler.isim} - ${girdi.litre} Litre ${fiyatBilgisi} ${duzenlendiEtiketi} ${cevrimdisiEtiketi}</h5>
+                        <div class="btn-group">${actionButtons} ${gecmisButonu}</div>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center my-2">
-                        <span class="fs-4 fw-bold text-primary">${girdi.litre} L</span>
-                        <span class="fs-5 fw-bold text-success">${tutar.toFixed(2)} TL</span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center">
-                         <small class="text-secondary">Saat: ${formatliTarih}</small>
-                         <div class="btn-group btn-group-sm">${actionButtons} ${gecmisButonu}</div>
-                    </div>
-                </div>
-            </div>
-        </div>`;
-        kartListesi.innerHTML += kartElementi;
-    });
-},
+                    <p class="mb-1 girdi-detay">Toplayan: ${girdi.kullanicilar.kullanici_adi} | Saat: ${formatliTarih}</p>
+                </div>`;
+            listeElementi.innerHTML += girdiElementi;
+        });
+    },
 
     /**
      * Sayfalama navigasyonunu oluşturur.
@@ -364,10 +308,9 @@ renderGirdilerAsCards(girdiler) {
         kaydetButton.innerHTML = isLoading ? `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...` : `Kaydet`;
     },
 
-    duzenlemeModaliniAc(girdiId, mevcutLitre, mevcutFiyat) {
+    duzenlemeModaliniAc(girdiId, mevcutLitre) {
         document.getElementById('edit-girdi-id').value = girdiId;
         document.getElementById('edit-litre-input').value = mevcutLitre;
-        document.getElementById('edit-fiyat-input').value = mevcutFiyat; // Bu satır eklendi
         document.getElementById('edit-sebep-input').value = '';
         this.duzenleModal.show();
     },
@@ -375,7 +318,6 @@ renderGirdilerAsCards(girdiler) {
     getDuzenlemeFormVerisi: () => ({
         girdiId: document.getElementById('edit-girdi-id').value,
         yeniLitre: document.getElementById('edit-litre-input').value,
-        yeniFiyat: document.getElementById('edit-fiyat-input').value,
         duzenlemeSebebi: document.getElementById('edit-sebep-input').value.trim(),
     }),
     
@@ -386,37 +328,33 @@ renderGirdilerAsCards(girdiler) {
     
     getSilinecekGirdiId: () => document.getElementById('silinecek-girdi-id').value,
 
-renderGecmisModalContent(gecmisKayitlari, isLoading = false, error = null) {
-    const modalBody = document.getElementById('gecmis-modal-body');
-    if (isLoading) {
-        modalBody.innerHTML = '<div class="text-center p-4"><div class="spinner-border"></div></div>';
-        return;
-    }
-    if (error) {
-        modalBody.innerHTML = `<p class="text-danger p-3">Geçmiş yüklenemedi: ${error}</p>`;
-        return;
-    }
-    if (!gecmisKayitlari || gecmisKayitlari.length === 0) {
-        modalBody.innerHTML = '<p class="p-3">Bu girdi için düzenleme geçmişi bulunamadı.</p>';
-        return;
-    }
+    renderGecmisModalContent(gecmisKayitlari, isLoading = false, error = null) {
+        const modalBody = document.getElementById('gecmis-modal-body');
+        if (isLoading) {
+            modalBody.innerHTML = '<div class="text-center p-4"><div class="spinner-border"></div></div>';
+            return;
+        }
+        if (error) {
+            modalBody.innerHTML = `<p class="text-danger p-3">Geçmiş yüklenemedi: ${error}</p>`;
+            return;
+        }
+        if (!gecmisKayitlari || gecmisKayitlari.length === 0) {
+            modalBody.innerHTML = '<p class="p-3">Bu girdi için düzenleme geçmişi bulunamadı.</p>';
+            return;
+        }
 
-    let content = '<ul class="list-group">';
-    gecmisKayitlari.forEach(kayit => {
-        const tarih = new Date(kayit.created_at).toLocaleString('tr-TR');
-        const eskiFiyatBilgisi = kayit.eski_fiyat_degeri ? ` | <span class="text-warning">Eski Fiyat:</span> ${parseFloat(kayit.eski_fiyat_degeri).toFixed(2)} TL` : '';
-        
-        // DEĞİŞİKLİK BURADA: Sebep alanı boş (null veya "") ise "-" yazdırıyoruz.
-        const sebepMetni = kayit.duzenleme_sebebi || '-';
-
-        content += `<li class="list-group-item">
-                        <p class="mb-1 fw-bold">${tarih} - ${kayit.duzenleyen_kullanici_id.kullanici_adi} tarafından düzenlendi.</p>
-                        <p class="mb-1"><span class="text-warning">Eski Litre:</span> ${kayit.eski_litre_degeri} Litre ${eskiFiyatBilgisi}</p>
-                        <p class="mb-0"><span class="text-info">Sebep:</span> ${sebepMetni}</p>
-                    </li>`;
-    });
-    modalBody.innerHTML = content + '</ul>';
-},
+        let content = '<ul class="list-group">';
+        gecmisKayitlari.forEach(kayit => {
+            const tarih = new Date(kayit.created_at).toLocaleString('tr-TR');
+            const eskiFiyatBilgisi = kayit.eski_fiyat_degeri ? ` | <span class="text-warning">Eski Fiyat:</span> ${parseFloat(kayit.eski_fiyat_degeri).toFixed(2)} TL` : '';
+            content += `<li class="list-group-item">
+                            <p class="mb-1 fw-bold">${tarih} - ${kayit.duzenleyen_kullanici_id.kullanici_adi} tarafından düzenlendi.</p>
+                            <p class="mb-1"><span class="text-warning">Eski Litre:</span> ${kayit.eski_litre_degeri} Litre ${eskiFiyatBilgisi}</p>
+                            <p class="mb-0"><span class="text-info">Sebep:</span> ${kayit.duzenleme_sebebi}</p>
+                        </li>`;
+        });
+        modalBody.innerHTML = content + '</ul>';
+    },
 
     sifreDegistirmeAc() {
         document.getElementById('mevcut-sifre-input').value = '';

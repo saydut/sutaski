@@ -14,17 +14,9 @@ function formatDateToYYYYMMDD(date) {
 // static/js/reports.js
 
 async function pdfIndir() {
-    // --- KONTROLÜ BURAYA EKLEYİN ---
-    if (!navigator.onLine) {
-        gosterMesaj("PDF raporu oluşturmak için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    // --- KONTROL SONU ---
-
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
-    // --- DEĞİŞEN SATIR ---
-    const url = `/api/pdf/aylik_rapor?ay=${ay}&yil=${yil}`;
+    const url = `/api/rapor/aylik_pdf?ay=${ay}&yil=${yil}`;
     
     await indirVeAc(url, 'pdf-indir-btn', {
         success: 'Rapor indirildi ve yeni sekmede açıldı.',
@@ -95,54 +87,16 @@ async function raporOlustur() {
     document.getElementById('tedarikci-dokum-tablosu').innerHTML = '';
 
     if (!baslangic || !bitis) return;
-
-    // --- DEĞİŞEN ÇEVRİMDIŞI KONTROLÜ BAŞLANGICI ---
+    
+    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
     if (!navigator.onLine) {
-        mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Rapor oluşturuluyor...</p>';
+        mesajElementi.innerHTML = '<p class="text-warning">Rapor oluşturmak için internet bağlantısı gereklidir.</p>';
         mesajElementi.style.display = 'block';
-        if (detayliChart) {
-            unregisterChart(detayliChart); // Yöneticinin listesinden kaldır
-            detayliChart.destroy();       // Şimdi grafiği güvenle yok et
-        }
-        
-        // Önbellekten veriyi çekmeyi dene
-        const veri = await getCachedAnaPanelData('detayli_rapor');
-
-        if (veri) {
-            gosterMesaj("Çevrimdışı mod: Önbellekten yüklenen son rapor gösteriliyor.", "info");
-            mesajElementi.style.display = 'none';
-            // Raporu önbellekteki veriyle oluştur
-            const formatliBaslangic = new Date(veri.summaryData.baslangicTarihi).toLocaleDateString('tr-TR');
-            const formatliBitis = new Date(veri.summaryData.bitisTarihi).toLocaleDateString('tr-TR');
-            grafikBaslik.textContent = `${formatliBaslangic} - ${formatliBitis} Arası Günlük Süt Toplama Raporu (Önbellek)`;
-
-            ozetVerileriniDoldur(veri.summaryData);
-            tedarikciTablosunuDoldur(veri.supplierBreakdown);
-            
-            detayliChart = new Chart(ctx, {
-                type: 'line',
-                data: veri.chartData,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { beginAtZero: true },
-                        x: {}
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: { callbacks: { label: (context) => ` Toplam: ${context.parsed.y} Litre` } }
-                    }
-                }
-            });
-            registerChart(detayliChart);
-            if (typeof updateAllChartThemes === 'function') updateAllChartThemes();
-        } else {
-            mesajElementi.innerHTML = '<p class="text-warning">Çevrimdışı mod. Bu rapor için önbellekte veri bulunamadı.</p>';
-        }
+        if (detayliChart) detayliChart.destroy();
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         return;
     }
-    // --- DEĞİŞEN ÇEVRİMDIŞI KONTROLÜ SONU ---
+    // --- KONTROL SONU ---
 
     mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Rapor oluşturuluyor...</p>';
     mesajElementi.style.display = 'block';
@@ -153,14 +107,6 @@ async function raporOlustur() {
         const veri = await response.json();
 
         if (!response.ok) throw new Error(veri.error || 'Rapor verisi alınamadı.');
-        
-        // --- YENİ EKLENEN ÖNBELLEĞE KAYDETME KODU ---
-        // Veriyi sunucudan başarıyla çektikten sonra önbelleğe kaydediyoruz.
-        // Tarih bilgisini de ekleyelim ki çevrimdışıyken başlığı doğru yazabilelim.
-        veri.summaryData.baslangicTarihi = baslangicDate.toISOString();
-        veri.summaryData.bitisTarihi = bitisDate.toISOString();
-        await cacheAnaPanelData('detayli_rapor', veri);
-        // --- ÖNBELLEĞE KAYDETME SONU ---
         
         if (veri.chartData.labels.length === 0) {
             mesajElementi.textContent = "Seçilen tarih aralığında veri bulunamadı.";

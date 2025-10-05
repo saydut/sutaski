@@ -26,10 +26,6 @@
     data-app-version="{{ APP_VERSION }}"
     {% block body_attributes %}{% endblock %}
 >
-    <script>
-        // main.py'den gelen VAPID_PUBLIC_KEY'i al ve JavaScript değişkeni yap
-        const VAPID_PUBLIC_KEY = '{{ VAPID_PUBLIC_KEY }}';
-    </script>
 
     {% block content %}{% endblock %}
 
@@ -42,7 +38,6 @@
     <script src="{{ url_for('static', filename='js/chart-manager.js') }}"></script>
     <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
     <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/subscription.js') }}"></script>
 
 <script>
     if ('serviceWorker' in navigator) {

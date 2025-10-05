@@ -14,18 +14,6 @@ function registerChart(chartInstance) {
 }
 
 /**
- * Yok edilen (destroyed) bir chart'ı yönetim listesinden kaldırır.
- * @param {Chart} chartInstance - Yok edilecek olan chart nesnesi.
- */
-function unregisterChart(chartInstance) {
-    if (!chartInstance) return;
-    const index = registeredCharts.indexOf(chartInstance);
-    if (index > -1) {
-        registeredCharts.splice(index, 1); // Grafiği listeden kaldır
-    }
-}
-
-/**
  * Kayıtlı tüm chart'ların temasını (renkler, çizgiler vb.) günceller.
  * Bu fonksiyon, tema değiştirildiğinde `theme.js` tarafından çağrılır.
  */

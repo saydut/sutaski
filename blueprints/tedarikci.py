@@ -8,6 +8,7 @@ from decimal import Decimal
 from datetime import datetime
 import pytz
 import calendar
+from weasyprint import HTML
 import io
 from postgrest import APIError
 from collections import defaultdict
@@ -215,48 +216,132 @@ def delete_tedarikci(id):
 @tedarikci_bp.route('/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
-    """Tüm tedarikçileri SAYFALAMALI, SIRALAMALI ve ARANABİLİR şekilde listeler."""
+    """Tedarikçiler sayfasındaki ana listeyi sayfalama, arama ve sıralama yaparak getirir."""
     try:
         sirket_id = session['user']['sirket_id']
-
-        # 1. Frontend'den gelen parametreleri al
+        
         sayfa = int(request.args.get('sayfa', 1))
-        limit = 15 # Frontend ile aynı olmalı
+        limit = 15
         offset = (sayfa - 1) * limit
+        arama_terimi = request.args.get('arama', '')
+        sirala_sutun = request.args.get('sirala', 'isim')
+        sirala_yon = request.args.get('yon', 'asc')
 
-        arama = request.args.get('arama', '').strip()
-        siralama_sutun = request.args.get('siralamaSutun', 'isim')
-        siralama_yon = request.args.get('siralamaYon', 'asc')
-
-        # 2. Ana sorguyu oluştur
+        # DEĞİŞİKLİK 1: 'tedarikciler' yerine yeni view'ı kullanıyoruz
+        # DEĞİŞİKLİK 2: 'select' içinden karmaşık ilişki sorgusunu kaldırdık
         query = supabase.table('tedarikci_ozetleri').select(
-            'id, isim, telefon_no, toplam_litre', count='exact'
+            'id, isim, telefon_no, tc_no, adres, toplam_litre', 
+            count='estimated'
         ).eq('sirket_id', sirket_id)
 
-        # 3. Arama filtresini ekle (isim veya telefonda arama yapar)
-        if arama:
-            query = query.or_(f'isim.ilike.%{arama}%,telefon_no.ilike.%{arama}%')
+        if arama_terimi:
+            query = query.ilike('isim', f'%{arama_terimi}%')
 
-        # 4. Sıralamayı ekle
-        is_desc = siralama_yon == 'desc'
-        # Güvenlik için sıralanabilir sütunları beyaz listeye alalım
-        izin_verilen_sutunlar = ['isim', 'toplam_litre']
-        if siralama_sutun not in izin_verilen_sutunlar:
-            siralama_sutun = 'isim' # Varsayılana dön
-            
-        query = query.order(siralama_sutun, desc=is_desc)
+        descending = sirala_yon == 'desc'
+        # ÖNEMLİ NOT: Artık 'toplam_litre' sütununa göre de sıralama yapabiliriz!
+        query = query.order(sirala_sutun, desc=descending).range(offset, offset + limit - 1)
+        
+        response = query.execute()
 
-        # 5. Sayfalamayı uygula ve sorguyu çalıştır
-        response = query.range(offset, offset + limit - 1).execute()
-
-        # 6. Sonucu frontend'e gönder
-        return jsonify({
-            "tedarikciler": response.data,
-            "toplam_kayit": response.count
-        })
-
+        # DEĞİŞİKLİK 3: Python içinde ayrıca toplama yapmaya gerek kalmadı!
+        # 'response.data' zaten bize hazır hesaplanmış 'toplam_litre' verisini içeriyor.
+        
+        return jsonify({"tedarikciler": response.data, "toplam_kayit": response.count})
+        
     except Exception as e:
         print(f"Tedarikçi listesi hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
         
+# --- PDF OLUŞTURMA İÇİN YARDIMCI VE ANA FONKSİYONLAR ---
 
+# --- DEĞİŞİKLİK BU FONKSİYONDA BAŞLIYOR ---
+# blueprints/tedarikci.py dosyasındaki _get_aylik_tedarikci_verileri fonksiyonunu bununla değiştir.
+
+def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
+    """Belirtilen ay içindeki tüm verileri PDF için tek bir RPC çağrısıyla çeker."""
+    _, ayin_son_gunu = calendar.monthrange(yil, ay)
+    baslangic_tarihi_str = f"{yil}-{ay:02d}-01"
+    bitis_tarihi_str = f"{yil}-{ay:02d}-{ayin_son_gunu}"
+
+    # Tek bir RPC çağrısı ile tüm verileri çekiyoruz
+    response = supabase.rpc('get_monthly_supplier_report_data', {
+        'p_sirket_id': sirket_id,
+        'p_tedarikci_id': tedarikci_id,
+        'p_start_date': baslangic_tarihi_str,
+        'p_end_date': bitis_tarihi_str # DÜZELTME: Saat bilgisi kaldırıldı.
+    }).execute()
+
+    if not response.data:
+        return {
+            "sut_girdileri": [], "yem_islemleri": [], "finansal_islemler": [],
+            "ozet": { "toplam_sut_tutari": 0, "toplam_yem_borcu": 0, "toplam_odeme": 0 }
+        }
+
+    data = response.data
+    ozet = data.get('ozet', {})
+    ozet['toplam_sut_tutari'] = Decimal(str(ozet.get('toplam_sut_tutari', '0')))
+    ozet['toplam_yem_borcu'] = Decimal(str(ozet.get('toplam_yem_borcu', '0')))
+    ozet['toplam_odeme'] = Decimal(str(ozet.get('toplam_odeme', '0')))
+    data['ozet'] = ozet
+
+    for girdi in data.get('sut_girdileri', []):
+        girdi['tutar'] = girdi['toplam_tutar']
+        # Tarihi objeye çevirmeye gerek yok, zaten formatlı geliyor. Sıralama da SQL'de yapıldı.
+
+    return data
+
+@tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/hesap_ozeti_pdf')
+@login_required
+@lisans_kontrolu
+def tedarikci_hesap_ozeti_pdf(tedarikci_id):
+    try:
+        sirket_id = session['user']['sirket_id']
+        sirket_adi = session['user'].get('sirket_adi', 'Bilinmeyen Şirket')
+        ay = int(request.args.get('ay'))
+        yil = int(request.args.get('yil'))
+        tedarikci_res = supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
+        if not tedarikci_res.data:
+            return jsonify({"error": "Tedarikçi bulunamadı veya yetkiniz yok."}), 404
+        veri = _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil)
+        net_bakiye = veri["ozet"]["toplam_sut_tutari"] - veri["ozet"]["toplam_yem_borcu"] - veri["ozet"]["toplam_odeme"]
+        ozet = {
+            'toplam_sut_alacagi': veri["ozet"]["toplam_sut_tutari"],
+            'toplam_yem_borcu': veri["ozet"]["toplam_yem_borcu"],
+            'toplam_odeme': veri["ozet"]["toplam_odeme"],
+            'net_bakiye': net_bakiye
+        }
+        aylar = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
+        rapor_basligi = f"{aylar[ay-1]} {yil} Hesap Özeti"
+        html_out = render_template('tedarikci_hesap_ozeti_pdf.html', rapor_basligi=rapor_basligi, sirket_adi=sirket_adi, tedarikci_adi=tedarikci_res.data['isim'], olusturma_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y %H:%M'), ozet=ozet, sut_girdileri=veri["sut_girdileri"], yem_islemleri=veri["yem_islemleri"], finansal_islemler=veri["finansal_islemler"])
+        pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
+        filename = f"{yil}_{ay:02d}_{tedarikci_res.data['isim'].replace(' ', '_')}_hesap_ozeti.pdf"
+        return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
+    except Exception as e:
+        print(f"Hesap özeti PDF hatası: {e}")
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+
+@tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/mustahsil_makbuzu_pdf')
+@login_required
+@lisans_kontrolu
+def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
+    try:
+        sirket_id = session['user']['sirket_id']
+        ay = int(request.args.get('ay'))
+        yil = int(request.args.get('yil'))
+        tedarikci_res = supabase.table('tedarikciler').select('isim, tc_no, adres').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
+        sirket_res = supabase.table('sirketler').select('sirket_adi, adres, vergi_kimlik_no').eq('id', sirket_id).single().execute()
+        if not tedarikci_res.data or not sirket_res.data:
+            return jsonify({"error": "Gerekli şirket veya tedarikçi bilgisi bulunamadı."}), 404
+        veri = _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil)
+        stopaj_orani = Decimal('0.02')
+        stopaj_tutari = veri["ozet"]["toplam_sut_tutari"] * stopaj_orani
+        net_odenecek = (veri["ozet"]["toplam_sut_tutari"] - stopaj_tutari) - veri["ozet"]["toplam_yem_borcu"] - veri["ozet"]["toplam_odeme"]
+        veri["ozet"]["stopaj_tutari"] = stopaj_tutari
+        veri["ozet"]["net_odenecek"] = net_odenecek
+        html_out = render_template('mustahsil_makbuzu_pdf.html', sirket=sirket_res.data, tedarikci=tedarikci_res.data, makbuz_tarihi=datetime.now(turkey_tz).strftime('%d.%m.%Y'), sut_girdileri=veri["sut_girdileri"], yem_islemleri=veri["yem_islemleri"], finansal_islemler=veri["finansal_islemler"], ozet=veri["ozet"], stopaj_orani=stopaj_orani)
+        pdf_bytes = HTML(string=html_out, base_url=current_app.root_path).write_pdf()
+        filename = f"{yil}_{ay:02d}_{tedarikci_res.data['isim'].replace(' ', '_')}_mustahsil.pdf"
+        return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
+    except Exception as e:
+        print(f"Müstahsil PDF hatası: {e}")
+        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500

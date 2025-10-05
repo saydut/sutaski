@@ -1,7 +1,9 @@
+// static/js/finans_yonetimi.js (DİNAMİK GÖRÜNÜM DEĞİŞTİRME ÖZELLİKLİ TAM VERSİYON)
+
 let tedarikciSecici, tarihSecici;
 let duzenleModal, silmeOnayModal;
 let mevcutGorunum = 'tablo';
-const KAYIT_SAYISI = 5;
+const KAYIT_SAYISI = 5; // Backend'deki limit ile aynı olmalı
 
 window.onload = function() {
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
@@ -13,7 +15,7 @@ window.onload = function() {
     gorunumuAyarla(mevcutGorunum);
 
     tedarikcileriDoldur();
-    finansalIslemleriYukle(1);
+    finansalIslemleriYukle(1); // İlk sayfayı yükle
 };
 
 function gorunumuDegistir(yeniGorunum) {
@@ -21,12 +23,13 @@ function gorunumuDegistir(yeniGorunum) {
     mevcutGorunum = yeniGorunum;
     localStorage.setItem('finansGorunum', yeniGorunum);
     gorunumuAyarla(yeniGorunum);
-    finansalIslemleriYukle(1);
+    finansalIslemleriYukle(1); // Görünüm değiştiğinde ilk sayfayı yükle
 }
 
 function gorunumuAyarla(aktifGorunum) {
     document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
     document.getElementById(`${aktifGorunum}-gorunumu`).style.display = 'block';
+    
     document.getElementById('btn-view-table').classList.toggle('active', aktifGorunum === 'tablo');
     document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
 }
@@ -42,46 +45,34 @@ async function tedarikcileriDoldur() {
 
 async function finansalIslemleriYukle(sayfa = 1) {
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+    const tabloBody = document.getElementById('finansal-islemler-tablosu');
+    const kartListesi = document.getElementById('finansal-islemler-kart-listesi');
     const sayfalamaNav = document.getElementById('finans-sayfalama');
 
+    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
     if (!navigator.onLine) {
-        veriYokMesaji.innerHTML = '<p class="text-warning">Çevrimdışı mod. Yalnızca yerel olarak kaydedilmiş son işlemler listeleniyor.</p>';
+        veriYokMesaji.innerHTML = '<p class="text-warning">Finansal işlemleri listelemek için internet bağlantısı gereklidir.</p>';
+        veriYokMesaji.style.display = 'block';
+        tabloBody.innerHTML = '';
+        kartListesi.innerHTML = '';
         sayfalamaNav.innerHTML = '';
-        try {
-            const islemler = await getOfflineFinansalIslemler();
-            verileriGoster(islemler);
-            veriYokMesaji.style.display = islemler.length > 0 ? 'none' : 'block';
-             if (islemler.length === 0) {
-                veriYokMesaji.innerHTML = '<p class="text-secondary">Önbellekte gösterilecek finansal işlem bulunamadı.</p>';
-             }
-        } catch (e) {
-            verileriGoster([]);
-            veriYokMesaji.innerHTML = '<p class="text-danger">Önbellekteki veriler okunamadı.</p>';
-            veriYokMesaji.style.display = 'block';
-        }
         return;
     }
-    
-    document.getElementById('veri-yok-mesaji').style.display = 'none';
-    const placeholder = `<div class="text-center p-4"><div class="spinner-border"></div></div>`;
-    if(mevcutGorunum === 'tablo') document.getElementById('finansal-islemler-tablosu').innerHTML = placeholder;
-    else document.getElementById('finansal-islemler-kart-listesi').innerHTML = placeholder;
+    // --- KONTROL SONU ---
 
+    veriYokMesaji.innerHTML = `<div class="spinner-border spinner-border-sm"></div> Yükleniyor...`;
+    veriYokMesaji.style.display = 'block';
 
     try {
         const response = await fetch(`/finans/api/islemler?sayfa=${sayfa}`);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'İşlemler yüklenemedi.');
-
-
-        verileriGoster(data.islemler);
         
+        verileriGoster(data.islemler);
         ui.sayfalamaNavOlustur('finans-sayfalama', data.toplam_kayit, sayfa, KAYIT_SAYISI, finansalIslemleriYukle);
 
     } catch (error) {
-         verileriGoster([]);
          veriYokMesaji.innerHTML = `<p class="text-danger">${error.message}</p>`;
-         veriYokMesaji.style.display = 'block';
     }
 }
 
@@ -152,75 +143,56 @@ function renderCards(islemler) {
 async function finansalIslemKaydet() {
     const veri = {
         islem_tipi: document.getElementById('islem-tipi-sec').value,
-        tedarikci_id: parseInt(tedarikciSecici.getValue()),
+        tedarikci_id: tedarikciSecici.getValue(),
         tutar: document.getElementById('tutar-input').value,
-        // Tarih seçilmişse al, seçilmemişse null bırak (offline.js bunu yönetecek)
-        islem_tarihi: tarihSecici.selectedDates[0] ? tarihSecici.selectedDates[0].toISOString() : null,
+        islem_tarihi: tarihSecici.selectedDates[0] ? tarihSecici.selectedDates[0].toISOString().slice(0, 19).replace('T', ' ') : null,
         aciklama: document.getElementById('aciklama-input').value.trim()
     };
-
-    if (!veri.islem_tipi || !veri.tedarikci_id || !veri.tutar || parseFloat(veri.tutar) <= 0) {
-        gosterMesaj('Lütfen işlem tipi, tedarikçi ve pozitif bir tutar girin.', 'warning');
+    if (!veri.islem_tipi || !veri.tedarikci_id || !veri.tutar) {
+        gosterMesaj('Lütfen işlem tipi, tedarikçi ve tutar alanlarını doldurun.', 'warning');
         return;
     }
 
-    // --- YENİ ÇEVRİMDIŞI MANTIĞI ---
-    if (!navigator.onLine) {
-        // İnternet yoksa, offline.js'teki kaydetme fonksiyonunu çağır
-        const basarili = await kaydetCevrimdisiFinansIslemi(veri);
-        if (basarili) {
-            // Başarıyla yerel veritabanına kaydedildiyse formu temizle
-            document.getElementById('islem-tipi-sec').value = 'Ödeme';
-            tedarikciSecici.clear();
-            document.getElementById('tutar-input').value = '';
-            document.getElementById('aciklama-input').value = '';
-            tarihSecici.clear();
-            // Not: Liste hemen güncellenmez, sadece bekleyen kayıtlara eklenir.
-        }
-        return; // Fonksiyonu burada bitir.
-    }
-
-    // --- MEVCUT ÇEVRİMİÇİ MANTIĞI ---
-    // İnternet varsa, eskisi gibi sunucuya gönder.
-    const kaydetButton = document.querySelector('.btn-primary');
-    const originalButtonText = kaydetButton.innerHTML;
-
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
-
+    let islemBasarili = false;
+    // 1. ADIM: Sadece KAYDETME işlemini dene ve hatasını yakala.
     try {
-        const response = await fetch('/finans/api/islemler', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                ...veri,
-                // Sunucuya gönderirken tarihi doğru formatla
-                islem_tarihi: veri.islem_tarihi ? new Date(veri.islem_tarihi).toISOString().slice(0, 19).replace('T', ' ') : null
-            })
-        });
-
+        const response = await fetch('/finans/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
         const result = await response.json();
 
         if (!response.ok) {
-            throw new Error(result.error || 'İşlem kaydedilemedi.');
+            // Eğer sunucu bilerek bir hata döndürdüyse (örn: "Tutar pozitif olmalı")
+            gosterMesaj(result.error || 'İşlem kaydedilemedi.', 'danger');
+            return; // Fonksiyonu durdur.
         }
 
+        // Buraya ulaştıysak, kayıt işlemi kesinlikle başarılıdır.
         gosterMesaj(result.message, 'success');
+        islemBasarili = true;
+
+    } catch (error) {
+        // Eğer sunucuya hiç ulaşılamadıysa bu hata çıkar.
+        gosterMesaj('İşlem kaydedilirken sunucuya bağlanılamadı.', 'danger');
+        return; // Fonksiyonu durdur.
+    }
+
+    // 2. ADIM: Eğer kaydetme başarılı olduysa, formu temizle ve listeyi yenile.
+    if (islemBasarili) {
         // Formu temizle
         document.getElementById('islem-tipi-sec').value = 'Ödeme';
         tedarikciSecici.clear();
         document.getElementById('tutar-input').value = '';
         document.getElementById('aciklama-input').value = '';
         tarihSecici.clear();
-
-        // Listeyi yenile
-        await finansalIslemleriYukle(1);
-
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-    } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = originalButtonText;
+        
+        // Listeyi yenileme işlemini kendi try-catch bloğu içine al.
+        try {
+            // Not: Fonksiyonun adı `finansalIslemleriYukle(1)` olabilir, kendi koduna göre düzenle.
+            await finansalIslemleriYukle(1); 
+        } catch (error) {
+            // Eğer SADECE liste yenileme başarısız olursa, kullanıcıya durumu izah eden bir uyarı ver.
+            console.error("Liste yenilenirken hata oluştu:", error);
+            gosterMesaj('İşlem kaydedildi ancak liste yenilenemedi. Lütfen sayfayı yenileyin.', 'warning');
+        }
     }
 }
 
@@ -230,17 +202,10 @@ function silmeOnayiAc(islemId) {
 }
 
 async function finansalIslemSil() {
-    // --- YENİ EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
-        silmeOnayModal.hide();
-        return;
-    }
-    // --- KONTROL SONU ---
-
     const id = document.getElementById('silinecek-islem-id').value;
     silmeOnayModal.hide();
 
+    // 1. Öğeyi arayüzden anında kaldır
     const silinecekElement = document.getElementById(`finans-islem-${id}`);
     if (!silinecekElement) return;
     
@@ -250,17 +215,24 @@ async function finansalIslemSil() {
     silinecekElement.style.opacity = '0';
     setTimeout(() => silinecekElement.remove(), 400);
 
+    // 2. Arka planda API isteğini gönder
     try {
         const response = await fetch(`/finans/api/islemler/${id}`, { method: 'DELETE' });
         const result = await response.json();
         if (!response.ok) {
+            // Sunucudan gelen bilerek bir hata varsa (örn: "Yetkiniz yok"), onu fırlat
             throw new Error(result.error);
         }
+
         gosterMesaj(result.message, 'success');
+        // Başarılı olursa başka bir şey yapmaya gerek yok, çünkü arayüzden zaten silindi.
 
     } catch (error) {
+        // ---- DÜZELTME BURADA ----
+        // Hata mesajını 'result' yerine doğrudan 'error' nesnesinden alıyoruz.
         gosterMesaj(error.message || 'Silme işlemi başarısız, işlem geri yüklendi.', 'danger');
         
+        // Hata olursa elemanı eski yerine geri ekle
         silinecekElement.style.opacity = '1';
         if (!silinecekElement.parentNode) {
             parent.insertBefore(silinecekElement, nextSibling);

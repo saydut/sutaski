@@ -1,340 +1,228 @@
-// static/js/offline.js DOSYASININ TAM VE EKSİKSİZ GÜNCEL HALİ
+// static/js/offline.js
 
+// Tarayıcı veritabanını (IndexedDB) kolayca kullanmak için Dexie.js kütüphanesini hazırlıyoruz.
 const db = new Dexie('sutaski_offline_db');
 
 // Veritabanı şemasını tanımlıyoruz.
-// Versiyonu 5'e yükseltip ana_panel_cache tablosunu ekliyoruz.
-db.version(5).stores({
+// 'sut_girdileri' adında bir tablomuz olacak ve her kaydın otomatik artan bir 'id'si olacak.
+// YENİ: tedarikciler ve yem_urunleri tablolarını ekliyoruz. 'id' alanına göre kayıt tutacağız.
+db.version(2).stores({
     sut_girdileri: '++id, tedarikci_id, litre, fiyat, eklendigi_zaman',
     tedarikciler: 'id, isim',
-    yem_urunleri: 'id, yem_adi, stok_miktari_kg, birim_fiyat',
-    finansal_islemler: '++id, islem_tipi, tedarikci_id, tutar, aciklama, islem_tarihi',
-    yeni_tedarikciler_offline: '++id, isim, tc_no, telefon_no, adres',
-    ana_panel_cache: 'key, data, timestamp' // Genel amaçlı önbellek tablosu
+    yem_urunleri: 'id, yem_adi, stok_miktari_kg, birim_fiyat'
+}).upgrade(tx => {
+    // Versiyon 1'den 2'ye geçerken eski veriyi korumak için bu blok gerekli olabilir.
+    // Şimdilik sadece yeni tabloları oluşturuyoruz.
+    console.log("Veritabanı 2. versiyona yükseltildi.");
 });
 
 
-// --- ÇEVRİMDIŞI KAYDETME FONKSİYONLARI ---
+// --- SÜT GİRDİSİ İŞLEMLERİ ---
 
 /**
  * Yeni bir süt girdisini, internet yokken yerel veritabanına kaydeder.
- * @param {object} girdi - Kaydedilecek girdi verisi.
- * @returns {Promise<boolean>}
+ * @param {object} girdi - Kaydedilecek girdi verisi (tedarikci_id, litre, fiyat).
+ * @returns {boolean} - Kaydetme işleminin başarılı olup olmadığını döndürür.
  */
-async function kaydetCevrimdisiSutGirdisi(girdi) {
+async function kaydetCevrimdisi(girdi) {
     try {
+        // Girdiye, ne zaman eklendiğini belirtmek için bir zaman damgası ekliyoruz.
         girdi.eklendigi_zaman = new Date().toISOString();
         await db.sut_girdileri.add(girdi);
-        gosterMesaj('İnternet yok. Süt girdisi yerel olarak kaydedildi.', 'info');
-        await cevrimiciDurumuGuncelle();
+        console.log('Girdi çevrimdışı olarak kaydedildi:', girdi);
+        gosterMesaj('İnternet yok. Girdi yerel olarak kaydedildi, bağlantı kurulunca gönderilecek.', 'info');
+        cevrimiciDurumuGuncelle(); // Arayüzdeki durumu (bekleyen girdi sayısını) anında güncelle.
         return true;
     } catch (error) {
-        console.error('Çevrimdışı süt girdisi kaydetme hatası:', error);
-        gosterMesaj('Süt girdisi yerel olarak kaydedilemedi.', 'danger');
+        console.error('Çevrimdışı kaydetme hatası:', error);
+        gosterMesaj('Girdi yerel olarak kaydedilemedi. Lütfen tekrar deneyin.', 'danger');
         return false;
     }
 }
 
 /**
- * YENİ FONKSİYON: Yeni bir finansal işlemi, internet yokken yerel veritabanına kaydeder.
- * @param {object} islem - Kaydedilecek işlem verisi.
- * @returns {Promise<boolean>}
+ * Yerel veritabanında bekleyen tüm girdileri getirir.
+ * @returns {Promise<Array>} - Bekleyen girdilerin bir dizisini döndürür.
  */
-async function kaydetCevrimdisiFinansIslemi(islem) {
-    try {
-        // Eğer kullanıcı bir tarih seçmediyse, şimdiki zamanı ata.
-        if (!islem.islem_tarihi) {
-            islem.islem_tarihi = new Date().toISOString();
-        }
-        await db.finansal_islemler.add(islem);
-        gosterMesaj('İnternet yok. Finansal işlem yerel olarak kaydedildi.', 'info');
-        await cevrimiciDurumuGuncelle();
-        return true;
-    } catch (error) {
-        console.error('Çevrimdışı finansal işlem kaydetme hatası:', error);
-        gosterMesaj('Finansal işlem yerel olarak kaydedilemedi.', 'danger');
-        return false;
-    }
-}
-
-
-/**
- * Yeni bir tedarikçiyi, internet yokken yerel veritabanına kaydeder.
- * @param {object} tedarikci - Kaydedilecek tedarikçi verisi.
- * @returns {Promise<boolean>}
- */
-async function kaydetCevrimdisiYeniTedarikci(tedarikci) {
-    try {
-        await db.yeni_tedarikciler_offline.add(tedarikci);
-        console.log('Yeni tedarikçi çevrimdışı olarak kaydedildi:', tedarikci);
-        gosterMesaj('İnternet yok. Yeni tedarikçi yerel olarak kaydedildi, bağlantı kurulunca gönderilecek.', 'info');
-        await cevrimiciDurumuGuncelle();
-        return true;
-    } catch (error) {
-        console.error('Çevrimdışı yeni tedarikçi kaydetme hatası:', error);
-        gosterMesaj('Yeni tedarikçi yerel olarak kaydedilemedi.', 'danger');
-        return false;
-    }
-}
-
-/**
- * Yerel veritabanında bekleyen tüm kayıtları getirir.
- */
-async function bekleyenKayitlariGetir() {
-    const sutGirdileri = await db.sut_girdileri.toArray();
-    const finansIslemleri = await db.finansal_islemler.toArray();
-    const yeniTedarikciler = await db.yeni_tedarikciler_offline.toArray();
-    return {
-        sut: sutGirdileri,
-        finans: finansIslemleri,
-        tedarikci: yeniTedarikciler
-    };
+async function bekleyenGirdileriGetir() {
+    return await db.sut_girdileri.toArray();
 }
 
 
 // --- VERİ SENKRONİZASYON VE ÖNBELLEKLEME FONKSİYONLARI ---
 
+/**
+ * İnternet bağlantısı geldiğinde, yerelde bekleyen tüm girdileri sunucuya göndermeyi dener.
+ */
 async function senkronizeEt() {
+    // Sadece çevrimiçi olduğumuzda bu fonksiyonu çalıştır.
     if (!navigator.onLine) return;
 
-    // Arka planda listeleri güncellemeye başla
-    Promise.all([ syncTedarikciler(), syncYemUrunleri() ]);
+    // YENİ: Tedarikçi ve yem listelerini de sunucuyla senkronize et.
+    // Bu, internet varken listelerin en güncel halinin veritabanına yazılmasını sağlar.
+    Promise.all([
+        syncTedarikciler(),
+        syncYemUrunleri()
+    ]);
 
-    const bekleyenKayitlar = await bekleyenKayitlariGetir();
-    const toplamBekleyen = bekleyenKayitlar.sut.length + bekleyenKayitlar.finans.length + bekleyenKayitlar.tedarikci.length;
 
-    if (toplamBekleyen === 0) {
-        cevrimiciDurumuGuncelle();
+    const bekleyenGirdiler = await bekleyenGirdileriGetir();
+    if (bekleyenGirdiler.length === 0) {
+        console.log('Senkronize edilecek bekleyen girdi yok.');
+        cevrimiciDurumuGuncelle(); // Arayüzü yine de güncelle, belki 'bekleyen' uyarısı kalmıştır.
         return;
     }
 
-    gosterMesaj(`${toplamBekleyen} adet bekleyen kayıt sunucuya gönderiliyor...`, 'info', 3000);
+    console.log(`${bekleyenGirdiler.length} adet girdi senkronize ediliyor...`);
+    gosterMesaj(`${bekleyenGirdiler.length} adet bekleyen girdi sunucuya gönderiliyor...`, 'info', 3000);
 
-    let senkronizasyonBasarili = true;
-
-    // ÖNCE YENİ TEDARİKÇİLERİ GÖNDER
-    for (const tedarikci of bekleyenKayitlar.tedarikci) {
+    for (const girdi of bekleyenGirdiler) {
         try {
-            await api.postYeniTedarikci(tedarikci);
-            await db.yeni_tedarikciler_offline.delete(tedarikci.id);
-            console.log(`Yeni Tedarikçi (Yerel ID: ${tedarikci.id}) başarıyla senkronize edildi.`);
+            const response = await fetch('/api/sut_girdisi_ekle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tedarikci_id: girdi.tedarikci_id,
+                    litre: girdi.litre,
+                    fiyat: girdi.fiyat
+                })
+            });
+
+            if (response.ok) {
+                // Girdi sunucuya başarıyla gönderildiyse, yerel veritabanından siliyoruz.
+                await db.sut_girdileri.delete(girdi.id);
+                console.log(`Girdi (ID: ${girdi.id}) başarıyla senkronize edildi ve yerelden silindi.`);
+            } else {
+                const errorData = await response.json();
+                console.error(`Girdi (ID: ${girdi.id}) senkronize edilemedi:`, errorData.error);
+                // Sunucudan bir hata geldiyse, diğerlerini göndermeyi durdur.
+                break;
+            }
         } catch (error) {
-            console.error(`Yeni Tedarikçi (ID: ${tedarikci.id}) senkronize edilemedi:`, error);
-            senkronizasyonBasarili = false;
+            console.error('Senkronizasyon sırasında ağ hatası. Daha sonra tekrar denenecek.', error);
+            // Ağ hatası olursa, şimdilik dur. İnternet tekrar geldiğinde tekrar deneriz.
             break;
         }
     }
-    
-    // SONRA SÜT GİRDİLERİNİ GÖNDER
-    if (senkronizasyonBasarili) {
-        for (const girdi of bekleyenKayitlar.sut) {
-            try {
-                const apiVerisi = { tedarikci_id: girdi.tedarikci_id, litre: girdi.litre, fiyat: girdi.fiyat };
-                await api.postSutGirdisi(apiVerisi);
-                await db.sut_girdileri.delete(girdi.id);
-                console.log(`Süt Girdisi (ID: ${girdi.id}) başarıyla senkronize edildi.`);
-            } catch (error) {
-                console.error(`Süt Girdisi (ID: ${girdi.id}) senkronize edilemedi:`, error);
-                senkronizasyonBasarili = false;
-                break;
-            }
-        }
-    }
-    
-    // SONRA FİNANSAL İŞLEMLERİ GÖNDER
-    if (senkronizasyonBasarili) {
-        for (const islem of bekleyenKayitlar.finans) {
-            try {
-                // Sunucuya göndermeden önce ID'yi kaldır ve tarihi formatla
-                const apiVerisi = { ...islem };
-                delete apiVerisi.id; // Otomatik artan yerel ID'yi sunucuya gönderme
-                apiVerisi.islem_tarihi = new Date(islem.islem_tarihi).toISOString().slice(0, 19).replace('T', ' ');
 
-                await api.postFinansIslemi(apiVerisi);
-                await db.finansal_islemler.delete(islem.id);
-                console.log(`Finansal İşlem (ID: ${islem.id}) başarıyla senkronize edildi.`);
-            } catch (error) {
-                console.error(`Finansal İşlem (ID: ${islem.id}) senkronize edilemedi:`, error);
-                senkronizasyonBasarili = false;
-                break;
-            }
-        }
-    }
-
-    // Senkronizasyon sonrası tüm listeleri yeniden çekelim ki her şey güncel olsun
-    if(senkronizasyonBasarili && toplamBekleyen > 0) {
-        console.log("Senkronizasyon sonrası listeler güncelleniyor...");
-        await syncTedarikciler(); // Tedarikçi listesini tazeleyelim
-    }
-
+    // Senkronizasyon denemesi sonrası arayüzü ve ana listeyi güncelle.
     await cevrimiciDurumuGuncelle();
-    if (senkronizasyonBasarili) {
-        gosterMesaj('Senkronizasyon tamamlandı.', 'success');
-        if (typeof girdileriGoster === 'function') girdileriGoster(); // main.js'teki fonksiyon
-        if (typeof finansalIslemleriYukle === 'function') finansalIslemleriYukle(1); // finans_yonetimi.js'teki fonksiyon
-        if (typeof verileriYukle === 'function') verileriYukle(1); // tedarikciler.js'teki fonksiyon
-    } else {
-        gosterMesaj('Senkronizasyon sırasında bir hata oluştu. Bazı kayıtlar gönderilemedi.', 'warning');
+    if (typeof girdileriGoster === 'function') {
+        girdileriGoster(); // Ana sayfadaki listeyi yenile.
     }
+     gosterMesaj('Senkronizasyon tamamlandı.', 'success');
 }
 
 
-// --- MEVCUT LİSTELERİ ÖNBELLEKLEME FONKSİYONLARI ---
+// --- YENİ FONKSİYONLAR ---
+
+/**
+ * API'den gelen tedarikçi listesini yerel veritabanına kaydeder.
+ * Önce eski listeyi siler, sonra yenisini ekler.
+ * @param {Array} tedarikciler - API'den gelen tedarikçi listesi.
+ */
 async function syncTedarikciler() {
     try {
+        console.log('Tedarikçi listesi sunucudan çekilip yerel veritabanına yazılıyor...');
         const tedarikciler = await api.fetchTedarikciler();
-        // *** DÜZELTME 1: Orijinal diziyi bozmamak için verinin bir kopyasını oluştur. ***
-        const tedarikcilerKopya = JSON.parse(JSON.stringify(tedarikciler));
         await db.transaction('rw', db.tedarikciler, async () => {
             await db.tedarikciler.clear();
-            await db.tedarikciler.bulkAdd(tedarikcilerKopya);
+            await db.tedarikciler.bulkAdd(tedarikciler);
         });
-        console.log(`${tedarikciler.length} tedarikçi yerel veritabanına kaydedildi.`);
-        return tedarikciler; // Orijinal, bozulmamış diziyi geri döndür.
+        console.log(`${tedarikciler.length} tedarikçi yerel veritabanına başarıyla kaydedildi.`);
+        return tedarikciler;
     } catch (error) {
         console.error("Tedarikçiler yerel veritabanına kaydedilemedi:", error);
-        return [];
+        return []; // Hata durumunda boş liste dön
     }
 }
 
+/**
+ * API'den gelen yem ürünleri listesini yerel veritabanına kaydeder.
+ * @param {Array} yemUrunleri - API'den gelen yem ürünleri listesi.
+ */
 async function syncYemUrunleri() {
     try {
-        const yemUrunleri = await api.fetchYemUrunleri();
-        // *** DÜZELTME 2: Aynı mantığı yem ürünleri için de uygula. ***
-        const yemUrunleriKopya = JSON.parse(JSON.stringify(yemUrunleri));
+        console.log('Yem ürünleri listesi sunucudan çekilip yerel veritabanına yazılıyor...');
+        const yemUrunleri = await api.fetchYemUrunleri(); // Bu fonksiyonu store.js'de oluşturacağız
         await db.transaction('rw', db.yem_urunleri, async () => {
             await db.yem_urunleri.clear();
-            await db.yem_urunleri.bulkAdd(yemUrunleriKopya);
+            await db.yem_urunleri.bulkAdd(yemUrunleri);
         });
-        console.log(`${yemUrunleri.length} yem ürünü yerel veritabanına kaydedildi.`);
-        return yemUrunleri; // Orijinal, bozulmamış diziyi geri döndür.
+        console.log(`${yemUrunleri.length} yem ürünü yerel veritabanına başarıyla kaydedildi.`);
+        return yemUrunleri;
     } catch (error) {
         console.error("Yem ürünleri yerel veritabanına kaydedilemedi:", error);
         return [];
     }
 }
 
-
-async function syncFinansalIslemler(islemler) {
-    try {
-        // *** DÜZELTME 3: Gelen veriyi, veritabanına kaydetmeden önce uyumsuz objelerden temizle. ***
-        const temizlenmisIslemler = islemler.map(islem => {
-            // 'tedarikciler' gibi iç içe objeler veritabanı şemasına uymadığı için kaldırılır.
-            const { tedarikciler, kullanicilar, ...kalanlar } = islem;
-            return kalanlar;
-        });
-
-        await db.transaction('rw', db.finansal_islemler, async () => {
-            await db.finansal_islemler.clear();
-            await db.finansal_islemler.bulkAdd(temizlenmisIslemler); // Sadece temizlenmiş veriyi kaydet
-        });
-        console.log(`${temizlenmisIslemler.length} finansal işlem yerel veritabanına kaydedildi.`);
-        return islemler; // Orijinal veriyi döndürmeye devam et ki arayüz bozulmasın.
-    } catch (error) {
-        console.error("Finansal işlemler yerel veritabanına kaydedilemedi:", error);
-        return [];
-    }
-}
-
-
-
+/**
+ * Çevrimdışı modda, yerel veritabanından tedarikçi listesini getirir.
+ * @returns {Promise<Array>}
+ */
 async function getOfflineTedarikciler() {
     const tedarikciler = await db.tedarikciler.toArray();
     console.log(`Yerel veritabanından ${tedarikciler.length} tedarikçi okundu.`);
     return tedarikciler;
 }
 
+/**
+ * Çevrimdışı modda, yerel veritabanından yem ürünleri listesini getirir.
+ * @returns {Promise<Array>}
+ */
 async function getOfflineYemUrunleri() {
      const yemler = await db.yem_urunleri.toArray();
      console.log(`Yerel veritabanından ${yemler.length} yem ürünü okundu.`);
      return yemler;
 }
 
-async function getOfflineFinansalIslemler() {
-    const islemler = await db.finansal_islemler.toArray();
-    console.log(`Yerel veritabanından ${islemler.length} finansal işlem okundu.`);
-    return islemler;
-}
+// ------------------------------------
 
 
 /**
- * Genel bir veriyi ana panel önbelleğine kaydeder.
- * @param {string} key - Verinin anahtarı (örn: 'gunlukOzet').
- * @param {any} data - Kaydedilecek veri.
+ * Arayüzdeki "Çevrimdışı" ve "Bekleyen Girdi" uyarılarını günceller.
  */
-async function cacheAnaPanelData(key, data) {
-    try {
-        await db.ana_panel_cache.put({ key: key, data: data, timestamp: new Date().getTime() });
-        console.log(`'${key}' verisi önbelleğe alındı.`);
-    } catch (error) {
-        console.error(`'${key}' verisi önbelleğe alınamadı:`, error);
-    }
-}
-
-/**
- * Önbellekten bir veriyi anahtarıyla okur.
- * @param {string} key - Okunacak verinin anahtarı.
- * @returns {Promise<any|null>}
- */
-async function getCachedAnaPanelData(key) {
-    const record = await db.ana_panel_cache.get(key);
-    return record ? record.data : null;
-}
-
-// --- ARAYÜZ GÜNCELLEME ---
-
 async function cevrimiciDurumuGuncelle() {
     const container = document.getElementById('offline-status-container');
     const offlineBadge = document.getElementById('offline-status-badge');
     const syncBadge = document.getElementById('sync-status-badge');
     const syncCount = document.getElementById('sync-count');
-    // Yeni eklenenler
-    const bekleyenGirdiButonlari = document.querySelectorAll('.bekleyen-girdi-butonu');
-    const bekleyenGirdiSayisiSpan = document.querySelectorAll('.bekleyen-girdi-sayisi');
 
+    // Elementler sayfada bulunamazsa işlemi durdur.
+    if (!container || !offlineBadge || !syncBadge || !syncCount) return;
 
-    if (!container) return;
-
-    const bekleyenSutSayisi = await db.sut_girdileri.count();
-    const bekleyenFinansSayisi = await db.finansal_islemler.count();
-    const bekleyenTedarikciSayisi = await db.yeni_tedarikciler_offline.count();
-    const toplamBekleyen = bekleyenSutSayisi + bekleyenFinansSayisi + bekleyenTedarikciSayisi;
-    
-    if(syncCount) syncCount.textContent = toplamBekleyen;
-    bekleyenGirdiSayisiSpan.forEach(span => span.textContent = toplamBekleyen);
-
+    const bekleyenSayisi = await db.sut_girdileri.count();
+    syncCount.textContent = bekleyenSayisi;
 
     if (navigator.onLine) {
-        if(offlineBadge) offlineBadge.classList.add('d-none');
-        if (toplamBekleyen > 0) {
-            if(syncBadge) syncBadge.classList.remove('d-none');
+        // Çevrimiçiysek "Çevrimdışı" uyarısını gizle.
+        offlineBadge.classList.add('d-none');
+        if (bekleyenSayisi > 0) {
+            // Ama bekleyen girdi varsa, "Bekleyen" uyarısını göster.
+            syncBadge.classList.remove('d-none');
             container.classList.remove('d-none');
-            bekleyenGirdiButonlari.forEach(but => but.style.display = 'inline-block');
         } else {
-            if(syncBadge) syncBadge.classList.add('d-none');
+            // Bekleyen girdi yoksa, tüm uyarıları gizle.
+            syncBadge.classList.add('d-none');
             container.classList.add('d-none');
-            bekleyenGirdiButonlari.forEach(but => but.style.display = 'none');
         }
     } else {
-        if(offlineBadge) offlineBadge.classList.remove('d-none');
-        if(syncBadge) syncBadge.classList.remove('d-none');
+        // Çevrimdışıysak, her iki uyarıyı da göster.
+        offlineBadge.classList.remove('d-none');
+        syncBadge.classList.remove('d-none');
         container.classList.remove('d-none');
-        bekleyenGirdiButonlari.forEach(but => but.style.display = 'inline-block');
     }
 }
 
-// --- OLAY DİNLEYİCİLERİ ---
-window.addEventListener('online', () => {
-    // Sadece giriş yapılmış sayfalarda online olunca senkronize et
-    if (document.body.dataset.userRole) {
-        senkronizeEt();
-    }
-});
+
+// Tarayıcı olaylarını dinleyerek durumu otomatik yönet.
+window.addEventListener('online', senkronizeEt);
 window.addEventListener('offline', cevrimiciDurumuGuncelle);
+// Sayfa ilk yüklendiğinde durumu kontrol et ve gerekirse senkronizasyonu başlat.
 window.addEventListener('load', () => {
     cevrimiciDurumuGuncelle();
-    // Sadece giriş yapılmış sayfalarda ve internet varsa senkronize et
-    if (navigator.onLine && document.body.dataset.userRole) {
+    if (navigator.onLine) {
         senkronizeEt();
     }
 });

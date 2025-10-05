@@ -1,14 +1,16 @@
+# blueprints/admin.py (DİNAMİK ÖNBELLEK YÖNETİMİ EKLENDİ)
+
 from flask import Blueprint, jsonify, render_template, request, session
 from extensions import supabase, bcrypt
 from decorators import login_required, admin_required
 from constants import UserRole
 from postgrest import APIError
 
-admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
+admin_bp = Blueprint('admin', __name__)
 
 # --- ARAYÜZ SAYFALARI (ADMIN) ---
 
-@admin_bp.route('/panel') # URL'i daha anlaşılır hale getirdim
+@admin_bp.route('/admin')
 @login_required
 @admin_required
 def admin_panel():
@@ -17,7 +19,7 @@ def admin_panel():
 
 # --- API ADRESLERİ (ADMIN) ---
 
-@admin_bp.route('/data')
+@admin_bp.route('/api/admin/data')
 @login_required
 @admin_required
 def get_admin_data():
@@ -29,12 +31,13 @@ def get_admin_data():
         print(f"Admin veri hatası: {e}")
         return jsonify({"error": "Veri alınırken sunucuda bir hata oluştu."}), 500
 
-# --- ÖNBELLEK YÖNETİMİ ---
-@admin_bp.route('/cache_version', methods=['GET'])
+# --- YENİ FONKSİYONLAR: ÖNBELLEK YÖNETİMİ (GÜNCELLENDİ) ---
+@admin_bp.route('/api/admin/cache_version', methods=['GET'])
 @login_required
 @admin_required
 def get_cache_version():
     try:
+        # .single() yerine .limit(1).single() kullanarak birden fazla kayıt olsa bile hata almayı önlüyoruz.
         response = supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'cache_version').limit(1).single().execute()
         version = response.data.get('ayar_degeri', '1') if response.data else '1'
         return jsonify({"version": version})
@@ -42,26 +45,30 @@ def get_cache_version():
         print(f"Önbellek sürümü alınırken hata: {e}")
         return jsonify({"error": "Önbellek sürümü alınamadı."}), 500
 
-@admin_bp.route('/increment_cache_version', methods=['POST'])
+@admin_bp.route('/api/admin/increment_cache_version', methods=['POST'])
 @login_required
 @admin_required
 def increment_cache_version():
     try:
+        # Mevcut sürümü alırken daha güvenli bir yöntem kullanıyoruz.
         get_response = supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'cache_version').limit(1).single().execute()
         
         if not get_response.data:
+            # Eğer ayar yoksa, oluştur ve 1'den başlat
             supabase.table('ayarlar').insert({'ayar_adi': 'cache_version', 'ayar_degeri': '2'}).execute()
             return jsonify({"message": "Önbellek ayarı oluşturuldu ve sürüm v2 olarak ayarlandı.", "new_version": 2})
 
         current_version = int(get_response.data.get('ayar_degeri', '1'))
         new_version = current_version + 1
         
+        # Yeni sürümü veritabanına kaydet
         supabase.table('ayarlar').update({'ayar_degeri': str(new_version)}).eq('ayar_adi', 'cache_version').execute()
         
         return jsonify({"message": f"Önbellek sürümü başarıyla v{new_version}'e yükseltildi!", "new_version": new_version})
     except Exception as e:
         print(f"Önbellek sürümü artırılırken hata: {e}")
         return jsonify({"error": "Önbellek sürümü güncellenemedi."}), 500
+# --- ÖNBELLEK YÖNETİMİ SONU ---
 
 @admin_bp.route('/api/admin/update_lisans', methods=['POST'])
 @login_required

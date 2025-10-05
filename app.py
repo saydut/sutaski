@@ -10,16 +10,11 @@ from blueprints.main import main_bp
 from blueprints.admin import admin_bp
 from blueprints.yem import yem_bp
 from blueprints.finans import finans_bp
-from blueprints.bildirim import bildirim_bp
-from blueprints.subscription import subscription_bp 
 
 # Yeniden yapılandırma sonrası eklenen yeni blueprint'ler
 from blueprints.tedarikci import tedarikci_bp
 from blueprints.sut import sut_bp
 from blueprints.rapor import rapor_bp
-# --- YENİ EKLENEN SATIR ---
-from blueprints.pdf_generator import pdf_generator_bp
-from blueprints.versioning import versioning_bp
 
 def create_app():
     """Flask uygulama fabrikası."""
@@ -65,12 +60,6 @@ def create_app():
     app.register_blueprint(tedarikci_bp)
     app.register_blueprint(sut_bp)
     app.register_blueprint(rapor_bp)
-    app.register_blueprint(bildirim_bp)
-    app.register_blueprint(subscription_bp)
-    # --- YENİ EKLENEN SATIR ---
-    app.register_blueprint(pdf_generator_bp)
-    app.register_blueprint(versioning_bp)
-
 
     return app
 
@@ -78,7 +67,6 @@ def create_app():
 if __name__ == '__main__':
     app = create_app()
     app.run(debug=True)
-# ... (PythonAnywhere için olan yorum satırları aynı kalacak)
 ####3###
 #
 ## Bu dosya PythonAnywhere'in web sunucusu tarafından kullanılır.

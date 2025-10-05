@@ -49,7 +49,7 @@ async function adminVerileriniYukle() {
     try {
         const [adminDataResponse, surumNotlariResponse] = await Promise.all([
             fetch('/api/admin/data'),
-            fetch('/api/versioning/surum_notlari')
+            fetch('/api/admin/surum_notlari')
         ]);
 
         const adminData = await adminDataResponse.json();
@@ -82,13 +82,6 @@ async function adminVerileriniYukle() {
 async function surumNotuEkle(event) {
     event.preventDefault(); 
     
-    // --- EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    // --- KONTROL SONU ---
-    
     const selectedDate = document.getElementById('yayin-tarihi-input')._flatpickr.selectedDates[0];
     
     const veri = {
@@ -98,7 +91,7 @@ async function surumNotuEkle(event) {
     };
 
     try {
-        const response = await fetch('/api/versioning/surum_notlari', {
+        const response = await fetch('/api/admin/surum_notlari', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(veri)
@@ -142,17 +135,10 @@ function surumNotlariniDoldur(notlar) {
 }
 
 async function surumNotuSil(id) {
-    // --- EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    // --- KONTROL SONU ---
-
     if (!confirm("Bu sürüm notunu silmek istediğinizden emin misiniz?")) return;
 
     try {
-        const response = await fetch(`/api/versioning/surum_notlari/${id}`, { method: 'DELETE' });
+        const response = await fetch(`/api/admin/surum_notlari/${id}`, { method: 'DELETE' });
         const result = await response.json();
         if (response.ok) {
             gosterMesaj(result.message, 'success');
@@ -183,13 +169,6 @@ function surumDuzenlemeModaliniAc(id) {
 
 // YENİ FONKSİYON
 async function surumNotuGuncelle() {
-    // --- EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    // --- KONTROL SONU ---
-
     const id = document.getElementById('edit-surum-id').value;
     const selectedDate = document.getElementById('edit-yayin-tarihi-input')._flatpickr.selectedDates[0];
 
@@ -205,7 +184,7 @@ async function surumNotuGuncelle() {
     }
 
     try {
-        const response = await fetch(`/api/versioning/surum_notlari/${id}`, {
+        const response = await fetch(`/api/admin/surum_notlari/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(veri)
@@ -296,13 +275,6 @@ function kullanicilariDoldur(kullanicilar) {
 }
 
 async function lisansGuncelle(sirketId) {
-    // --- EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    // --- KONTROL SONU ---
-
     const fpInstance = tarihSeciciler[`lisans-tarih-${sirketId}`];
     const secilenTarih = fpInstance.selectedDates[0];
     const yeniTarih = formatDateToYYYYMMDD(secilenTarih);
@@ -323,13 +295,6 @@ async function lisansGuncelle(sirketId) {
 }
 
 async function rolGuncelle(kullaniciId) {
-    // --- EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    // --- KONTROL SONU ---
-
     const yeniRol = document.getElementById(`rol-secim-${kullaniciId}`).value;
     try {
          const response = await fetch('/api/admin/update_rol', {
@@ -378,13 +343,6 @@ async function mevcutOnbellekSurumunuYukle() {
  * Sürüm artırma butonuna tıklandığında çalışır.
  */
 async function onbellekSurumunuArtir() {
-    // --- EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    // --- KONTROL SONU ---
-
     if (!confirm("Önbellek sürümünü bir artırmak istediğinizden emin misiniz? Bu işlem, tüm kullanıcıların bir sonraki ziyaretlerinde uygulamayı yeniden indirmesine neden olur.")) {
         return;
     }
@@ -406,14 +364,6 @@ async function onbellekSurumunuArtir() {
 
 
 async function sirketSil() {
-    // --- EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
-        sirketSilmeOnayModal.hide();
-        return;
-    }
-    // --- KONTROL SONU ---
-
     const sirketId = document.getElementById('silinecek-sirket-id').value;
     try {
         const response = await fetch('/api/admin/delete_company', {
@@ -443,13 +393,6 @@ function sifreSifirlamaAc(kullaniciId, kullaniciAdi) {
 }
 
 async function sifreSifirla() {
-    // --- EKLENEN KONTROL ---
-    if (!navigator.onLine) {
-        gosterMesaj("Bu işlem için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    // --- KONTROL SONU ---
-
     const kullaniciId = document.getElementById('sifirlanacak-kullanici-id').value;
     const yeniSifre = document.getElementById('yeni-sifre-input').value;
 
@@ -473,52 +416,5 @@ async function sifreSifirla() {
     } catch (error) {
         console.error("Şifre sıfırlanırken hata:", error);
         gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
-    }
-}
-
-// Formun gönderilme olayını dinle
-document.addEventListener('DOMContentLoaded', () => {
-    const bildirimForm = document.getElementById('bildirim-formu');
-    if(bildirimForm) {
-        bildirimForm.addEventListener('submit', topluBildirimGonder);
-    }
-});
-
-async function topluBildirimGonder(event) {
-    event.preventDefault(); // Sayfanın yeniden yüklenmesini engelle
-
-    const baslik = document.getElementById('bildirim-baslik').value;
-    const mesaj = document.getElementById('bildirim-mesaj').value;
-    const button = document.getElementById('bildirim-gonder-btn');
-    const originalButtonHTML = button.innerHTML;
-
-    if (!baslik || !mesaj) {
-        gosterMesaj('Başlık ve mesaj boş bırakılamaz.', 'warning');
-        return;
-    }
-
-    button.disabled = true;
-    button.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Gönderiliyor...`;
-
-    try {
-        const response = await fetch('/api/bildirim/gonder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ baslik: baslik, mesaj: mesaj })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            document.getElementById('bildirim-formu').reset(); // Formu temizle
-        } else {
-            throw new Error(result.error || 'Bilinmeyen bir hata oluştu.');
-        }
-    } catch (error) {
-        gosterMesaj(`Hata: ${error.message}`, 'danger');
-    } finally {
-        button.disabled = false;
-        button.innerHTML = originalButtonHTML;
     }
 }
