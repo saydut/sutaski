@@ -2,6 +2,7 @@ import os
 from flask import Flask
 from dotenv import load_dotenv
 from datetime import datetime
+from functools import lru_cache
 
 # Eklentileri ve ana Blueprint'leri içe aktar
 from extensions import bcrypt, supabase
@@ -35,17 +36,25 @@ def create_app():
         except (ValueError, TypeError):
             return value
 
-    @app.context_processor
-    def inject_global_vars():
+    @lru_cache(maxsize=None) # Basit bir bellek içi önbellekleme
+    def get_version_info():
         try:
-            latest_version_res = supabase.table('surum_notlari').select('surum_no').order('yayin_tarihi', desc=True).order('id', desc=True).limit(1).execute()
+            # Tek bir sorgu ile tüm notları çek
             all_versions_res = supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).order('id', desc=True).execute()
-            app_version = latest_version_res.data[0]['surum_no'] if latest_version_res.data else "1.0.0"
-            surum_notlari = all_versions_res.data if all_versions_res.data else []
+            
+            if not all_versions_res.data:
+                return "1.0.0", []
+
+            surum_notlari = all_versions_res.data
+            app_version = surum_notlari[0]['surum_no']
+            return app_version, surum_notlari
         except Exception as e:
             print(f"Sürüm bilgileri çekilirken hata oluştu: {e}")
-            app_version = "N/A"
-            surum_notlari = []
+            return "N/A", []
+
+    @app.context_processor
+    def inject_global_vars():
+        app_version, surum_notlari = get_version_info()
         return {'APP_VERSION': app_version, 'SURUM_NOTLARI': surum_notlari}
 
     # Eklentileri başlat
