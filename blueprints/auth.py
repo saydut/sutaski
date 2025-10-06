@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, render_template, request, redirect, url_fo
 from extensions import supabase, bcrypt, turkey_tz
 from decorators import login_required
 from datetime import datetime
+from postgrest import APIError
 
 # Blueprint'i oluşturuyoruz. url_prefix kullanmıyoruz çünkü /login gibi kök yolları kullanacağız.
 auth_bp = Blueprint('auth', __name__)
@@ -28,32 +29,53 @@ def logout():
 def register_user():
     try:
         data = request.get_json()
-        kullanici_adi = data['kullanici_adi']
+        kullanici_adi = data['kullanici_adi'].strip()
         sifre = data['sifre']
-        sirket_adi = data['sirket_adi']
+        sirket_adi = data['sirket_adi'].strip()
+
+        # Gerekli alanların kontrolü
+        if not all([kullanici_adi, sifre, sirket_adi]):
+            return jsonify({"error": "Tüm alanların doldurulması zorunludur."}), 400
 
         kullanici_var_mi = supabase.table('kullanicilar').select('id', count='exact').eq('kullanici_adi', kullanici_adi).execute()
         if kullanici_var_mi.count > 0:
             return jsonify({"error": "Bu kullanıcı adı zaten mevcut."}), 400
 
-        sirket_response = supabase.table('sirketler').select('id').eq('sirket_adi', sirket_adi).execute()
         sirket_id = None
-        if len(sirket_response.data) > 0:
-            sirket_id = sirket_response.data[0]['id']
-        else:
-            yeni_sirket_response = supabase.table('sirketler').insert({'sirket_adi': sirket_adi}).execute()
-            if len(yeni_sirket_response.data) > 0:
-                sirket_id = yeni_sirket_response.data[0]['id']
+        # Büyük/küçük harf duyarsız olarak şirket ara (daha kullanıcı dostu)
+        sirket_response = supabase.table('sirketler').select('id, sirket_adi').ilike('sirket_adi', sirket_adi).execute()
         
+        # Eğer bir veya daha fazla sonuç varsa, tam eşleşme olup olmadığını kontrol et
+        if sirket_response.data:
+            for sirket in sirket_response.data:
+                # Kullanıcının girdiği isimle veritabanındaki birebir aynıysa o şirketi kullan
+                if sirket['sirket_adi'] == sirket_adi:
+                    sirket_id = sirket['id']
+                    break
+        
+        # Eğer tam eşleşen bir şirket bulunamadıysa, yeni bir tane oluşturmayı dene
+        if sirket_id is None:
+            try:
+                yeni_sirket_response = supabase.table('sirketler').insert({'sirket_adi': sirket_adi}).execute()
+                sirket_id = yeni_sirket_response.data[0]['id']
+            except APIError as e:
+                # Veritabanındaki UNIQUE kuralı sayesinde, başka bir işlem aynı anda bu şirketi oluşturursa
+                # burada hata alırız ve kullanıcıya bilgi veririz.
+                if "violates unique constraint" in e.message:
+                    return jsonify({"error": f"'{sirket_adi}' adında bir şirket zaten mevcut. Lütfen tam adını doğru yazdığınızdan emin olun veya farklı bir isim deneyin."}), 409
+                else:
+                    raise # Farklı bir veritabanı hatasıysa yeniden fırlat
+
         hashed_sifre = bcrypt.generate_password_hash(sifre).decode('utf-8')
         
-        yeni_kullanici = supabase.table('kullanicilar').insert({
+        supabase.table('kullanicilar').insert({
             'kullanici_adi': kullanici_adi, 
             'sifre': hashed_sifre,
             'sirket_id': sirket_id
         }).execute()
 
         return jsonify({"message": "Kayıt başarılı!"}), 201
+
     except Exception as e:
         print(f"Kayıt Hatası: {e}")
         return jsonify({"error": "Kayıt sırasında bir sunucu hatası oluştu."}), 500

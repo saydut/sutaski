@@ -411,44 +411,42 @@ function yemSilmeOnayiAc(id, isim) {
     yemSilmeOnayModal.show();
 }
 
-// Bu fonksiyonu dosyadaki mevcut fonksiyonla değiştirin.
 async function yemUrunuSil() {
     const id = document.getElementById('silinecek-yem-id').value;
     yemSilmeOnayModal.hide();
 
-    // --- ÇÖZÜM: İŞLEMDEN ÖNCE İNTERNETİ KONTROL ET ---
-    if (!navigator.onLine) {
-        gosterMesaj("Silme işlemi için internet bağlantısı gereklidir.", "warning");
-        return; // İnternet yoksa fonksiyonu burada durdur.
-    }
-    // --- KONTROL SONU ---
-
-    // 1. Öğeyi UI'dan anında kaldır
     const silinecekElement = document.getElementById(`yem-urun-${id}`);
     if (!silinecekElement) return;
     
+    // İyimser güncelleme: Önce arayüzden gizle
     const parent = silinecekElement.parentNode;
     const nextSibling = silinecekElement.nextSibling;
     silinecekElement.style.transition = 'opacity 0.4s';
     silinecekElement.style.opacity = '0';
     setTimeout(() => silinecekElement.remove(), 400);
 
-    // 2. Arka planda API'yi çağır
     try {
         const response = await fetch(`/yem/api/urunler/${id}`, { method: 'DELETE' });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
 
         gosterMesaj(result.message, 'success');
-        // Başarılı olunca yem seçme menüsünü de yenilemek önemli
         await yemSeciciyiDoldur();
+        await db.yem_urunleri.delete(parseInt(id)); // Çevrimdışı veritabanından da sil
 
     } catch (error) {
-        gosterMesaj(error.message || 'Silme başarısız, ürün geri yüklendi.', 'danger');
-        // Hata olursa elemanı geri ekle
-        silinecekElement.style.opacity = '1';
-        if (!silinecekElement.parentNode) {
-            parent.insertBefore(silinecekElement, nextSibling);
+        // Hata bir ağ hatası mı diye kontrol et
+        if (!navigator.onLine) {
+            gosterMesaj('İnternet yok. Silme işlemi kaydedildi, bağlantı kurulunca uygulanacak.', 'info');
+            // Silme işlemini çevrimdışı kaydet
+            await kaydetSilmeIslemiCevrimdisi('yem_urunu', parseInt(id));
+        } else {
+            // Sunucu hatası veya başka bir hata varsa arayüzü geri yükle
+            gosterMesaj(error.message || 'Silme başarısız, ürün geri yüklendi.', 'danger');
+            silinecekElement.style.opacity = '1';
+            if (!silinecekElement.parentNode) {
+                parent.insertBefore(silinecekElement, nextSibling);
+            }
         }
     }
 }
@@ -584,17 +582,10 @@ async function yemIslemiSil() {
     const id = document.getElementById('silinecek-islem-id').value;
     yemIslemSilmeOnayModal.hide();
 
-    // --- ÇÖZÜM: İŞLEMDEN ÖNCE İNTERNETİ KONTROL ET ---
-    if (!navigator.onLine) {
-        gosterMesaj("İşlemi iptal etmek için internet bağlantısı gereklidir.", "warning");
-        return; // İnternet yoksa fonksiyonu burada durdur.
-    }
-    // --- KONTROL SONU ---
-
-    // İyimser güncelleme: Önce arayüzden kaldır
     const silinecekElement = document.getElementById(`yem-islem-liste-${id}`) || document.getElementById(`yem-islem-kart-${id}`);
     if (!silinecekElement) return;
 
+    // İyimser güncelleme
     const parent = silinecekElement.parentNode;
     const nextSibling = silinecekElement.nextSibling;
     silinecekElement.style.opacity = '0';
@@ -606,16 +597,26 @@ async function yemIslemiSil() {
         if (!response.ok) throw new Error(result.error);
 
         gosterMesaj(result.message, 'success');
-        // Stoklar değiştiği için ürün listesini ve seçiciyi yenile
+        // Stoklar değiştiği için listeleri yenilemek önemli
         await yemListesiniGoster(mevcutYemSayfasi);
         await yemSeciciyiDoldur();
 
     } catch (error) {
-        gosterMesaj(error.message || 'İşlem iptal edilemedi, satır geri yüklendi.', 'danger');
-        // Hata olursa satırı geri ekle
-        silinecekElement.style.opacity = '1';
-        if (!silinecekElement.parentNode) {
-            parent.insertBefore(silinecekElement, nextSibling);
+        if (!navigator.onLine) {
+            gosterMesaj('İnternet yok. İşlem iptali kaydedildi, bağlantı kurulunca uygulanacak.', 'info');
+            // Bu silme işlemini çevrimdışı desteklemiyoruz çünkü stok hesabı karmaşık.
+            // Arayüzü geri alıyoruz. Bu, daha güvenli bir yaklaşımdır.
+            gosterMesaj('İşlem iptali çevrimdışı yapılamıyor, lütfen internete bağlanın.', 'warning');
+            silinecekElement.style.opacity = '1';
+            if (!silinecekElement.parentNode) {
+                parent.insertBefore(silinecekElement, nextSibling);
+            }
+        } else {
+             gosterMesaj(error.message || 'İşlem iptal edilemedi, satır geri yüklendi.', 'danger');
+             silinecekElement.style.opacity = '1';
+             if (!silinecekElement.parentNode) {
+                 parent.insertBefore(silinecekElement, nextSibling);
+             }
         }
     }
 }

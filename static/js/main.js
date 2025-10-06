@@ -250,6 +250,7 @@ async function sutGirdisiEkle() {
 
     // --- İYİMSER (OPTIMISTIC) GÜNCELLEME MANTIĞI ---
     const listeElementi = document.getElementById('girdiler-listesi');
+    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
     const geciciId = `gecici-${Date.now()}`;
     const tedarikciAdi = ui.tedarikciSecici.options[tedarikciId].text;
     const kullaniciAdi = JSON.parse(localStorage.getItem('offlineUser'))?.kullanici_adi || 'Siz';
@@ -265,10 +266,8 @@ async function sutGirdisiEkle() {
         <p class="mb-1 girdi-detay">Toplayan: ${kullaniciAdi} | Saat: ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</p>
     `;
     
-    const ilkEleman = listeElementi.querySelector("div:not([id])");
-    if (ilkEleman && listeElementi.children.length === 1) {
-        ilkEleman.style.display = 'none';
-    }
+    // "Veri Yok" mesajını gizle ve geçici elemanı ekle
+    veriYokMesaji.style.display = 'none';
     listeElementi.prepend(geciciElement);
 
     const orjinalFormVerisi = { tedarikciId, litre, fiyat };
@@ -280,29 +279,27 @@ async function sutGirdisiEkle() {
         const bugun = utils.getLocalDateString();
         ui.updateOzetPanels(result.yeni_ozet, bugun);
         
-        // --- DEĞİŞİKLİK BURADA BAŞLIYOR ---
-        // Grafiklerin yeniden yüklenmesi için fonksiyonları çağırıyoruz.
         await charts.haftalikGrafigiOlustur();
         await charts.tedarikciGrafigiOlustur();
-        // --- DEĞİŞİKLİK BURADA BİTİYOR ---
 
+        // Başarılı kayıttan sonra listeyi sunucudan gelen en güncel haliyle yenile
         await girdileriGoster(1, bugun);
 
     } catch (error) {
-        // --- DEĞİŞİKLİK BURADA ---
-        // Teknik hatayı konsola yazdır, kullanıcıya ise anlaşılır bir mesaj göster.
         console.error("İyimser ekleme başarısız oldu:", error);
         gosterMesaj("Kayıt başarısız. İnternet bağlantınızı kontrol edin.", "danger");
         
         const silinecekElement = document.getElementById(geciciId);
         if (silinecekElement) silinecekElement.remove();
 
+        // Formu eski haline getir
         ui.tedarikciSecici.setValue(orjinalFormVerisi.tedarikciId);
         document.getElementById('litre-input').value = orjinalFormVerisi.litre;
         document.getElementById('fiyat-input').value = orjinalFormVerisi.fiyat;
         
-        if(listeElementi.children.length === 1 && ilkEleman) {
-            ilkEleman.style.display = 'block';
+        // Listeyi kontrol et, eğer tamamen boş kaldıysa "Veri Yok" mesajını geri getir
+        if (listeElementi.children.length === 0) {
+            veriYokMesaji.style.display = 'block';
         }
     }
 }
