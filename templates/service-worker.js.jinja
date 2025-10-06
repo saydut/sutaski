@@ -1,4 +1,4 @@
-// templates/service-worker.js.jinja
+// templates/service-worker.js.jinja (TAM VE GÜNCEL HALİ)
 
 const CACHE_NAME = 'sut-takip-cache-v{{ cache_version }}';
 
@@ -10,7 +10,7 @@ const APP_SHELL_URLS = [
     '/tedarikciler',
     '/raporlar',
     '/yem/yonetim',
-    '/finans/' // finans blueprint'i bu yola kayıtlı
+    '/finans/'
 ];
 
 // Önbelleğe alınacak statik varlıklar (CSS, JS, Resimler, Fontlar vb.)
@@ -38,7 +38,7 @@ const STATIC_ASSETS = [
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js',
-    'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/tr.js',
+    'https://npmcdn.com/flatpickr/dist/l10n/tr.js',
     'https://unpkg.com/dexie@3/dist/dexie.js',
     'https://cdn.jsdelivr.net/npm/chart.js',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
@@ -51,21 +51,21 @@ self.addEventListener('install', event => {
       const cache = await caches.open(CACHE_NAME);
       console.log('Cache açıldı ve varlıklar önbelleğe alınıyor.');
 
-      // 1. Statik varlıkları önbelleğe al
-      await cache.addAll(STATIC_ASSETS);
-
-      // 2. Uygulama kabuğu sayfalarını özel başlıkla isteyerek önbelleğe al
-      const requests = APP_SHELL_URLS.map(url => new Request(url, {
-        headers: { 'X-Cache-Me': 'true' }
-      }));
-
-      // Tek tek ekleyerek bir hata olursa diğerlerinin eklenmesini sağlıyoruz
-      for (const request of requests) {
-        try {
-          await cache.add(request);
-        } catch (error) {
-          console.error(`'${request.url}' sayfası önbelleğe alınamadı:`, error);
-        }
+      // Statik varlıkları ve uygulama kabuğunu önbelleğe al
+      const allAssetsToCache = [...STATIC_ASSETS, ...APP_SHELL_URLS];
+      
+      try {
+        await cache.addAll(allAssetsToCache);
+      } catch (error) {
+          console.error('Tüm varlıklar önbelleğe alınamadı, tek tek deneniyor:', error);
+          // Eğer allAll başarısız olursa (genellikle tek bir dosya yüzünden), tek tek eklemeyi dene
+          for (const asset of allAssetsToCache) {
+              try {
+                  await cache.add(asset);
+              } catch (err) {
+                  console.warn(`'${asset}' önbelleğe alınamadı:`, err);
+              }
+          }
       }
     })()
   );
@@ -89,30 +89,49 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-    if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
+    const url = new URL(event.request.url);
+
+    // API istekleri için yeni strateji
+    if (url.pathname.startsWith('/api/')) {
+        event.respondWith(
+            fetch(event.request).catch(() => {
+                // Ağ hatası olduğunda (çevrimdışı), HTML yerine standart bir JSON hatası döndür.
+                // Bu, JavaScript'in "geçersiz JSON" hatası almasını engeller.
+                return new Response(JSON.stringify({ error: 'İnternet bağlantısı yok veya sunucuya ulaşılamıyor.' }), {
+                    status: 503, // Service Unavailable
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            })
+        );
         return;
     }
-
+    
+    // HTML sayfa navigasyonu için strateji
     if (event.request.mode === 'navigate') {
         event.respondWith(
             (async () => {
                 try {
+                    // Önce internetten almayı dene
                     const networkResponse = await fetch(event.request);
                     return networkResponse;
                 } catch (error) {
+                    // İnternet yoksa, önbellekten vermeyi dene
                     console.log(`Ağ hatası: '${event.request.url}' için önbellekten sunuluyor.`);
                     const cache = await caches.open(CACHE_NAME);
                     const cachedResponse = await cache.match(event.request.url);
-                    // Eğer istenen sayfa önbellekte varsa onu, yoksa genel offline sayfasını ver
+                    // İstenen sayfa önbellekte varsa onu, yoksa genel /offline sayfasını ver
                     return cachedResponse || await cache.match('/offline');
                 }
             })()
         );
-    } else {
-        event.respondWith(
-            caches.match(event.request).then(response => {
-                return response || fetch(event.request);
-            })
-        );
-    }
+        return;
+    } 
+    
+    // Statik dosyalar (CSS, JS, resimler vb.) için strateji
+    // Önce önbelleğe bak, yoksa internetten çek.
+    event.respondWith(
+        caches.match(event.request).then(response => {
+            return response || fetch(event.request);
+        })
+    );
 });

@@ -113,18 +113,35 @@ async function baslangicVerileriniYukle() {
  * @param {string|null} tarih - 'YYYY-MM-DD' formatında tarih. Boş bırakılırsa bugün.
  */
 async function ozetVerileriniYukle(tarih = null) {
-    ui.toggleOzetPanelsLoading(true); // Yükleniyor animasyonunu göster
+    ui.toggleOzetPanelsLoading(true);
     const effectiveDate = tarih || utils.getLocalDateString(new Date());
+    const cacheKey = `ozet_${effectiveDate}`;
 
+    // --- YENİ ÇEVRİMDIŞI MANTIĞI ---
+    if (!navigator.onLine) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+            console.log("Özet verisi önbellekten yüklendi.");
+            ui.updateOzetPanels(JSON.parse(cachedData), effectiveDate);
+        } else {
+            console.warn("Çevrimdışı modda özet verisi için önbellek bulunamadı.");
+            ui.updateOzetPanels(null, effectiveDate, true); // Önbellek yoksa hata göster
+        }
+        ui.toggleOzetPanelsLoading(false);
+        return; // İnternet yoksa burada bitir.
+    }
+
+    // --- ÇEVRİMİÇİ MANTIĞI (Değişiklik yok) ---
     try {
         const data = await api.fetchGunlukOzet(effectiveDate);
         ui.updateOzetPanels(data, effectiveDate);
+        // Başarılı olursa veriyi önbelleğe kaydet
+        localStorage.setItem(cacheKey, JSON.stringify(data));
     } catch (error) {
         console.error("Özet yüklenirken hata:", error);
-        ui.updateOzetPanels(null, effectiveDate, true); // Hata durumunu UI'a bildir
+        ui.updateOzetPanels(null, effectiveDate, true);
     } finally {
-        // Hata olsa da olmasa da yükleniyor animasyonunu kaldır
-        ui.toggleOzetPanelsLoading(false); 
+        ui.toggleOzetPanelsLoading(false);
     }
 }
 
@@ -136,31 +153,44 @@ async function ozetVerileriniYukle(tarih = null) {
  */
 async function girdileriGoster(sayfa = 1, tarih = null) {
     mevcutSayfa = sayfa;
-    if (!tarih) {
-        tarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : utils.getLocalDateString(new Date());
-    }
-    
+    const effectiveDate = tarih || (ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : utils.getLocalDateString(new Date()));
+    const cacheKey = `girdiler_${effectiveDate}_sayfa_${sayfa}`;
+
     ui.toggleGirdilerListLoading(true);
     document.getElementById('veri-yok-mesaji').style.display = 'none';
+
+    // --- YENİ ÇEVRİMDIŞI MANTIĞI ---
+    if (!navigator.onLine) {
+        const cachedData = localStorage.getItem(cacheKey);
+        if (cachedData) {
+            console.log("Girdiler önbellekten yüklendi.");
+            const { girdiler, toplam_girdi_sayisi } = JSON.parse(cachedData);
+            ui.renderGirdiler(girdiler, mevcutGorunum);
+            ui.sayfalamaNavOlustur('girdiler-sayfalama', toplam_girdi_sayisi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, effectiveDate));
+        } else {
+            console.warn("Çevrimdışı modda girdiler için önbellek bulunamadı.");
+            ui.renderGirdiler([], mevcutGorunum); // Boş liste göster
+        }
+        ui.toggleGirdilerListLoading(false);
+        return; // İnternet yoksa burada bitir.
+    }
+    
+    // --- ÇEVRİMİÇİ MANTIĞI ---
     try {
-        // Çevrimiçi ise sunucudan veri çek
-        const sunucuVerisi = navigator.onLine ? await api.fetchSutGirdileri(tarih, sayfa) : { girdiler: [], toplam_girdi_sayisi: 0 };
+        const sunucuVerisi = await api.fetchSutGirdileri(effectiveDate, sayfa);
         
-        // Çevrimdışı bekleyen girdileri al
+        // Başarılı olursa veriyi önbelleğe kaydet
+        localStorage.setItem(cacheKey, JSON.stringify(sunucuVerisi));
+
         const bekleyenGirdiler = await bekleyenGirdileriGetir();
+        const { tumGirdiler, toplamGirdi } = ui.mergeOnlineOfflineGirdiler(sunucuVerisi, bekleyenGirdiler, effectiveDate);
         
-        // Sunucu verisi ile çevrimdışı veriyi birleştir
-        const { tumGirdiler, toplamGirdi } = ui.mergeOnlineOfflineGirdiler(sunucuVerisi, bekleyenGirdiler, tarih);
-        
-        // Birleştirilmiş veriyi arayüzde göster
         ui.renderGirdiler(tumGirdiler, mevcutGorunum);
-        
-        // Sayfalamayı oluştur
-        ui.sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, tarih));
+        ui.sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, effectiveDate));
 
     } catch (error) {
         console.error("Girdileri gösterirken hata:", error);
-        ui.renderGirdilerListesi([], "Girdiler yüklenirken bir hata oluştu.");
+        ui.renderGirdiler([], mevcutGorunum); // Hata durumunda boş liste göster
     } finally {
         ui.toggleGirdilerListLoading(false);
     }

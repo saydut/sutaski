@@ -582,10 +582,19 @@ async function yemIslemiSil() {
     const id = document.getElementById('silinecek-islem-id').value;
     yemIslemSilmeOnayModal.hide();
 
+    // --- ÇÖZÜM: İŞLEMDEN ÖNCE İNTERNETİ KONTROL ET ---
+    // Bu işlem, stok hesabını karmaşıklaştırdığı için çevrimdışı desteklenmiyor.
+    // Bu yüzden en başta interneti kontrol edip kullanıcıya net bir mesaj veriyoruz.
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlemi iptal etmek için internet bağlantısı gereklidir.", "warning");
+        return; // İnternet yoksa fonksiyonu burada durdur.
+    }
+    // --- KONTROL SONU ---
+
+    // İnternet varsa, iyimser güncelleme ile devam et
     const silinecekElement = document.getElementById(`yem-islem-liste-${id}`) || document.getElementById(`yem-islem-kart-${id}`);
     if (!silinecekElement) return;
 
-    // İyimser güncelleme
     const parent = silinecekElement.parentNode;
     const nextSibling = silinecekElement.nextSibling;
     silinecekElement.style.opacity = '0';
@@ -597,26 +606,16 @@ async function yemIslemiSil() {
         if (!response.ok) throw new Error(result.error);
 
         gosterMesaj(result.message, 'success');
-        // Stoklar değiştiği için listeleri yenilemek önemli
+        // Stoklar değiştiği için ürün listesini ve seçiciyi yenile
         await yemListesiniGoster(mevcutYemSayfasi);
         await yemSeciciyiDoldur();
 
     } catch (error) {
-        if (!navigator.onLine) {
-            gosterMesaj('İnternet yok. İşlem iptali kaydedildi, bağlantı kurulunca uygulanacak.', 'info');
-            // Bu silme işlemini çevrimdışı desteklemiyoruz çünkü stok hesabı karmaşık.
-            // Arayüzü geri alıyoruz. Bu, daha güvenli bir yaklaşımdır.
-            gosterMesaj('İşlem iptali çevrimdışı yapılamıyor, lütfen internete bağlanın.', 'warning');
-            silinecekElement.style.opacity = '1';
-            if (!silinecekElement.parentNode) {
-                parent.insertBefore(silinecekElement, nextSibling);
-            }
-        } else {
-             gosterMesaj(error.message || 'İşlem iptal edilemedi, satır geri yüklendi.', 'danger');
-             silinecekElement.style.opacity = '1';
-             if (!silinecekElement.parentNode) {
-                 parent.insertBefore(silinecekElement, nextSibling);
-             }
+        // Hata sadece sunucudan gelirse (internet varken) burası çalışacak
+        gosterMesaj(error.message || 'İşlem iptal edilemedi, satır geri yüklendi.', 'danger');
+        silinecekElement.style.opacity = '1';
+        if (!silinecekElement.parentNode) {
+            parent.insertBefore(silinecekElement, nextSibling);
         }
     }
 }
