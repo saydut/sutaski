@@ -24,20 +24,24 @@ function updateAllChartThemes() {
     const legendColor = isDark ? '#E2E8F0' : '#333333';
     const borderColor = isDark ? '#1E293B' : '#FFFFFF';
     
-    // Grafik tiplerine özel renkler
     const barBgColor = isDark ? 'rgba(76, 125, 255, 0.8)' : 'rgba(74, 144, 226, 0.8)';
     const barBorderColor = isDark ? 'rgba(76, 125, 255, 1)' : 'rgba(74, 144, 226, 1)';
     const lineBgColor = isDark ? 'rgba(76, 125, 255, 0.3)' : 'rgba(74, 144, 226, 0.3)';
     const lineBorderColor = isDark ? 'rgba(76, 125, 255, 1)' : 'rgba(74, 144, 226, 1)';
 
     registeredCharts.forEach(chart => {
-        // Genel ayarlar
+        // --- DÜZELTME BURADA ---
+        // Güncellemeye çalışmadan önce chart nesnesinin geçerli olduğundan emin ol.
+        if (!chart || !chart.options || !chart.data) {
+            return; // Eğer chart null veya geçersizse, bu adımı atla.
+        }
+        // --- DÜZELTME SONU ---
+
         if (chart.options.scales.y) chart.options.scales.y.ticks.color = textColor;
         if (chart.options.scales.x) chart.options.scales.x.ticks.color = textColor;
         if (chart.options.scales.y) chart.options.scales.y.grid.color = gridColor;
         if (chart.options.plugins.legend) chart.options.plugins.legend.labels.color = legendColor;
 
-        // Grafik tipine özel ayarlar
         const chartType = chart.config.type;
         const dataset = chart.data.datasets[0];
 
