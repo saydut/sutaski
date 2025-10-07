@@ -1,7 +1,8 @@
-from flask import Blueprint, render_template, session, request
+import os
+from flask import Blueprint, render_template, session, request, flash, redirect, url_for, Response
 from decorators import login_required, lisans_kontrolu
-from flask import Response
-from extensions import supabase
+from extensions import supabase, turkey_tz
+from datetime import datetime
 
 main_bp = Blueprint(
     'main',
@@ -12,12 +13,41 @@ main_bp = Blueprint(
 
 # --- ARAYÜZ SAYFALARI ---
 @main_bp.route('/')
-@login_required
-@lisans_kontrolu
 def anasayfa():
+    # Eğer kullanıcı giriş yapmamışsa, flash mesajı OLUŞTURMADAN doğrudan login sayfasına yönlendir.
+    if 'user' not in session:
+        return redirect(url_for('auth.login_page'))
+
+    # Eğer kullanıcı giriş yapmışsa, lisans kontrolünü burada manuel olarak yapıyoruz.
+    # (Daha önce decorator ile yapılan kontrol)
+    user_info = session.get('user')
+    # Admin rolündeki kullanıcıları lisans kontrolünden muaf tut
+    if user_info and user_info.get('rol') == 'admin':
+        pass # Kontrolü atla
+    else:
+        lisans_bitis = user_info.get('lisans_bitis_tarihi')
+        if lisans_bitis:
+            try:
+                lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis, '%Y-%m-%d').date()
+                bugun_tr = datetime.now(turkey_tz).date()
+                if bugun_tr >= lisans_bitis_tarihi_obj:
+                    flash("Şirketinizin lisans süresi dolmuştur. Lütfen sistem yöneticinizle iletişime geçin.", "danger")
+                    session.pop('user', None)
+                    return redirect(url_for('auth.login_page'))
+            except (ValueError, TypeError):
+                 flash("Lisans tarihi formatı geçersiz.", "danger")
+                 session.pop('user', None)
+                 return redirect(url_for('auth.login_page'))
+        else:
+             flash("Şirketiniz için bir lisans tanımlanmamıştır.", "danger")
+             session.pop('user', None)
+             return redirect(url_for('auth.login_page'))
+
     # Service Worker'ın uygulama kabuğunu önbelleğe alması için
     if request.headers.get('X-Cache-Me') == 'true':
         return render_template('index.html', session={})
+
+    # Tüm kontrollerden geçtiyse, normal anasayfayı göster
     return render_template('index.html', session=session)
 
 @main_bp.route('/raporlar')

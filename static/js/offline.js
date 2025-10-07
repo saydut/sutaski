@@ -263,8 +263,13 @@ async function getOfflineYemUrunleri() {
 window.addEventListener('online', senkronizeEt);
 window.addEventListener('offline', cevrimiciDurumuGuncelle);
 window.addEventListener('load', () => {
+    // Sadece online/offline durumunu gösteren arayüzü güncelle
     cevrimiciDurumuGuncelle();
-    if (navigator.onLine) {
+
+    // Eğer giriş veya kayıt sayfasında DEĞİLSEK ve internet varsa senkronize et
+    const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/register';
+    if (!isAuthPage && navigator.onLine) {
+        console.log("Giriş yapılmış bir sayfada senkronizasyon başlatılıyor...");
         senkronizeEt();
     }
 });
