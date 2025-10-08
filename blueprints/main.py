@@ -11,38 +11,20 @@ main_bp = Blueprint(
     static_folder='../../static'
 )
 
+
+
 # --- ARAYÜZ SAYFALARI ---
 @main_bp.route('/')
+@login_required
+@lisans_kontrolu
 def anasayfa():
     # Service Worker'ın uygulama kabuğunu önbelleğe alması için özel kontrol
     # Eğer istek Service Worker'dan geliyorsa, giriş kontrolü yapmadan boş şablonu döndür
     if request.headers.get('X-Cache-Me') == 'true':
         return render_template('index.html', session={})
 
-    # Eğer normal bir kullanıcı isteğiyse ve giriş yapılmamışsa, login sayfasına yönlendir
-    if 'user' not in session:
-        return redirect(url_for('auth.login_page'))
-
-    # Lisans kontrolünü manuel olarak yap
-    user_info = session.get('user')
-    if user_info and user_info.get('rol') != 'admin':
-        lisans_bitis = user_info.get('lisans_bitis_tarihi')
-        if lisans_bitis:
-            try:
-                lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis, '%Y-%m-%d').date()
-                bugun_tr = datetime.now(turkey_tz).date()
-                if bugun_tr >= lisans_bitis_tarihi_obj:
-                    flash("Şirketinizin lisans süresi dolmuştur.", "danger")
-                    session.pop('user', None)
-                    return redirect(url_for('auth.login_page'))
-            except (ValueError, TypeError):
-                 flash("Lisans tarihi formatı geçersiz.", "danger")
-                 session.pop('user', None)
-                 return redirect(url_for('auth.login_page'))
-        else:
-             flash("Şirketiniz için bir lisans tanımlanmamıştır.", "danger")
-             session.pop('user', None)
-             return redirect(url_for('auth.login_page'))
+    # @login_required ve @lisans_kontrolu decorator'ları giriş ve lisans
+    # kontrollerini zaten yaptığı için buradaki manuel kod blokları kaldırıldı.
 
     # Tüm kontrollerden geçtiyse, normal anasayfayı göster
     return render_template('index.html', session=session)

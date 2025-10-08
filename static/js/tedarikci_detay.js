@@ -238,38 +238,7 @@ function renderFinansAsCards(container, veriler) {
 
 // --- Genel Veri Yükleme Motoru ---
 
-async function veriYukleVeGoster(config) {
-    const tabloBody = document.getElementById(config.tabloBodyId);
-    const kartContainer = document.getElementById(config.kartContainerId);
-    const veriYok = document.getElementById(config.veriYokId);
 
-    tabloBody.innerHTML = `<tr><td colspan="6" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
-    kartContainer.innerHTML = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
-    veriYok.style.display = 'none';
-
-    try {
-        const response = await fetch(config.apiURL);
-        const data = await response.json();
-
-        tabloBody.innerHTML = '';
-        kartContainer.innerHTML = '';
-
-        const veriler = data[config.veriAnahtari];
-        if (veriler.length === 0) {
-            veriYok.style.display = 'block';
-        } else {
-            if (mevcutGorunum === 'tablo') {
-                config.tabloRenderFn(tabloBody, veriler);
-            } else {
-                config.kartRenderFn(kartContainer, veriler);
-            }
-        }
-        ui.sayfalamaNavOlustur(config.sayfalamaId, data.toplam_kayit, config.sayfa, KAYIT_SAYISI, config.yukleFn);
-    } catch (e) {
-        tabloBody.innerHTML = `<tr><td colspan="6" class="text-center p-4 text-danger">Veriler yüklenemedi.</td></tr>`;
-        kartContainer.innerHTML = `<div class="col-12 text-center p-4 text-danger">Veriler yüklenemedi.</div>`;
-    }
-}
 
 
 function ozetKartlariniDoldur(ozet) {

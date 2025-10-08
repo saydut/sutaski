@@ -8,7 +8,7 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user' not in session:
-            flash("Bu sayfayı görüntülemek için giriş yapmalısınız.", "warning")
+            flash("Devam etmek için lütfen giriş yapın.", "info")
             return redirect(url_for('auth.login_page'))
         return f(*args, **kwargs)
     return decorated_function
@@ -77,3 +77,6 @@ def modification_allowed(f):
             return jsonify({"error": "Bu işlemi yapma yetkiniz yok."}), 403
         return f(*args, **kwargs)
     return decorated_function
+
+
+
