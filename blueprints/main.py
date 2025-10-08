@@ -14,24 +14,25 @@ main_bp = Blueprint(
 # --- ARAYÜZ SAYFALARI ---
 @main_bp.route('/')
 def anasayfa():
-    # Eğer kullanıcı giriş yapmamışsa, flash mesajı OLUŞTURMADAN doğrudan login sayfasına yönlendir.
+    # Service Worker'ın uygulama kabuğunu önbelleğe alması için özel kontrol
+    # Eğer istek Service Worker'dan geliyorsa, giriş kontrolü yapmadan boş şablonu döndür
+    if request.headers.get('X-Cache-Me') == 'true':
+        return render_template('index.html', session={})
+
+    # Eğer normal bir kullanıcı isteğiyse ve giriş yapılmamışsa, login sayfasına yönlendir
     if 'user' not in session:
         return redirect(url_for('auth.login_page'))
 
-    # Eğer kullanıcı giriş yapmışsa, lisans kontrolünü burada manuel olarak yapıyoruz.
-    # (Daha önce decorator ile yapılan kontrol)
+    # Lisans kontrolünü manuel olarak yap
     user_info = session.get('user')
-    # Admin rolündeki kullanıcıları lisans kontrolünden muaf tut
-    if user_info and user_info.get('rol') == 'admin':
-        pass # Kontrolü atla
-    else:
+    if user_info and user_info.get('rol') != 'admin':
         lisans_bitis = user_info.get('lisans_bitis_tarihi')
         if lisans_bitis:
             try:
                 lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis, '%Y-%m-%d').date()
                 bugun_tr = datetime.now(turkey_tz).date()
                 if bugun_tr >= lisans_bitis_tarihi_obj:
-                    flash("Şirketinizin lisans süresi dolmuştur. Lütfen sistem yöneticinizle iletişime geçin.", "danger")
+                    flash("Şirketinizin lisans süresi dolmuştur.", "danger")
                     session.pop('user', None)
                     return redirect(url_for('auth.login_page'))
             except (ValueError, TypeError):
@@ -43,10 +44,6 @@ def anasayfa():
              session.pop('user', None)
              return redirect(url_for('auth.login_page'))
 
-    # Service Worker'ın uygulama kabuğunu önbelleğe alması için
-    if request.headers.get('X-Cache-Me') == 'true':
-        return render_template('index.html', session={})
-
     # Tüm kontrollerden geçtiyse, normal anasayfayı göster
     return render_template('index.html', session=session)
 
@@ -54,7 +51,6 @@ def anasayfa():
 @login_required
 @lisans_kontrolu
 def raporlar_page():
-    # BU BLOK EKLENDİ
     if request.headers.get('X-Cache-Me') == 'true':
         return render_template('raporlar.html', session={})
     return render_template('raporlar.html')
@@ -63,10 +59,10 @@ def raporlar_page():
 @login_required
 @lisans_kontrolu
 def tedarikciler_sayfasi():
-    # BU BLOK EKLENDİ
     if request.headers.get('X-Cache-Me') == 'true':
         return render_template('tedarikciler.html', session={})
     return render_template('tedarikciler.html')
+
 
 @main_bp.route('/tedarikci/<int:tedarikci_id>')
 @login_required

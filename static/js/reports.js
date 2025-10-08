@@ -88,19 +88,24 @@ async function raporOlustur() {
 
     if (!baslangic || !bitis) return;
     
-    // --- YENİ ÇEVRİMDIŞI KONTROLÜ ---
     if (!navigator.onLine) {
         mesajElementi.innerHTML = '<p class="text-warning">Rapor oluşturmak için internet bağlantısı gereklidir.</p>';
         mesajElementi.style.display = 'block';
-        if (detayliChart) detayliChart.destroy();
+        if (detayliChart) detayliChart.destroy(); // İnternet yoksa grafiği temizle
+        detayliChart = null; // Grafiği null yap
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         return;
     }
-    // --- KONTROL SONU ---
 
     mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Rapor oluşturuluyor...</p>';
     mesajElementi.style.display = 'block';
-    if (detayliChart) detayliChart.destroy();
+    
+    // --- HATA DÜZELTMESİ BURADA ---
+    // Grafiği yok etmeden önce var olup olmadığını kontrol et
+    if (detayliChart) {
+        detayliChart.destroy();
+        detayliChart = null;
+    }
     
     try {
         const response = await fetch(`/api/rapor/detayli_rapor?baslangic=${baslangic}&bitis=${bitis}`);

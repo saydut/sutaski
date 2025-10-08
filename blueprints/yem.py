@@ -15,10 +15,11 @@ yem_bp = Blueprint('yem', __name__, url_prefix='/yem')
 @login_required
 @lisans_kontrolu
 def yem_yonetimi_sayfasi():
-    # BU BLOK EKLENDİ
+    # Service Worker'ın uygulama kabuğunu önbelleğe alması için özel kontrol
     if request.headers.get('X-Cache-Me') == 'true':
         return render_template('yem_yonetimi.html', session={})
     return render_template('yem_yonetimi.html')
+
 
 # --- API UÇ NOKTALARI ---
 @yem_bp.route('/api/urunler/liste', methods=['GET'])

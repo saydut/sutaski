@@ -1,4 +1,4 @@
-// static/js/finans_yonetimi.js (DİNAMİK GÖRÜNÜM DEĞİŞTİRME ÖZELLİKLİ TAM VERSİYON)
+// static/js/finans_yonetimi.js (ÇEVRİMDIŞI KAYIT EKLENDİ)
 
 let tedarikciSecici, tarihSecici;
 let duzenleModal, silmeOnayModal;
@@ -43,7 +43,14 @@ async function tedarikcileriDoldur() {
     }
 }
 
-// --- İŞLEM VE MODAL FONKSİYONLARI (Değişiklik yok) ---
+function formuTemizle() {
+    document.getElementById('islem-tipi-sec').value = 'Ödeme';
+    tedarikciSecici.clear();
+    document.getElementById('tutar-input').value = '';
+    document.getElementById('aciklama-input').value = '';
+    tarihSecici.clear();
+}
+
 async function finansalIslemKaydet() {
     const veri = {
         islem_tipi: document.getElementById('islem-tipi-sec').value,
@@ -57,46 +64,27 @@ async function finansalIslemKaydet() {
         return;
     }
 
-    let islemBasarili = false;
-    // 1. ADIM: Sadece KAYDETME işlemini dene ve hatasını yakala.
+    // --- YENİ ÇEVRİMDIŞI MANTIĞI ---
+    if (!navigator.onLine) {
+        const basarili = await kaydetFinansIslemiCevrimdisi(veri);
+        if (basarili) {
+            formuTemizle();
+        }
+        return;
+    }
+
+    // --- MEVCUT ÇEVRİMİÇİ MANTIĞI ---
     try {
         const response = await fetch('/finans/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
         const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'İşlem kaydedilemedi.');
 
-        if (!response.ok) {
-            // Eğer sunucu bilerek bir hata döndürdüyse (örn: "Tutar pozitif olmalı")
-            gosterMesaj(result.error || 'İşlem kaydedilemedi.', 'danger');
-            return; // Fonksiyonu durdur.
-        }
-
-        // Buraya ulaştıysak, kayıt işlemi kesinlikle başarılıdır.
         gosterMesaj(result.message, 'success');
-        islemBasarili = true;
+        formuTemizle();
+        await finansalIslemleriYukle(1); 
 
     } catch (error) {
-        // Eğer sunucuya hiç ulaşılamadıysa bu hata çıkar.
-        gosterMesaj('İşlem kaydedilirken sunucuya bağlanılamadı.', 'danger');
-        return; // Fonksiyonu durdur.
-    }
-
-    // 2. ADIM: Eğer kaydetme başarılı olduysa, formu temizle ve listeyi yenile.
-    if (islemBasarili) {
-        // Formu temizle
-        document.getElementById('islem-tipi-sec').value = 'Ödeme';
-        tedarikciSecici.clear();
-        document.getElementById('tutar-input').value = '';
-        document.getElementById('aciklama-input').value = '';
-        tarihSecici.clear();
-        
-        // Listeyi yenileme işlemini kendi try-catch bloğu içine al.
-        try {
-            // Not: Fonksiyonun adı `finansalIslemleriYukle(1)` olabilir, kendi koduna göre düzenle.
-            await finansalIslemleriYukle(1); 
-        } catch (error) {
-            // Eğer SADECE liste yenileme başarısız olursa, kullanıcıya durumu izah eden bir uyarı ver.
-            console.error("Liste yenilenirken hata oluştu:", error);
-            gosterMesaj('İşlem kaydedildi ancak liste yenilenemedi. Lütfen sayfayı yenileyin.', 'warning');
-        }
+        gosterMesaj(error.message, 'danger');
     }
 }
 
@@ -108,8 +96,12 @@ function silmeOnayiAc(islemId) {
 async function finansalIslemSil() {
     const id = document.getElementById('silinecek-islem-id').value;
     silmeOnayModal.hide();
+    
+    if (!navigator.onLine) {
+        gosterMesaj("İşlemi silmek için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
 
-    // 1. Öğeyi arayüzden anında kaldır
     const silinecekElement = document.getElementById(`finans-islem-${id}`);
     if (!silinecekElement) return;
     
@@ -119,21 +111,13 @@ async function finansalIslemSil() {
     silinecekElement.style.opacity = '0';
     setTimeout(() => silinecekElement.remove(), 400);
 
-    // 2. Arka planda API isteğini gönder
     try {
         const response = await fetch(`/finans/api/islemler/${id}`, { method: 'DELETE' });
         const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error);
-        }
-
+        if (!response.ok) throw new Error(result.error);
         gosterMesaj(result.message, 'success');
-
     } catch (error) {
-        // ---- DÜZELTME BURADA ----
         gosterMesaj(error.message || 'Silme işlemi başarısız, işlem geri yüklendi.', 'danger');
-        
-        // Hata olursa elemanı eski yerine geri ekle
         silinecekElement.style.opacity = '1';
         if (!silinecekElement.parentNode) {
             parent.insertBefore(silinecekElement, nextSibling);
@@ -161,17 +145,12 @@ async function finansalIslemGuncelle() {
     }
 
     try {
-        const response = await fetch(`/finans/api/islemler/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
-        });
+        const response = await fetch(`/finans/api/islemler/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
         const result = await response.json();
-
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             duzenleModal.hide();
-            await finansalIslemleriYukle(1); // Listeyi yenile
+            await finansalIslemleriYukle(1);
         } else {
             gosterMesaj(result.error || 'Güncelleme başarısız.', 'danger');
         }
@@ -208,7 +187,7 @@ function renderFinansAsTable(container, islemler) {
                 <td class="text-end fw-bold ${islem.islem_tipi === 'Ödeme' ? 'text-success' : 'text-danger'}">${parseFloat(islem.tutar).toFixed(2)} TL</td>
                 <td>${islem.aciklama || '-'}</td>
                 <td class="text-center">
-                    <button class="btn btn-sm btn-outline-primary" onclick="duzenleModaliniAc(${islem.id}, '${islem.tutar}', '${islem.aciklama || ''}')" title="Düzenle"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="duzenleModaliniAc(${islem.id}, '${islem.tutar}', '${(islem.aciklama || '').replace(/'/g, "\\'")}')" title="Düzenle"><i class="bi bi-pencil"></i></button>
                     <button class="btn btn-sm btn-outline-danger" onclick="silmeOnayiAc(${islem.id})" title="Sil"><i class="bi bi-trash"></i></button>
                 </td>
             </tr>`;
@@ -230,7 +209,7 @@ function renderFinansAsCards(container, islemler) {
                         <p class="aciklama">${islem.aciklama || 'Açıklama yok'}</p>
                     </div>
                     <div class="finance-card-footer">
-                        <button class="btn btn-sm btn-outline-primary" onclick="duzenleModaliniAc(${islem.id}, '${islem.tutar}', '${islem.aciklama || ''}')" title="Düzenle"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="duzenleModaliniAc(${islem.id}, '${islem.tutar}', '${(islem.aciklama || '').replace(/'/g, "\\'")}')" title="Düzenle"><i class="bi bi-pencil"></i></button>
                         <button class="btn btn-sm btn-outline-danger" onclick="silmeOnayiAc(${islem.id})" title="Sil"><i class="bi bi-trash"></i></button>
                     </div>
                 </div>

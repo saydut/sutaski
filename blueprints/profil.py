@@ -7,11 +7,13 @@ from postgrest import APIError
 
 profil_bp = Blueprint('profil', __name__)
 
-# --- ARAYÜZ SAYFASI ---
 @profil_bp.route('/profil')
 @login_required
 def profil_sayfasi():
     """Kullanıcının profil bilgilerini düzenleyebileceği sayfayı gösterir."""
+    # Service Worker'ın uygulama kabuğunu önbelleğe alması için özel kontrol eklendi
+    if request.headers.get('X-Cache-Me') == 'true':
+        return render_template('profil.html', session={})
     return render_template('profil.html')
 
 # --- API ENDPOINT'LERİ ---

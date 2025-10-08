@@ -1,20 +1,17 @@
-// templates/service-worker.js.jinja (TAM VE GÜNCEL HALİ)
+// templates/service-worker.js.jinja (EN SAĞLAM VE NİHAİ SÜRÜM - CDN Düzeltmesi)
 
 const CACHE_NAME = 'sut-takip-cache-v{{ cache_version }}';
 
-// Önbelleğe alınacak ana uygulama sayfaları (HTML)
-const APP_SHELL_URLS = [
+// Önbelleğe alınacak ana uygulama sayfaları ve temel varlıklar
+const CORE_ASSETS = [
     '/',
     '/login',
     '/offline',
     '/tedarikciler',
     '/raporlar',
     '/yem/yonetim',
-    '/finans/'
-];
-
-// Önbelleğe alınacak statik varlıklar (CSS, JS, Resimler, Fontlar vb.)
-const STATIC_ASSETS = [
+    '/finans/',
+    '/profil',
     '/static/style.css',
     '/static/theme.js',
     '/static/js/utils.js',
@@ -31,47 +28,66 @@ const STATIC_ASSETS = [
     '/static/js/reports.js',
     '/static/js/charts.js',
     '/static/js/chart-manager.js',
+    '/static/js/data-loader.js',
+    '/static/js/profil.js',
     '/static/images/icon.png',
+    '/static/images/favicon.ico'
+];
+
+// Uygulama çalışırken dinamik olarak önbelleğe alınacak dış kaynaklar
+const CDN_ASSETS = [
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css',
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js',
-    'https://npmcdn.com/flatpickr/dist/l10n/tr.js',
+    'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/tr.js', // <-- DEĞİŞİKLİK BURADA
     'https://unpkg.com/dexie@3/dist/dexie.js',
     'https://cdn.jsdelivr.net/npm/chart.js',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?v=1.11.3'
 ];
 
+
+// Bir kaynağı güvenli bir şekilde önbelleğe alan yardımcı fonksiyon
+const cacheAsset = async (cache, assetUrl) => {
+    try {
+        const request = new Request(assetUrl, { redirect: 'follow' });
+        const response = await fetch(request);
+        if (!response.ok) {
+            // Eğer yanıt başarısızsa, bir hata fırlat ki yakalanabilsin.
+            throw new Error(`Ağ yanıtı başarısız: ${response.status} - ${assetUrl}`);
+        }
+        await cache.put(assetUrl, response);
+    } catch (error) {
+        console.warn(`'${assetUrl}' önbelleğe alınamadı:`, error);
+    }
+};
+
+
 self.addEventListener('install', event => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
-      console.log('Cache açıldı ve varlıklar önbelleğe alınıyor.');
-
-      const allAssetsToCache = [...STATIC_ASSETS, ...APP_SHELL_URLS];
+      console.log('Cache açıldı ve temel varlıklar önbelleğe alınıyor.');
       
-      for (const asset of allAssetsToCache) {
-          try {
-              // YENİLİK: Dış kaynaklar (CDN) için 'no-cors' modunda istek yap
-              // Bu, CORS hatası almayı engeller.
-              if (asset.startsWith('http')) {
-                  const request = new Request(asset, { mode: 'no-cors' });
-                  await cache.put(request, await fetch(request));
-              } else {
-                  // Yerel varlıkları normal şekilde ekle
-                  await cache.add(asset);
-              }
-          } catch (err) {
-              console.warn(`'${asset}' önbelleğe alınamadı:`, err);
-          }
-      }
+      // Önce uygulamanın çekirdek dosyalarını önbelleğe al
+      const corePromises = CORE_ASSETS.map(asset => cacheAsset(cache, asset));
+      await Promise.all(corePromises);
+
+      console.log('Çekirdek varlıklar tamamlandı. CDN varlıkları alınıyor.');
+
+      // Sonra dış kaynakları (CDN) önbelleğe al
+      const cdnPromises = CDN_ASSETS.map(asset => cacheAsset(cache, asset));
+      await Promise.all(cdnPromises);
+
+      console.log('Tüm varlıkların önbelleğe alma işlemi tamamlandı.');
     })()
   );
   self.skipWaiting();
 });
+
 
 self.addEventListener('activate', event => {
   event.waitUntil(
@@ -89,50 +105,61 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-self.addEventListener('fetch', event => {
-    const url = new URL(event.request.url);
 
-    // API istekleri için yeni strateji
+self.addEventListener('fetch', event => {
+    const { request } = event;
+    const url = new URL(request.url);
+
+    // API istekleri için her zaman internete git (Network Only)
     if (url.pathname.startsWith('/api/')) {
         event.respondWith(
-            fetch(event.request).catch(() => {
-                // Ağ hatası olduğunda (çevrimdışı), HTML yerine standart bir JSON hatası döndür.
-                // Bu, JavaScript'in "geçersiz JSON" hatası almasını engeller.
+            fetch(request).catch(() => {
                 return new Response(JSON.stringify({ error: 'İnternet bağlantısı yok veya sunucuya ulaşılamıyor.' }), {
-                    status: 503, // Service Unavailable
+                    status: 503,
                     headers: { 'Content-Type': 'application/json' }
                 });
             })
         );
         return;
     }
-    
-    // HTML sayfa navigasyonu için strateji
-    if (event.request.mode === 'navigate') {
-        event.respondWith(
-            (async () => {
-                try {
-                    // Önce internetten almayı dene
-                    const networkResponse = await fetch(event.request);
-                    return networkResponse;
-                } catch (error) {
-                    // İnternet yoksa, önbellekten vermeyi dene
-                    console.log(`Ağ hatası: '${event.request.url}' için önbellekten sunuluyor.`);
-                    const cache = await caches.open(CACHE_NAME);
-                    const cachedResponse = await cache.match(event.request.url);
-                    // İstenen sayfa önbellekte varsa onu, yoksa genel /offline sayfasını ver
-                    return cachedResponse || await cache.match('/offline');
-                }
-            })()
-        );
-        return;
-    } 
-    
-    // Statik dosyalar (CSS, JS, resimler vb.) için strateji
-    // Önce önbelleğe bak, yoksa internetten çek.
+
+    // Diğer tüm istekler için (sayfalar, css, js) - Önce Ağ, sonra Önbellek (Network First)
     event.respondWith(
-        caches.match(event.request).then(response => {
-            return response || fetch(event.request);
-        })
+        (async () => {
+            const cache = await caches.open(CACHE_NAME);
+
+            try {
+                // 1. Önce internetten en güncel halini çekmeyi dene
+                const networkResponse = await fetch(request);
+                
+                // Başarılı olursa, gelecekte kullanmak üzere önbelleği güncelle
+                if (request.method === 'GET') {
+                    cache.put(request, networkResponse.clone());
+                }
+                
+                return networkResponse;
+
+            } catch (error) {
+                // 2. İnternetten çekemezsen (çevrimdışıysan), önbelleğe bak
+                console.log(`Ağ hatası, '${request.url}' için önbellekten sunuluyor.`);
+                const cachedResponse = await cache.match(request);
+                
+                if (cachedResponse) {
+                    return cachedResponse;
+                }
+
+                // 3. Önbellekte de yoksa, navigasyon istekleri için genel offline sayfasını göster
+                if (request.mode === 'navigate') {
+                    return await cache.match('/offline');
+                }
+                
+                // Diğer varlıklar için (js, css) hata döndür
+                return new Response("Kaynak çevrimdışı ve önbellekte bulunamadı.", {
+                    status: 404,
+                    statusText: "Not Found"
+                });
+            }
+        })()
     );
 });
+
