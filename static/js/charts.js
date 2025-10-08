@@ -14,10 +14,15 @@ const charts = {
     async haftalikGrafigiOlustur() {
         try {
             const veri = await api.fetchHaftalikOzet();
-            const ctx = document.getElementById('haftalikRaporGrafigi').getContext('2d');
+            const canvas = document.getElementById('haftalikRaporGrafigi');
+            if (!canvas) return; // Canvas elementi yoksa işlemi durdur
+            const ctx = canvas.getContext('2d');
             
+            // --- HATA DÜZELTMESİ ---
+            // Grafiği yok etmeden önce var olup olmadığını kontrol et
             if (this.haftalikChart) {
                 this.haftalikChart.destroy();
+                this.haftalikChart = null; // Referansı temizle
             }
 
             this.haftalikChart = new Chart(ctx, {
@@ -45,17 +50,13 @@ const charts = {
                 }
             });
 
-            // Oluşturulan grafiği merkezi yöneticiye kaydet
             registerChart(this.haftalikChart);
-            
-            // Temanın anında uygulanması için güncelleme fonksiyonunu çağır
             if (typeof updateAllChartThemes === 'function') {
                 updateAllChartThemes();
             }
 
         } catch (error) {
             console.error("Haftalık grafik oluşturulurken hata:", error.message);
-            // İsteğe bağlı: Grafik alanında bir hata mesajı gösterilebilir.
         }
     },
 
@@ -66,54 +67,50 @@ const charts = {
     async tedarikciGrafigiOlustur() {
         const veriYokMesaji = document.getElementById('tedarikci-veri-yok');
         const canvas = document.getElementById('tedarikciDagilimGrafigi');
+        if (!canvas) return; // Canvas elementi yoksa işlemi durdur
         const ctx = canvas.getContext('2d');
 
-        // Adım 1: Önceki grafiği temizle ve "Yükleniyor..." durumunu ayarla
+        // --- HATA DÜZELTMESİ ---
+        // Grafiği yok etmeden önce var olup olmadığını kontrol et
         if (this.tedarikciChart) {
             this.tedarikciChart.destroy();
+            this.tedarikciChart = null; // Referansı temizle
         }
-        canvas.style.display = 'none'; // Canvas'ı (grafik alanı) tamamen gizle
-        veriYokMesaji.style.display = 'block'; // Mesaj/yükleniyor alanını göster
-        veriYokMesaji.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>'; // İçine spinner koy
+        
+        canvas.style.display = 'none';
+        veriYokMesaji.style.display = 'block';
+        veriYokMesaji.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>';
 
         try {
             const veri = await api.fetchTedarikciDagilimi();
             
             if (veri.labels.length === 0) {
                 veriYokMesaji.textContent = 'Son 30 günde veri bulunamadı.';
-                return; // Canvas gizli kalacak, sadece bu yazı görünecek.
+                return;
             }
 
-            // Adım 2: Veriyi işle (Çok fazla tedarikçiyi "Diğerleri" altında grupla)
-            const GRAFIKTE_GOSTERILECEK_SAYI = 9; // En büyük 9 dilimi göster
-            let islenmisVeri = {
-                labels: veri.labels,
-                data: veri.data
-            };
+            const GRAFIKTE_GOSTERILECEK_SAYI = 9;
+            let islenmisVeri = { labels: veri.labels, data: veri.data };
 
-            // Eğer gösterilecek sayıdan daha fazla tedarikçi varsa gruplama yap
             if (veri.labels.length > GRAFIKTE_GOSTERILECEK_SAYI + 1) {
                 const digerleriToplami = veri.data.slice(GRAFIKTE_GOSTERILECEK_SAYI).reduce((a, b) => a + b, 0);
-                
                 islenmisVeri.labels = veri.labels.slice(0, GRAFIKTE_GOSTERILECEK_SAYI);
-                islenmisVeri.labels.push('Diğerleri'); // Yeni bir etiket ekle
-                
+                islenmisVeri.labels.push('Diğerleri');
                 islenmisVeri.data = veri.data.slice(0, GRAFIKTE_GOSTERILECEK_SAYI);
-                islenmisVeri.data.push(digerleriToplami); // Diğerlerinin toplamını ekle
+                islenmisVeri.data.push(digerleriToplami);
             }
             
-            // Adım 3: Grafiği oluştur ve göster
-            veriYokMesaji.style.display = 'none'; // Yükleniyor alanını gizle
-            canvas.style.display = 'block'; // Grafik alanını göster
+            veriYokMesaji.style.display = 'none';
+            canvas.style.display = 'block';
 
             this.tedarikciChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: islenmisVeri.labels, // İşlenmiş etiketleri kullan
+                    labels: islenmisVeri.labels,
                     datasets: [{
                         label: 'Litre',
-                        data: islenmisVeri.data, // İşlenmiş veriyi kullan
-                        backgroundColor: [ // Daha canlı ve ayırt edici bir renk paleti
+                        data: islenmisVeri.data,
+                        backgroundColor: [
                             '#3B82F6', '#EF4444', '#F59E0B', '#10B981', '#6366F1', 
                             '#8B5CF6', '#EC4899', '#F97316', '#06B6D4', '#64748B'
                         ],
@@ -139,7 +136,7 @@ const charts = {
 
         } catch (error) {
             console.error("Tedarikçi grafiği oluşturulurken hata:", error.message);
-            veriYokMesaji.textContent = 'Grafik yüklenemedi.'; // Hata mesajını ayarla
+            veriYokMesaji.textContent = 'Grafik yüklenemedi.';
         }
     }
 };
