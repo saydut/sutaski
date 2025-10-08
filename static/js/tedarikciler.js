@@ -1,4 +1,4 @@
-// static/js/tedarikciler.js (ÇEVRİMDIŞI KAYIT EKLENDİ)
+// static/js/tedarikciler.js (MERKEZİ API KULLANAN YENİ VERSİYON)
 
 let tedarikciModal, silmeOnayModal;
 let mevcutSayfa = 1;
@@ -172,38 +172,25 @@ async function tedarikciKaydet() {
     };
     if (!veri.isim) { gosterMesaj("Tedarikçi ismi zorunludur.", "warning"); return; }
     
-    // --- YENİ ÇEVRİMDIŞI MANTIĞI ---
     if (!navigator.onLine) {
-        // Düzenleme çevrimdışı desteklenmiyor
         if (id) {
             gosterMesaj("Tedarikçi düzenlemek için internet bağlantısı gereklidir.", "warning");
             return;
         }
-        // Yeni kayıt ise çevrimdışı kaydet
         const basarili = await kaydetTedarikciCevrimdisi(veri);
-        if (basarili) {
-            tedarikciModal.hide();
-        }
+        if (basarili) tedarikciModal.hide();
         return;
     }
 
-    // --- Mevcut Çevrimiçi Mantığı ---
     kaydetButton.disabled = true;
     kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
-    const url = id ? `/api/tedarikci_duzenle/${id}` : '/api/tedarikci_ekle';
-    const method = id ? 'PUT' : 'POST';
     try {
-        const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, "success");
-            tedarikciModal.hide();
-            await verileriYukle();
-        } else {
-            gosterMesaj(result.error || "Bir hata oluştu.", "danger");
-        }
+        const result = id ? await api.updateTedarikci(id, veri) : await api.postTedarikci(veri);
+        gosterMesaj(result.message, "success");
+        tedarikciModal.hide();
+        await verileriYukle();
     } catch (error) {
-        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+        gosterMesaj(error.message || "Bir hata oluştu.", "danger");
     } finally {
         kaydetButton.disabled = false;
         kaydetButton.innerHTML = originalButtonText;
@@ -217,17 +204,12 @@ async function tedarikciSil() {
         return;
     }
     try {
-        const response = await fetch(`/api/tedarikci_sil/${id}`, { method: 'DELETE' });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            silmeOnayModal.hide();
-            await verileriYukle(); 
-        } else {
-            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
-        }
+        const result = await api.deleteTedarikci(id);
+        gosterMesaj(result.message, 'success');
+        silmeOnayModal.hide();
+        await verileriYukle(); 
     } catch (error) {
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+        gosterMesaj(error.message || 'Silme işlemi başarısız.', 'danger');
     }
 }
 
@@ -278,4 +260,3 @@ function silmeOnayiAc(id, isim) {
     document.getElementById('silinecek-tedarikci-adi').innerText = isim;
     silmeOnayModal.show();
 }
-

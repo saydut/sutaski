@@ -1,15 +1,14 @@
 // ====================================================================================
-// API İLETİŞİM KATMANI (api.js)
+// API İLETİŞİM KATMANI (api.js) - YENİDEN DÜZENLENDİ
 // Bu dosya, sunucu ile olan tüm 'fetch' tabanlı iletişimi yönetir.
-// Her fonksiyon, bir API endpoint'ine istek yapar ve Promise döndürür.
-// Başarılı olursa JSON verisini, başarısız olursa hatayı 'reject' eder.
+// Artık projedeki TEK sunucu iletişim noktası burasıdır.
 // ====================================================================================
 
 const api = {
     /**
-     * Genel bir API isteği yapmak için yardımcı fonksiyon.
+     * Genel bir API isteği yapmak için merkezi fonksiyon.
      * @param {string} url - İstek yapılacak URL.
-     * @param {object} options - Fetch için yapılandırma seçenekleri (method, headers, body vb.).
+     * @param {object} options - Fetch için yapılandırma seçenekleri.
      * @returns {Promise<any>} - Başarılı olursa JSON verisi.
      */
     async request(url, options = {}) {
@@ -17,141 +16,65 @@ const api = {
             const response = await fetch(url, options);
             const data = await response.json();
             if (!response.ok) {
-                // Sunucudan gelen hata mesajını kullanarak bir hata fırlat
                 throw new Error(data.error || `HTTP error! status: ${response.status}`);
             }
             return data;
         } catch (error) {
             console.error(`API isteği hatası (${url}):`, error);
-            // Hata objesini yeniden fırlatarak çağıran fonksiyona iletiyoruz.
             throw error;
         }
     },
 
-    /**
-     * Belirli bir tarihin özet verilerini (toplam litre, girdi sayısı) çeker.
-     * @param {string} tarih - 'YYYY-MM-DD' formatında tarih.
-     * @returns {Promise<{toplam_litre: number, girdi_sayisi: number}>}
-     */
-    fetchGunlukOzet(tarih) {
-        return this.request(`/api/rapor/gunluk_ozet?tarih=${tarih}`);
-    },
+    // --- Rapor ve Ana Panel API'ları ---
+    fetchGunlukOzet(tarih) { return this.request(`/api/rapor/gunluk_ozet?tarih=${tarih}`); },
+    fetchHaftalikOzet() { return this.request('/api/rapor/haftalik_ozet'); },
+    fetchTedarikciDagilimi() { return this.request('/api/rapor/tedarikci_dagilimi'); },
 
-    /**
-     * Belirli bir tarih ve sayfa için süt girdilerini çeker.
-     * @param {string} tarih - 'YYYY-MM-DD' formatında tarih.
-     * @param {number} sayfa - Getirilecek sayfa numarası.
-     * @returns {Promise<{girdiler: Array, toplam_girdi_sayisi: number}>}
-     */
-    fetchSutGirdileri(tarih, sayfa) {
-        return this.request(`/api/sut_girdileri?tarih=${tarih}&sayfa=${sayfa}`);
-    },
+    // --- Süt Girdisi API'ları ---
+    fetchSutGirdileri(tarih, sayfa) { return this.request(`/api/sut_girdileri?tarih=${tarih}&sayfa=${sayfa}`); },
+    postSutGirdisi(veri) { return this.request('/api/sut_girdisi_ekle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    updateSutGirdisi(id, veri) { return this.request(`/api/sut_girdisi_duzenle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    deleteSutGirdisi(id) { return this.request(`/api/sut_girdisi_sil/${id}`, { method: 'DELETE' }); },
+    fetchGirdiGecmisi(id) { return this.request(`/api/girdi_gecmisi/${id}`); },
 
-    /**
-     * Son 7 günlük süt toplama verisini grafik için çeker.
-     * @returns {Promise<{labels: Array<string>, data: Array<number>}>}
-     */
-    fetchHaftalikOzet() {
-        return this.request('/api/rapor/haftalik_ozet');
-    },
+    // --- Tedarikçi API'ları ---
+    fetchTedarikciler() { return this.request('/api/tedarikciler_dropdown', { cache: 'no-cache' }); },
+    postTedarikci(veri) { return this.request('/api/tedarikci_ekle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    updateTedarikci(id, veri) { return this.request(`/api/tedarikci_duzenle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    deleteTedarikci(id) { return this.request(`/api/tedarikci_sil/${id}`, { method: 'DELETE' }); },
 
-    /**
-     * Son 30 günlük tedarikçi dağılımını grafik için çeker.
-     * @returns {Promise<{labels: Array<string>, data: Array<number>}>}
-     */
-    fetchTedarikciDagilimi() {
-        return this.request('/api/rapor/tedarikci_dagilimi');
-    },
+    // --- Yem Ürünü API'ları ---
+    postYemUrunu(veri) { return this.request('/yem/api/urunler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    updateYemUrunu(id, veri) { return this.request(`/yem/api/urunler/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    deleteYemUrunu(id) { return this.request(`/yem/api/urunler/${id}`, { method: 'DELETE' }); },
+    fetchYemUrunleriListe() { return this.request('/yem/api/urunler/liste'); },
 
-// BU FONKSİYONU BUL VE GÜNCELLE
-    /**
-     * Tüm tedarikçilerin listesini çeker.
-     * @returns {Promise<Array<{id: number, isim: string}>>}
-     */
-    fetchTedarikciler() {
-        // Dropdownlar için tam listeyi çeken yeni endpoint'i kullanıyoruz.
-        return this.request('/api/tedarikciler_dropdown', { cache: 'no-cache' });
-    },
+    // --- Yem İşlemi API'ları ---
+    postYemIslemi(veri) { return this.request('/yem/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    updateYemIslemi(id, veri) { return this.request(`/yem/api/islemler/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    deleteYemIslemi(id) { return this.request(`/yem/api/islemler/${id}`, { method: 'DELETE' }); },
 
-    /**
-     * Sunucuya yeni bir süt girdisi gönderir.
-     * @param {object} girdiVerisi - {tedarikci_id, litre, fiyat}
-     * @returns {Promise<any>}
-     */
-    postSutGirdisi(girdiVerisi) {
-        return this.request('/api/sut_girdisi_ekle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(girdiVerisi)
-        });
-    },
+    // --- Finansal İşlem API'ları ---
+    postFinansalIslem(veri) { return this.request('/finans/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    updateFinansalIslem(id, veri) { return this.request(`/finans/api/islemler/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    deleteFinansalIslem(id) { return this.request(`/finans/api/islemler/${id}`, { method: 'DELETE' }); },
 
-    /**
-     * Mevcut bir süt girdisini günceller.
-     * @param {number} girdiId - Güncellenecek girdinin ID'si.
-     * @param {object} guncelVeri - {yeni_litre, duzenleme_sebebi}
-     * @returns {Promise<any>}
-     */
-    updateSutGirdisi(girdiId, guncelVeri) {
-        return this.request(`/api/sut_girdisi_duzenle/${girdiId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(guncelVeri)
-        });
-    },
-
-    /**
-     * Bir süt girdisini siler.
-     * @param {number} girdiId - Silinecek girdinin ID'si.
-     * @returns {Promise<any>}
-     */
-    deleteSutGirdisi(girdiId) {
-        return this.request(`/api/sut_girdisi_sil/${girdiId}`, { method: 'DELETE' });
-    },
-
-    /**
-     * Bir girdinin düzenleme geçmişini çeker.
-     * @param {number} girdiId - Geçmişi istenen girdinin ID'si.
-     * @returns {Promise<Array<object>>}
-     */
-    fetchGirdiGecmisi(girdiId) {
-        return this.request(`/api/girdi_gecmisi/${girdiId}`);
-    },
-
-    /**
-     * Kullanıcı şifresini değiştirmek için istek gönderir.
-     * @param {object} sifreVerisi - {mevcut_sifre, yeni_sifre, yeni_sifre_tekrar}
-     * @returns {Promise<any>}
-     */
-    postChangePassword(sifreVerisi) {
-        return this.request('/api/user/change_password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(sifreVerisi)
-        });
-    },
+    // --- Kullanıcı ve Profil API'ları ---
+    postChangePassword(veri) { return this.request('/api/user/change_password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     
-    /**
-     * Verileri CSV olarak dışa aktarmak için istekte bulunur.
-     * @param {string|null} tarih - İsteğe bağlı, dışa aktarılacak tarih.
-     * @returns {Promise<{filename: string, blob: Blob}>}
-     */
+    // --- CSV Dışa Aktarma (Blob döndürdüğü için özel) ---
     async fetchCsvExport(tarih) {
         try {
-            const url = `/api/export_csv${tarih ? `?tarih=${tarih}` : ''}`;
+            const url = `/api/rapor/export_csv${tarih ? `?tarih=${tarih}` : ''}`;
             const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error('CSV dosyası oluşturulurken bir hata oluştu.');
-            }
+            if (!response.ok) throw new Error('CSV dosyası oluşturulurken bir hata oluştu.');
             
             const disposition = response.headers.get('Content-Disposition');
-            let filename = "sut_raporu.csv"; // Varsayılan dosya adı
+            let filename = "sut_raporu.csv";
             if (disposition && disposition.includes('attachment')) {
                 const filenameMatch = /filename[^;=\n]*=(['"]?)([^'";\n]+)\1?/;
                 const matches = filenameMatch.exec(disposition);
-                if (matches && matches[2]) {
-                    filename = matches[2];
-                }
+                if (matches && matches[2]) filename = matches[2];
             }
             
             const blob = await response.blob();
