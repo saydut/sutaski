@@ -234,3 +234,47 @@ def delete_surum_notu(id):
     except Exception as e:
         print(f"Sürüm notu silinirken hata: {e}")
         return jsonify({"error": "Sürüm notu silinemedi."}), 500
+    
+# --- BAKIM MODU API'LARI ---
+
+@admin_bp.route('/api/admin/maintenance_status', methods=['GET'])
+@login_required
+@admin_required
+def get_maintenance_status():
+    try:
+        response = supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'maintenance_mode').single().execute()
+        # Eğer ayar hiç yoksa, varsayılan olarak 'false' kabul et
+        is_maintenance = response.data.get('ayar_degeri', 'false') == 'true' if response.data else False
+        return jsonify({"is_maintenance_mode": is_maintenance})
+    except Exception as e:
+        print(f"Bakım modu durumu alınırken hata: {e}")
+        return jsonify({"error": "Bakım modu durumu alınamadı."}), 500
+
+@admin_bp.route('/api/admin/toggle_maintenance', methods=['POST'])
+@login_required
+@admin_required
+def toggle_maintenance_mode():
+    try:
+        data = request.get_json()
+        yeni_durum_str = 'true' if data.get('maintenance_mode') else 'false'
+
+        # Önce ayarın var olup olmadığını kontrol et
+        response = supabase.table('ayarlar').select('ayar_adi').eq('ayar_adi', 'maintenance_mode').execute()
+
+        if response.data:
+            # Ayar varsa, güncelle (update)
+            supabase.table('ayarlar').update({
+                'ayar_degeri': yeni_durum_str
+            }).eq('ayar_adi', 'maintenance_mode').execute()
+        else:
+            # Ayar yoksa, yeni satır olarak ekle (insert)
+            supabase.table('ayarlar').insert({
+                'ayar_adi': 'maintenance_mode',
+                'ayar_degeri': yeni_durum_str
+            }).execute()
+        
+        mesaj = "Uygulama başarıyla bakım moduna alındı." if yeni_durum_str == 'true' else "Uygulama bakım modundan çıkarıldı."
+        return jsonify({"message": mesaj})
+    except Exception as e:
+        print(f"Bakım modu değiştirilirken hata: {e}")
+        return jsonify({"error": "Bakım modu güncellenemedi."}), 500

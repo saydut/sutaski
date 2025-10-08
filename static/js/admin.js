@@ -68,8 +68,10 @@ async function adminVerileriniYukle() {
         } else {
             gosterMesaj(surumNotlari.error || "Sürüm notları yüklenemedi.", "danger");
         }
-        // BU SATIRI EKLEYİN
+        
         mevcutOnbellekSurumunuYukle();
+        // *** YENİ EKLENEN SATIR: Sayfa yüklendiğinde bakım modu durumunu kontrol eder. ***
+        mevcutBakimModunuYukle();
 
     } catch (error) {
         console.error("Admin verileri yüklenirken hata:", error);
@@ -151,7 +153,6 @@ async function surumNotuSil(id) {
     }
 }
 
-// YENİ FONKSİYON
 function surumDuzenlemeModaliniAc(id) {
     const not = tumSurumNotlari.find(n => n.id === id);
     if (!not) {
@@ -167,7 +168,6 @@ function surumDuzenlemeModaliniAc(id) {
     surumDuzenleModal.show();
 }
 
-// YENİ FONKSİYON
 async function surumNotuGuncelle() {
     const id = document.getElementById('edit-surum-id').value;
     const selectedDate = document.getElementById('edit-yayin-tarihi-input')._flatpickr.selectedDates[0];
@@ -202,7 +202,7 @@ async function surumNotuGuncelle() {
     }
 }
 
-// --- ŞİRKET VE KULLANICI YÖNETİMİ FONKSİYONLARI (DEĞİŞİKLİK YOK) ---
+// --- ŞİRKET VE KULLANICI YÖNETİMİ FONKSİYONLARI ---
 
 function sirketleriDoldur(sirketler) {
     const tbody = document.getElementById('sirketler-tablosu');
@@ -317,52 +317,6 @@ function sirketSilmeOnayiAc(sirketId, sirketAdi) {
     sirketSilmeOnayModal.show();
 }
 
-// --- DİNAMİK ÖNBELLEK YÖNETİMİ FONKSİYONLARI ---
-
-/**
- * Mevcut önbellek sürümünü sunucudan alır ve ekranda gösterir.
- */
-async function mevcutOnbellekSurumunuYukle() {
-    const displayElement = document.getElementById('cache-version-display');
-    try {
-        const response = await fetch('/api/admin/cache_version');
-        const data = await response.json();
-        if (response.ok) {
-            displayElement.textContent = `v${data.version}`;
-        } else {
-            displayElement.textContent = 'Hata';
-            gosterMesaj(data.error || 'Sürüm alınamadı.', 'danger');
-        }
-    } catch (error) {
-        displayElement.textContent = 'Hata';
-        gosterMesaj('Önbellek sürümü alınırken sunucu hatası.', 'danger');
-    }
-}
-
-/**
- * Sürüm artırma butonuna tıklandığında çalışır.
- */
-async function onbellekSurumunuArtir() {
-    if (!confirm("Önbellek sürümünü bir artırmak istediğinizden emin misiniz? Bu işlem, tüm kullanıcıların bir sonraki ziyaretlerinde uygulamayı yeniden indirmesine neden olur.")) {
-        return;
-    }
-    
-    try {
-        const response = await fetch('/api/admin/increment_cache_version', { method: 'POST' });
-        const data = await response.json();
-        if (response.ok) {
-            gosterMesaj(data.message, 'success');
-            document.getElementById('cache-version-display').textContent = `v${data.new_version}`;
-        } else {
-            gosterMesaj(data.error || 'İşlem başarısız.', 'danger');
-        }
-    } catch (error) {
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
-    }
-}
-
-
-
 async function sirketSil() {
     const sirketId = document.getElementById('silinecek-sirket-id').value;
     try {
@@ -416,5 +370,114 @@ async function sifreSifirla() {
     } catch (error) {
         console.error("Şifre sıfırlanırken hata:", error);
         gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
+    }
+}
+
+// --- DİNAMİK ÖNBELLEK YÖNETİMİ FONKSİYONLARI ---
+
+/**
+ * Mevcut önbellek sürümünü sunucudan alır ve ekranda gösterir.
+ */
+async function mevcutOnbellekSurumunuYukle() {
+    const displayElement = document.getElementById('cache-version-display');
+    try {
+        const response = await fetch('/api/admin/cache_version');
+        const data = await response.json();
+        if (response.ok) {
+            displayElement.textContent = `v${data.version}`;
+        } else {
+            displayElement.textContent = 'Hata';
+            gosterMesaj(data.error || 'Sürüm alınamadı.', 'danger');
+        }
+    } catch (error) {
+        displayElement.textContent = 'Hata';
+        gosterMesaj('Önbellek sürümü alınırken sunucu hatası.', 'danger');
+    }
+}
+
+/**
+ * Sürüm artırma butonuna tıklandığında çalışır.
+ */
+async function onbellekSurumunuArtir() {
+    if (!confirm("Önbellek sürümünü bir artırmak istediğinizden emin misiniz? Bu işlem, tüm kullanıcıların bir sonraki ziyaretlerinde uygulamayı yeniden indirmesine neden olur.")) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/admin/increment_cache_version', { method: 'POST' });
+        const data = await response.json();
+        if (response.ok) {
+            gosterMesaj(data.message, 'success');
+            document.getElementById('cache-version-display').textContent = `v${data.new_version}`;
+        } else {
+            gosterMesaj(data.error || 'İşlem başarısız.', 'danger');
+        }
+    } catch (error) {
+        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+    }
+}
+
+
+// --- BAKIM MODU FONKSİYONLARI ---
+
+/**
+ * Mevcut bakım modu durumunu sunucudan alır ve anahtarı ayarlar.
+ */
+async function mevcutBakimModunuYukle() {
+    const switchInput = document.getElementById('maintenance-switch');
+    const statusLabel = document.getElementById('maintenance-status-label');
+    try {
+        const response = await fetch('/api/admin/maintenance_status');
+        const data = await response.json();
+        if (response.ok) {
+            switchInput.checked = data.is_maintenance_mode;
+            statusLabel.textContent = data.is_maintenance_mode ? 'Aktif' : 'Pasif';
+        } else {
+            statusLabel.textContent = 'Hata';
+            gosterMesaj(data.error || 'Bakım modu durumu alınamadı.', 'danger');
+        }
+    } catch (error) {
+        statusLabel.textContent = 'Hata';
+        gosterMesaj('Bakım modu durumu alınırken sunucu hatası.', 'danger');
+    }
+}
+
+/**
+ * Bakım modu anahtarı değiştirildiğinde çalışır.
+ */
+async function toggleMaintenanceMode() {
+    const switchInput = document.getElementById('maintenance-switch');
+    const statusLabel = document.getElementById('maintenance-status-label');
+    const yeniDurum = switchInput.checked;
+
+    const onayMesaji = yeniDurum 
+        ? "Uygulamayı bakım moduna almak istediğinizden emin misiniz? Siz hariç kimse siteye erişemeyecek."
+        : "Uygulamayı bakım modundan çıkarmak istediğinizden emin misiniz? Site herkesin erişimine açılacak.";
+
+    if (!confirm(onayMesaji)) {
+        switchInput.checked = !yeniDurum; // İşlemi iptal et, anahtarı eski haline getir
+        return;
+    }
+    
+    statusLabel.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    try {
+        const response = await fetch('/api/admin/toggle_maintenance', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 'maintenance_mode': yeniDurum })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            gosterMesaj(data.message, 'success');
+            statusLabel.textContent = yeniDurum ? 'Aktif' : 'Pasif';
+        } else {
+            gosterMesaj(data.error || 'İşlem başarısız.', 'danger');
+            switchInput.checked = !yeniDurum; // Hata olursa anahtarı geri al
+            statusLabel.textContent = !yeniDurum ? 'Pasif' : 'Aktif';
+        }
+    } catch (error) {
+        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
+        switchInput.checked = !yeniDurum; // Hata olursa anahtarı geri al
     }
 }

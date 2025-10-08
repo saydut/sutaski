@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask, render_template, request, session, g, jsonify
 from dotenv import load_dotenv
 from datetime import datetime
 from functools import lru_cache
@@ -11,7 +11,7 @@ from blueprints.main import main_bp
 from blueprints.admin import admin_bp
 from blueprints.yem import yem_bp
 from blueprints.finans import finans_bp
-from blueprints.profil import profil_bp # -> BU SATIRI EKLE
+from blueprints.profil import profil_bp
 
 # Yeniden yapılandırma sonrası eklenen yeni blueprint'ler
 from blueprints.tedarikci import tedarikci_bp
@@ -26,6 +26,48 @@ def create_app():
     app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "varsayilan-cok-guvenli-bir-anahtar")
     app.config['JSON_AS_ASCII'] = False
 
+    @app.before_request
+    def check_for_maintenance():
+        # Bakım modu kontrolünün uygulanmayacağı yolların listesi
+        exempt_paths = [
+            '/static', 
+            '/admin', 
+            '/api/admin', 
+            '/login', 
+            '/logout', 
+            '/register', 
+            '/api/login', 
+            '/api/register'
+        ]
+        
+        # Eğer istenen yol bu listeki yollardan biriyle başlıyorsa, kontrol yapma
+        for path in exempt_paths:
+            if request.path.startswith(path):
+                return
+
+        # Oturumda kullanıcı 'admin' ise kontrol dışı bırak
+        if session.get('user', {}).get('rol') == 'admin':
+            return
+            
+        try:
+            # g objesi, tek bir istek boyunca veri saklamak için kullanılır.
+            if 'maintenance_mode' not in g:
+                response = supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'maintenance_mode').single().execute()
+                g.maintenance_mode = response.data.get('ayar_degeri', 'false') == 'true' if response.data else False
+            
+            if g.maintenance_mode:
+                # API istekleri için JSON, normal sayfa istekleri için HTML döndür
+                if request.path.startswith('/api/'):
+                    return jsonify({"error": "Uygulama şu anda bakımda. Lütfen daha sonra tekrar deneyin."}), 503
+                # 503 HTTP status kodu "Service Unavailable" anlamına gelir, bu durum için daha doğrudur.
+                return render_template('maintenance.html'), 503
+        except Exception as e:
+            # Veritabanına ulaşılamazsa veya başka bir hata olursa bunu sunucu loglarına yazdır.
+            print(f"BAKIM MODU KONTROL HATASI: {e}")
+            # Hata durumunda, en güvenli varsayım bakım modunun aktif olmadığıdır.
+            # 'pass' komutu sayesinde uygulama çökmeyecek ve normal şekilde devam etmeye çalışacaktır.
+            pass
+
     @app.template_filter('format_tarih_str')
     def format_tarih_filter(value):
         """String formatındaki 'YYYY-MM-DD' tarihini 'DD.MM.YYYY' formatına çevirir."""
@@ -37,15 +79,12 @@ def create_app():
         except (ValueError, TypeError):
             return value
 
-    @lru_cache(maxsize=None) # Basit bir bellek içi önbellekleme
+    @lru_cache(maxsize=None)
     def get_version_info():
         try:
-            # Tek bir sorgu ile tüm notları çek
             all_versions_res = supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).order('id', desc=True).execute()
-            
             if not all_versions_res.data:
                 return "1.0.0", []
-
             surum_notlari = all_versions_res.data
             app_version = surum_notlari[0]['surum_no']
             return app_version, surum_notlari
@@ -70,7 +109,7 @@ def create_app():
     app.register_blueprint(tedarikci_bp)
     app.register_blueprint(sut_bp)
     app.register_blueprint(rapor_bp)
-    app.register_blueprint(profil_bp) # -> BU SATIRI EKLE
+    app.register_blueprint(profil_bp)
 
     return app
 
