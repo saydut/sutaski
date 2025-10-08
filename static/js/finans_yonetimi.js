@@ -3,7 +3,7 @@
 let tedarikciSecici, tarihSecici;
 let duzenleModal, silmeOnayModal;
 let mevcutGorunum = 'tablo';
-const KAYIT_SAYISI = 5; // Backend'deki limit ile aynı olmalı
+const KAYIT_SAYISI = 5;
 
 window.onload = function() {
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
@@ -15,7 +15,7 @@ window.onload = function() {
     gorunumuAyarla(mevcutGorunum);
 
     tedarikcileriDoldur();
-    finansalIslemleriYukle(1); // İlk sayfayı yükle
+    finansalIslemleriYukle(1);
 };
 
 function gorunumuDegistir(yeniGorunum) {
@@ -23,7 +23,7 @@ function gorunumuDegistir(yeniGorunum) {
     mevcutGorunum = yeniGorunum;
     localStorage.setItem('finansGorunum', yeniGorunum);
     gorunumuAyarla(yeniGorunum);
-    finansalIslemleriYukle(1); // Görünüm değiştiğinde ilk sayfayı yükle
+    finansalIslemleriYukle(1);
 }
 
 function gorunumuAyarla(aktifGorunum) {

@@ -4,7 +4,6 @@ let mevcutGorunum = 'tablo';
 
 function gorunumuAyarla(aktifGorunum) {
     document.querySelectorAll('.gorunum-konteyneri-detay').forEach(el => {
-        // ID'sinde aktif görünümün adını içerenleri göster, diğerlerini gizle
         if (el.id.includes(aktifGorunum)) {
             el.style.display = el.classList.contains('row') ? 'flex' : 'block';
         } else {
@@ -21,13 +20,11 @@ function gorunumuDegistir(yeniGorunum) {
     localStorage.setItem('tedarikciDetayGorunum', yeniGorunum);
     gorunumuAyarla(yeniGorunum);
 
-    // Aktif olan sekmeyi yeniden yükle
     const aktifSekme = document.querySelector('.nav-tabs .nav-link.active');
     if (aktifSekme.id === 'sut-tab') sutGirdileriniYukle(1);
     else if (aktifSekme.id === 'yem-tab') yemIslemleriniYukle(1);
     else if (aktifSekme.id === 'finans-tab') finansalIslemleriYukle(1);
 }
-// EKLENECEK KOD SONU
 
 
 const yuklenenSekmeler = {
@@ -43,21 +40,17 @@ window.onload = () => {
 
     ayYilSecicileriniDoldur('rapor-ay', 'rapor-yil');
     ozetVerileriniYukle();
-    sutGirdileriniYukle(1);
+    sutGirdileriniYukle(1); // İlk sekmeyi direkt yükle
     sekmeOlaylariniAyarla();
 };
 
 function sekmeOlaylariniAyarla() {
     document.getElementById('yem-tab').addEventListener('show.bs.tab', () => {
-        if (!yuklenenSekmeler.yem) {
-            yemIslemleriniYukle(1);
-        }
+        if (!yuklenenSekmeler.yem) yemIslemleriniYukle(1);
     }, { once: true });
 
     document.getElementById('finans-tab').addEventListener('show.bs.tab', () => {
-        if (!yuklenenSekmeler.finans) {
-            finansalIslemleriYukle(1);
-        }
+        if (!yuklenenSekmeler.finans) finansalIslemleriYukle(1);
     }, { once: true });
 }
 
@@ -90,8 +83,7 @@ async function ozetVerileriniYukle() {
 
 async function sutGirdileriniYukle(sayfa = 1) {
     yuklenenSekmeler.sut = true;
-    await veriYukleVeGoster({
-        sayfa: sayfa,
+    await genelVeriYukleyici({
         apiURL: `/api/tedarikci/${TEDARIKCI_ID}/sut_girdileri?sayfa=${sayfa}`,
         veriAnahtari: 'girdiler',
         tabloBodyId: 'sut-girdileri-tablosu',
@@ -100,14 +92,16 @@ async function sutGirdileriniYukle(sayfa = 1) {
         sayfalamaId: 'sut-sayfalama',
         tabloRenderFn: renderSutAsTable,
         kartRenderFn: renderSutAsCards,
-        yukleFn: sutGirdileriniYukle
+        yukleFn: sutGirdileriniYukle,
+        sayfa: sayfa,
+        kayitSayisi: KAYIT_SAYISI,
+        mevcutGorunum: mevcutGorunum
     });
 }
 
 async function yemIslemleriniYukle(sayfa = 1) {
     yuklenenSekmeler.yem = true;
-    await veriYukleVeGoster({
-        sayfa: sayfa,
+    await genelVeriYukleyici({
         apiURL: `/api/tedarikci/${TEDARIKCI_ID}/yem_islemleri?sayfa=${sayfa}`,
         veriAnahtari: 'islemler',
         tabloBodyId: 'yem-islemleri-tablosu',
@@ -116,14 +110,16 @@ async function yemIslemleriniYukle(sayfa = 1) {
         sayfalamaId: 'yem-sayfalama',
         tabloRenderFn: renderYemAsTable,
         kartRenderFn: renderYemAsCards,
-        yukleFn: yemIslemleriniYukle
+        yukleFn: yemIslemleriniYukle,
+        sayfa: sayfa,
+        kayitSayisi: KAYIT_SAYISI,
+        mevcutGorunum: mevcutGorunum
     });
 }
 
 async function finansalIslemleriYukle(sayfa = 1) {
     yuklenenSekmeler.finans = true;
-    await veriYukleVeGoster({
-        sayfa: sayfa,
+    await genelVeriYukleyici({
         apiURL: `/api/tedarikci/${TEDARIKCI_ID}/finansal_islemler?sayfa=${sayfa}`,
         veriAnahtari: 'islemler',
         tabloBodyId: 'finansal-islemler-tablosu',
@@ -132,7 +128,10 @@ async function finansalIslemleriYukle(sayfa = 1) {
         sayfalamaId: 'finans-sayfalama',
         tabloRenderFn: renderFinansAsTable,
         kartRenderFn: renderFinansAsCards,
-        yukleFn: finansalIslemleriYukle
+        yukleFn: finansalIslemleriYukle,
+        sayfa: sayfa,
+        kayitSayisi: KAYIT_SAYISI,
+        mevcutGorunum: mevcutGorunum
     });
 }
 

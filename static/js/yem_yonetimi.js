@@ -1,23 +1,17 @@
-// static/js/yem_yonetimi.js (Merkezi veri yükleyici kullanan, hatasız tam versiyon)
-
 let yemIslemSilmeOnayModal, yemIslemDuzenleModal;
 let tedarikciSecici, yemUrunSecici;
 let yemUrunuModal, yemSilmeOnayModal;
 
-// Görünüm ve sayfalama durumunu tutan değişkenler
 let mevcutGorunum = 'tablo';
 let mevcutIslemGorunumu = 'tablo';
 let mevcutYemSayfasi = 1;
 let mevcutIslemSayfasi = 1;
 
-// Sabitler
 const YEMLER_SAYFA_BASI = 10;
 const ISLEMLER_SAYFA_BASI = 5;
 const KRITIK_STOK_SEVIYESI = 500;
 
-// Sayfa yüklendiğinde çalışacak ana fonksiyon
 window.onload = function() {
-    // Modalları ve kütüphaneleri başlat
     yemUrunuModal = new bootstrap.Modal(document.getElementById('yemUrunuModal'));
     yemSilmeOnayModal = new bootstrap.Modal(document.getElementById('yemSilmeOnayModal'));
     yemIslemSilmeOnayModal = new bootstrap.Modal(document.getElementById('yemIslemSilmeOnayModal'));
@@ -25,13 +19,11 @@ window.onload = function() {
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
     yemUrunSecici = new TomSelect("#yem-urun-sec", { create: false, sortField: { field: "text", direction: "asc" } });
 
-    // Kayıtlı görünüm tercihlerini tarayıcı hafızasından yükle
     mevcutGorunum = localStorage.getItem('yemGorunum') || 'tablo';
     mevcutIslemGorunumu = localStorage.getItem('yemIslemGorunum') || 'tablo';
     gorunumuAyarla();
     gorunumuAyarlaIslemler();
 
-    // Sayfanın ihtiyaç duyduğu ilk verileri yükle
     tedarikcileriDoldur();
     yemSeciciyiDoldur();
     yemUrunleriniYukle(1);
@@ -45,7 +37,7 @@ function gorunumuDegistir(yeniGorunum) {
     mevcutGorunum = yeniGorunum;
     localStorage.setItem('yemGorunum', yeniGorunum);
     gorunumuAyarla();
-    yemUrunleriniYukle(mevcutYemSayfasi); // Veriyi yeni görünüme göre tekrar render et
+    yemUrunleriniYukle(mevcutYemSayfasi);
 }
 
 function gorunumuAyarla() {
@@ -193,8 +185,6 @@ function renderYemIslemiAsCards(container, islemler) {
             </div>`;
     });
 }
-
-// --- FORM DOLDURMA VE CRUD İŞLEMLERİ ---
 
 async function tedarikcileriDoldur() {
     try {

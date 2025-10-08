@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Profilim - Süt Takip Sistemi{% endblock %}
+
+{% block content %}
+<div class="main-wrapper p-3 p-md-4">
+    <div id="alert-container"></div>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h1 class="fw-bold">Hesap Bilgilerim</h1>
+        <div class="d-flex align-items-center gap-2">
+            {% include '_hizli_islemler.html' %}
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <!-- Kullanıcı Bilgileri Kartı -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-body p-3">
+                    <h5 class="card-title mb-3">Kullanıcı Bilgileri</h5>
+                    <div class="mb-3">
+                        <label for="kullanici-adi-input" class="form-label">Kullanıcı Adı</label>
+                        <input type="text" class="form-control" id="kullanici-adi-input" readonly disabled>
+                        <small class="form-text text-secondary">Kullanıcı adınız değiştirilemez.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="eposta-input" class="form-label">E-posta Adresi</label>
+                        <input type="email" class="form-control" id="eposta-input" placeholder="E-posta adresinizi girin">
+                    </div>
+                    <div class="mb-3">
+                        <label for="kullanici-telefon-input" class="form-label">Telefon Numarası</label>
+                        <input type="tel" class="form-control" id="kullanici-telefon-input" placeholder="Telefon numaranızı girin">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Şirket Bilgileri Kartı -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-body p-3">
+                    <h5 class="card-title mb-3">Şirket Bilgileri</h5>
+                    <div class="mb-3">
+                        <label for="sirket-adi-input" class="form-label">Şirket Adı</label>
+                        <input type="text" class="form-control" id="sirket-adi-input" readonly disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label for="sirket-vkn-input" class="form-label">Vergi Kimlik No (VKN)</label>
+                        <input type="text" class="form-control" id="sirket-vkn-input" placeholder="Şirketinizin VKN'sini girin">
+                    </div>
+                    <div class="mb-3">
+                        <label for="sirket-adres-input" class="form-label">Şirket Adresi</label>
+                        <textarea class="form-control" id="sirket-adres-input" rows="3" placeholder="Şirketinizin adresini girin"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Şifre Değiştirme Kartı -->
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body p-3">
+                    <h5 class="card-title mb-3">Güvenlik</h5>
+                     <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="mevcut-sifre-input" class="form-label">Mevcut Şifre</label>
+                            <input type="password" class="form-control" id="mevcut-sifre-input" placeholder="Mevcut şifrenizi girin">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="yeni-sifre-input" class="form-label">Yeni Şifre</label>
+                            <input type="password" class="form-control" id="yeni-sifre-input" placeholder="Yeni bir şifre belirleyin">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="yeni-sifre-tekrar-input" class="form-label">Yeni Şifre (Tekrar)</label>
+                            <input type="password" class="form-control" id="yeni-sifre-tekrar-input" placeholder="Yeni şifrenizi tekrar girin">
+                        </div>
+                     </div>
+                     <small class="form-text text-secondary">Şifrenizi değiştirmek istemiyorsanız bu alanı boş bırakın.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kaydet Butonu -->
+    <div class="d-flex justify-content-end mt-3">
+        <button class="btn btn-primary" id="kaydet-btn" onclick="profilGuncelle()">
+            <i class="bi bi-check-lg me-2"></i>Değişiklikleri Kaydet
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/profil.js') }}"></script>
+{% endblock %}
