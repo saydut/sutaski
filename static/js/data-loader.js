@@ -25,8 +25,10 @@ async function genelVeriYukleyici(config) {
 
     // Çevrimdışı kontrolü
     if (!navigator.onLine) {
-        veriYok.innerHTML = `<p class="text-warning">Bu verileri görüntülemek için internet bağlantısı gereklidir.</p>`;
-        veriYok.style.display = 'block';
+        if(veriYok) {
+            veriYok.innerHTML = `<p class="text-warning">Bu verileri görüntülemek için internet bağlantısı gereklidir.</p>`;
+            veriYok.style.display = 'block';
+        }
         if(tabloBody) tabloBody.innerHTML = '';
         if(kartContainer) kartContainer.innerHTML = '';
         if(sayfalamaNav) sayfalamaNav.innerHTML = '';
@@ -34,16 +36,16 @@ async function genelVeriYukleyici(config) {
     }
 
     // Yükleniyor animasyonları
-    const spinnerHtml = `<tr><td colspan="6" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
+    const spinnerHtml = `<tr><td colspan="10" class="text-center p-4"><div class="spinner-border"></div></td></tr>`;
     const kartSpinnerHtml = `<div class="col-12 text-center p-4"><div class="spinner-border"></div></div>`;
+    
     if(tabloBody && config.mevcutGorunum === 'tablo') tabloBody.innerHTML = spinnerHtml;
     if(kartContainer && config.mevcutGorunum === 'kart') kartContainer.innerHTML = kartSpinnerHtml;
-    veriYok.style.display = 'none';
+    if(veriYok) veriYok.style.display = 'none';
 
     try {
-        const response = await fetch(config.apiURL);
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Veriler yüklenemedi.');
+        // Merkezi api.js'teki request fonksiyonunu kullanarak veriyi çekiyoruz.
+        const data = await api.request(config.apiURL);
 
         if(tabloBody) tabloBody.innerHTML = '';
         if(kartContainer) kartContainer.innerHTML = '';
@@ -52,21 +54,24 @@ async function genelVeriYukleyici(config) {
         const toplamKayit = data.toplam_kayit || data.toplam_urun_sayisi || data.toplam_islem_sayisi || data.toplam_girdi_sayisi || (veriler ? veriler.length : 0);
 
         if (!veriler || veriler.length === 0) {
-            veriYok.style.display = 'block';
+            if(veriYok) veriYok.style.display = 'block';
         } else {
-            if (config.mevcutGorunum === 'tablo' && tabloBody) {
+            // Gelen veriyi, o sayfaya özel olan render fonksiyonuna gönderiyoruz.
+            if (config.mevcutGorunum === 'tablo' && tabloBody && typeof config.tabloRenderFn === 'function') {
                 config.tabloRenderFn(tabloBody, veriler);
-            } else if (config.mevcutGorunum === 'kart' && kartContainer) {
+            } else if (config.mevcutGorunum === 'kart' && kartContainer && typeof config.kartRenderFn === 'function') {
                 config.kartRenderFn(kartContainer, veriler);
             }
         }
         
-        if (ui && typeof ui.sayfalamaNavOlustur === 'function') {
+        // ui.js içerisindeki merkezi sayfalama fonksiyonunu çağırıyoruz.
+        if (typeof ui.sayfalamaNavOlustur === 'function' && sayfalamaNav) {
             ui.sayfalamaNavOlustur(config.sayfalamaId, toplamKayit, config.sayfa, config.kayitSayisi, config.yukleFn);
         }
 
     } catch (e) {
-        const errorHtml = `<tr><td colspan="6" class="text-center p-4 text-danger">${e.message}</td></tr>`;
+        // Hata durumunda kullanıcıya bilgi ver.
+        const errorHtml = `<tr><td colspan="10" class="text-center p-4 text-danger">${e.message}</td></tr>`;
         const kartErrorHtml = `<div class="col-12 text-center p-4 text-danger">${e.message}</div>`;
         if(tabloBody) tabloBody.innerHTML = errorHtml;
         if(kartContainer) kartContainer.innerHTML = kartErrorHtml;

@@ -66,6 +66,7 @@ function gorunumuAyarlaIslemler() {
 
 async function yemUrunleriniYukle(sayfa = 1) {
     mevcutYemSayfasi = sayfa;
+    // Yem ürünleri listesi için merkezi veri yükleme motorunu çağırıyoruz.
     await genelVeriYukleyici({
         apiURL: `/yem/api/urunler?sayfa=${sayfa}`,
         veriAnahtari: 'urunler',
@@ -73,8 +74,8 @@ async function yemUrunleriniYukle(sayfa = 1) {
         kartContainerId: 'yem-urunleri-kart-listesi',
         veriYokId: 'veri-yok-mesaji',
         sayfalamaId: 'yem-urunleri-sayfalama',
-        tabloRenderFn: renderYemUrunuAsTable,
-        kartRenderFn: renderYemUrunuAsCards,
+        tabloRenderFn: renderYemUrunuAsTable, // Bu sayfaya özel çizim fonksiyonu
+        kartRenderFn: renderYemUrunuAsCards,   // Bu sayfaya özel çizim fonksiyonu
         yukleFn: yemUrunleriniYukle,
         sayfa: sayfa,
         kayitSayisi: YEMLER_SAYFA_BASI,
@@ -84,6 +85,7 @@ async function yemUrunleriniYukle(sayfa = 1) {
 
 async function yemIslemleriniYukle(sayfa = 1) {
     mevcutIslemSayfasi = sayfa;
+    // Yem işlemleri listesi için merkezi veri yükleme motorunu çağırıyoruz.
     await genelVeriYukleyici({
         apiURL: `/yem/api/islemler/liste?sayfa=${sayfa}`,
         veriAnahtari: 'islemler',
@@ -91,12 +93,12 @@ async function yemIslemleriniYukle(sayfa = 1) {
         kartContainerId: 'yem-islemleri-kart-listesi',
         veriYokId: 'yem-islemleri-veri-yok',
         sayfalamaId: 'yem-islemleri-sayfalama',
-        tabloRenderFn: renderYemIslemiAsTable,
-        kartRenderFn: renderYemIslemiAsCards,
+        tabloRenderFn: renderYemIslemiAsTable, // Bu sayfaya özel çizim fonksiyonu
+        kartRenderFn: renderYemIslemiAsCards,   // Bu sayfaya özel çizim fonksiyonu
         yukleFn: yemIslemleriniYukle,
         sayfa: sayfa,
         kayitSayisi: ISLEMLER_SAYFA_BASI,
-        mevcutGorunum: mevcutIslemGorunumu
+        mevcutGorunum: mevcutIslemGorunumu // Dikkat: Bu liste kendi görünüm değişkenini kullanıyor
     });
 }
 
