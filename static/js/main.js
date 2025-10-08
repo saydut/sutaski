@@ -86,6 +86,25 @@ window.onload = async function() {
 
     // Başlangıç verilerini yükle (özet, grafikler, tedarikçiler ve ilk sayfa girdileri)
     await baslangicVerileriniYukle();
+
+    // --- YENİ EKLENDİ: Modal olay dinleyicisi ---
+    // Düzenleme veya Silme modal'ı tamamen kapandıktan sonra grafikleri yenile.
+    const duzenleModalEl = document.getElementById('duzenleModal');
+    const silmeOnayModalEl = document.getElementById('silmeOnayModal');
+    
+    const grafikYenileCallback = () => {
+        console.log('Modal kapandı, grafikler yenileniyor...');
+        charts.haftalikGrafigiOlustur();
+        charts.tedarikciGrafigiOlustur();
+    };
+
+    if (duzenleModalEl) {
+        duzenleModalEl.addEventListener('hidden.bs.modal', grafikYenileCallback);
+    }
+    if (silmeOnayModalEl) {
+        silmeOnayModalEl.addEventListener('hidden.bs.modal', grafikYenileCallback);
+    }
+    // --- YENİ KOD SONU ---
 };
 
 /**
@@ -309,8 +328,9 @@ async function sutGirdisiEkle() {
         const bugun = utils.getLocalDateString();
         ui.updateOzetPanels(result.yeni_ozet, bugun);
         
-        await charts.haftalikGrafigiOlustur();
-        await charts.tedarikciGrafigiOlustur();
+        // Grafik güncellemelerini HEMEN ÇAĞIRMIYORUZ.
+        charts.haftalikGrafigiOlustur();
+        charts.tedarikciGrafigiOlustur();
 
         // Başarılı kayıttan sonra listeyi sunucudan gelen en güncel haliyle yenile
         await girdileriGoster(1, bugun);
@@ -339,6 +359,8 @@ async function sutGirdisiEkle() {
  */
 async function sutGirdisiDuzenle() {
     const { girdiId, yeniLitre, yeniFiyat, duzenlemeSebebi } = ui.getDuzenlemeFormVerisi();
+    
+    // Düzenleme sebebi artık zorunlu değil
     if (!yeniLitre || !yeniFiyat) {
         gosterMesaj("Lütfen yeni litre ve fiyat değerlerini girin.", "warning");
         return;
@@ -346,9 +368,9 @@ async function sutGirdisiDuzenle() {
     
     try {
         const result = await api.updateSutGirdisi(girdiId, { 
-            yeni_litre: parseFloat(yeniLitre),
+            yeni_litre: parseFloat(yeniLitre), 
             yeni_fiyat: parseFloat(yeniFiyat),
-            duzenleme_sebebi: duzenlemeSebebi
+            duzenleme_sebebi: duzenlemeSebebi 
         });
         gosterMesaj("Girdi başarıyla güncellendi.", "success");
         ui.duzenleModal.hide();
@@ -356,8 +378,10 @@ async function sutGirdisiDuzenle() {
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
         
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
-        await charts.haftalikGrafigiOlustur();
-        await charts.tedarikciGrafigiOlustur();
+        
+        // Grafik güncellemelerini HEMEN ÇAĞIRMIYORUZ.
+        // Modal kapandıktan sonra tetiklenecekler.
+
         await girdileriGoster(mevcutSayfa, formatliTarih);
 
     } catch (error) {
@@ -400,8 +424,10 @@ async function sutGirdisiSil() {
         gosterMesaj(result.message, 'success');
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
-        await charts.haftalikGrafigiOlustur();
-        await charts.tedarikciGrafigiOlustur();
+        
+        // Grafik güncellemelerini HEMEN ÇAĞIRMIYORUZ.
+        // Modal kapandıktan sonra tetiklenecekler.
+
         // Silme sonrası listeyi yenilerken toplam girdi sayısı değişebileceği için ilk sayfaya dönmek en sağlıklısı
         await girdileriGoster(1, formatliTarih);
 
@@ -476,3 +502,4 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
+
