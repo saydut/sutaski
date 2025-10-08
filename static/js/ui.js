@@ -358,9 +358,10 @@ renderGirdilerAsCards(girdiler) {
         kaydetButton.innerHTML = isLoading ? `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...` : `Kaydet`;
     },
 
-    duzenlemeModaliniAc(girdiId, mevcutLitre) {
+    duzenlemeModaliniAc(girdiId, mevcutLitre, mevcutFiyat) {
         document.getElementById('edit-girdi-id').value = girdiId;
         document.getElementById('edit-litre-input').value = mevcutLitre;
+        document.getElementById('edit-fiyat-input').value = mevcutFiyat;
         document.getElementById('edit-sebep-input').value = '';
         this.duzenleModal.show();
     },
@@ -368,6 +369,7 @@ renderGirdilerAsCards(girdiler) {
     getDuzenlemeFormVerisi: () => ({
         girdiId: document.getElementById('edit-girdi-id').value,
         yeniLitre: document.getElementById('edit-litre-input').value,
+        yeniFiyat: document.getElementById('edit-fiyat-input').value,
         duzenlemeSebebi: document.getElementById('edit-sebep-input').value.trim(),
     }),
     

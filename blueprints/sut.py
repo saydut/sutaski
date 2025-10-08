@@ -91,28 +91,47 @@ def add_sut_girdisi():
 def update_sut_girdisi(girdi_id):
     try:
         data = request.get_json()
-        mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
-        if not mevcut_girdi_res.data:
-             return jsonify({"error": "Girdi bulunamadı veya bu işlem için yetkiniz yok."}), 404
+        sirket_id = session['user']['sirket_id']
         
-        girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
-        girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
+        # Güncellenecek verileri tutacak bir sözlük oluştur
+        guncellenecek_veri = { 'duzenlendi_mi': True }
+        
+        # Gerekli verileri al ve kontrol et
+        yeni_litre = data.get('yeni_litre')
+        yeni_fiyat = data.get('yeni_fiyat')
+        duzenleme_sebebi = data.get('duzenleme_sebebi', '').strip() or '-' # Boşsa '-' yap
 
+        if not yeni_litre or not yeni_fiyat:
+            return jsonify({"error": "Yeni litre ve fiyat değerleri zorunludur."}), 400
+
+        try:
+            guncellenecek_veri['litre'] = str(Decimal(yeni_litre))
+            guncellenecek_veri['fiyat'] = str(Decimal(yeni_fiyat))
+        except (InvalidOperation, TypeError):
+            return jsonify({"error": "Lütfen geçerli sayısal değerler girin."}), 400
+
+        # Mevcut girdiyi al (güvenlik ve geçmiş kaydı için)
+        mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
+        if not mevcut_girdi_res.data:
+            return jsonify({"error": "Girdi bulunamadı veya bu işlem için yetkiniz yok."}), 404
+        
+        # Geçmiş kaydını oluştur
         supabase.table('girdi_gecmisi').insert({
-            'orijinal_girdi_id': girdi_id, 
-            'duzenleyen_kullanici_id': session['user']['id'], 
-            'duzenleme_sebebi': data['duzenleme_sebebi'], 
-            'eski_litre_degeri': mevcut_girdi_res.data['litre'], 
-            'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'), 
+            'orijinal_girdi_id': girdi_id,
+            'duzenleyen_kullanici_id': session['user']['id'],
+            'duzenleme_sebebi': duzenleme_sebebi,
+            'eski_litre_degeri': mevcut_girdi_res.data['litre'],
+            'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'),
             'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']
         }).execute()
-        
-        guncel_girdi = supabase.table('sut_girdileri').update({
-            'litre': data['yeni_litre'],
-            'duzenlendi_mi': True
-        }).eq('id', girdi_id).execute()
-        
-        yeni_ozet = get_guncel_ozet(session['user']['sirket_id'], girdi_tarihi_str)
+
+        # Süt girdisini yeni verilerle güncelle
+        guncel_girdi = supabase.table('sut_girdileri').update(guncellenecek_veri).eq('id', girdi_id).execute()
+
+        # Güncellemenin yapıldığı tarihin özetini yeniden hesapla
+        girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
+        girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
+        yeni_ozet = get_guncel_ozet(sirket_id, girdi_tarihi_str)
         
         return jsonify({"status": "success", "data": guncel_girdi.data, "yeni_ozet": yeni_ozet})
     except Exception as e:

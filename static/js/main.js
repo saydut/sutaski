@@ -338,20 +338,23 @@ async function sutGirdisiEkle() {
  * Mevcut bir süt girdisini düzenleme formunu yönetir.
  */
 async function sutGirdisiDuzenle() {
-    const { girdiId, yeniLitre, duzenlemeSebebi } = ui.getDuzenlemeFormVerisi();
-    if (!yeniLitre || !duzenlemeSebebi) {
-        gosterMesaj("Lütfen yeni litre değerini ve düzenleme sebebini girin.", "warning");
+    const { girdiId, yeniLitre, yeniFiyat, duzenlemeSebebi } = ui.getDuzenlemeFormVerisi();
+    if (!yeniLitre || !yeniFiyat) {
+        gosterMesaj("Lütfen yeni litre ve fiyat değerlerini girin.", "warning");
         return;
     }
     
     try {
-        const result = await api.updateSutGirdisi(girdiId, { yeni_litre: parseFloat(yeniLitre), duzenleme_sebebi: duzenlemeSebebi });
+        const result = await api.updateSutGirdisi(girdiId, { 
+            yeni_litre: parseFloat(yeniLitre),
+            yeni_fiyat: parseFloat(yeniFiyat),
+            duzenleme_sebebi: duzenlemeSebebi
+        });
         gosterMesaj("Girdi başarıyla güncellendi.", "success");
         ui.duzenleModal.hide();
         
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
         
-        // DEĞİŞİKLİK: Özet verisini API yanıtından al, tekrar istek atma.
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
         await charts.haftalikGrafigiOlustur();
         await charts.tedarikciGrafigiOlustur();
@@ -473,4 +476,3 @@ async function verileriDisaAktar() {
         gosterMesaj(error.message, "danger");
     }
 }
-
