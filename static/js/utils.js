@@ -1,6 +1,6 @@
 // ====================================================================================
 // YARDIMCI FONKSİYONLAR (utils.js)
-// Projenin farklı yerlerinde kullanılabilen genel amaçlı fonksiyonları içerir.
+// Projenin farklı yerlerinde kullanılabilen genel amaçlı, arayüzden bağımsız fonksiyonları içerir.
 // ====================================================================================
 
 const utils = {
@@ -17,31 +17,6 @@ const utils = {
     }
 };
 
-
-/**
- * Kullanıcıya dinamik olarak bir mesaj gösterir.
- * @param {string} mesaj Gösterilecek metin.
- * @param {string} tip Mesajın türü (success, danger, warning, info).
- * @param {number} sure Ms cinsinden ne kadar süre ekranda kalacağı.
- */
-function gosterMesaj(mesaj, tip = 'info', sure = 5000) {
-    const container = document.getElementById('alert-container');
-    if (!container) {
-        console.error("'alert-container' ID'li element sayfada bulunamadı.");
-        return;
-    }
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${tip} alert-dismissible fade show`;
-    alertDiv.role = 'alert';
-    alertDiv.innerHTML = `${mesaj} <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
-    container.appendChild(alertDiv);
-    setTimeout(() => {
-        const alertInstance = bootstrap.Alert.getOrCreateInstance(alertDiv);
-        if(alertInstance) { 
-            alertInstance.close(); 
-        }
-    }, sure);
-}
 
 /**
  * Hem yerel kullanıcı verisini siler hem de sunucudan çıkış yapar.
@@ -157,9 +132,3 @@ async function indirVeAc(url, buttonId, messages) {
         button.innerHTML = originalContent;
     }
 }
-
-
-/**
- * Veriyi yükler, belirtilen görünüme göre render eder ve sayfalama oluşturur.
- * @param {object} config - Yapılandırma objesi.
- */

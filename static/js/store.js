@@ -1,8 +1,9 @@
 // ====================================================================================
-// MERKEZİ VERİ YÖNETİMİ (store.js)
+// MERKEZİ VERİ YÖNETİMİ (store.js) - GÜÇLENDİRİLDİ
 // Bu dosya, uygulama genelinde paylaşılan verileri (state) yönetir.
 // Çevrimiçi ise veriyi API'den çeker ve yerel veritabanını (IndexedDB) günceller.
 // Çevrimdışı ise veriyi yerel veritabanından okur.
+// Ekleme/silme/güncelleme sonrası anında arayüz tepkisi için bellekteki veriyi de yönetir.
 // ====================================================================================
 
 const store = {
@@ -20,64 +21,52 @@ const store = {
         let fetchedData = [];
         if (navigator.onLine) {
             console.log('Çevrimiçi mod: Tedarikçiler sunucudan çekiliyor ve yerel DB güncelleniyor...');
-            // `syncTedarikciler` fonksiyonu hem API'den çeker hem de IndexedDB'ye yazar.
             fetchedData = await syncTedarikciler();
         } else {
             console.log('Çevrimdışı mod: Tedarikçiler yerel veritabanından (IndexedDB) okunuyor...');
             fetchedData = await getOfflineTedarikciler();
         }
 
-        // Eğer yeni veri (online veya offline) başarılı bir şekilde çekildiyse,
-        // bellekteki önbelleği (bu objenin içindeki `tedarikciler` dizisini) güncelle.
         if (fetchedData && fetchedData.length > 0) {
             this.tedarikciler = fetchedData;
         }
-
-        // Her durumda, bellekteki listenin en güncel halini döndür.
-        // Bu, veri çekme başarısız olsa bile uygulamanın eski veriyle çalışmaya devam etmesini sağlar.
+        
+        // Bellekteki listeyi alfabetik olarak sırala
+        this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim, 'tr'));
         return this.tedarikciler;
     },
 
     /**
      * Yem ürünleri listesini getirir.
-     * Online ise API'den çeker ve yerel veritabanını günceller.
-     * Offline ise yerel veritabanından çeker.
-     * @returns {Promise<Array>} Yem ürünlerinin listesini içeren bir Promise döndürür.
      */
     async getYemUrunleri() {
         let fetchedData = [];
         if (navigator.onLine) {
-            console.log('Çevrimiçi mod: Yem ürünleri sunucudan çekiliyor ve yerel DB güncelleniyor...');
+            console.log('Çevrimiçi mod: Yem ürünleri sunucudan çekiliyor...');
             fetchedData = await syncYemUrunleri();
         } else {
-            console.log('Çevrimdışı mod: Yem ürünleri yerel veritabanından (IndexedDB) okunuyor...');
+            console.log('Çevrimdışı mod: Yem ürünleri yerel DB\'den okunuyor...');
             fetchedData = await getOfflineYemUrunleri();
         }
 
-        // Eğer yeni veri çekildiyse, bellek önbelleğini güncelle.
         if (fetchedData && fetchedData.length > 0) {
             this.yemUrunleri = fetchedData;
         }
 
-        // Her durumda güncel veya önbellekteki veriyi döndür.
+        this.yemUrunleri.sort((a, b) => a.yem_adi.localeCompare(b.yem_adi, 'tr'));
         return this.yemUrunleri;
     },
 
-    // Aşağıdaki fonksiyonlar, online iken bir ekleme/silme/güncelleme yapıldığında,
-    // arayüzün anında güncellenmesi için hem bellekteki listeyi hem de IndexedDB'yi
-    // senkronize olarak günceller. Bu, sayfa yenilemeden arayüzün tutarlı kalmasını sağlar.
+    // --- ANINDA GÜNCELLEME İÇİN MUTATION FONKSİYONLARI ---
 
     /**
      * Belleğe ve yerel veritabanına yeni bir tedarikçi ekler.
      * @param {object} tedarikci - Eklenen yeni tedarikçi objesi.
      */
     addTedarikci(tedarikci) {
-        // Bellekteki listeye ekle
-        this.tedarikciler.push({ id: tedarikci.id, isim: tedarikci.isim, telefon_no: tedarikci.telefon_no, tc_no: tedarikci.tc_no, adres: tedarikci.adres });
-        // Alfabetik sırayı koru
+        this.tedarikciler.push(tedarikci);
         this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim, 'tr'));
-        // Yerel veritabanını da (IndexedDB) güncelle
-        db.tedarikciler.put(tedarikci);
+        db.tedarikciler.put(tedarikci); // IndexedDB'yi de güncelle
     },
 
     /**
@@ -87,11 +76,9 @@ const store = {
     updateTedarikci(tedarikci) {
         const index = this.tedarikciler.findIndex(t => t.id === tedarikci.id);
         if (index !== -1) {
-            // Bellekteki objeyi güncelle
             this.tedarikciler[index] = { ...this.tedarikciler[index], ...tedarikci };
             this.tedarikciler.sort((a, b) => a.isim.localeCompare(b.isim, 'tr'));
-            // Yerel veritabanını güncelle
-            db.tedarikciler.put(tedarikci);
+            db.tedarikciler.put(this.tedarikciler[index]);
         }
     },
 
@@ -102,6 +89,38 @@ const store = {
     removeTedarikci(id) {
         this.tedarikciler = this.tedarikciler.filter(t => t.id !== id);
         db.tedarikciler.delete(id);
+    },
+
+    /**
+     * Belleğe ve yerel veritabanına yeni bir yem ürünü ekler.
+     * @param {object} urun - Eklenen yeni yem ürünü.
+     */
+    addYemUrun(urun) {
+        this.yemUrunleri.push(urun);
+        this.yemUrunleri.sort((a, b) => a.yem_adi.localeCompare(b.yem_adi, 'tr'));
+        db.yem_urunleri.put(urun);
+    },
+
+    /**
+     * Bellekteki ve yerel veritabanındaki bir yem ürününü günceller.
+     * @param {object} urun - Güncellenmiş yem ürünü.
+     */
+    updateYemUrun(urun) {
+        const index = this.yemUrunleri.findIndex(y => y.id === urun.id);
+        if (index !== -1) {
+            this.yemUrunleri[index] = { ...this.yemUrunleri[index], ...urun };
+            this.yemUrunleri.sort((a, b) => a.yem_adi.localeCompare(b.yem_adi, 'tr'));
+            db.yem_urunleri.put(this.yemUrunleri[index]);
+        }
+    },
+
+    /**
+     * Bellekten ve yerel veritabanından bir yem ürününü siler.
+     * @param {number} id - Silinecek ürünün ID'si.
+     */
+    removeYemUrun(id) {
+        this.yemUrunleri = this.yemUrunleri.filter(y => y.id !== id);
+        db.yem_urunleri.delete(id);
     }
 };
 

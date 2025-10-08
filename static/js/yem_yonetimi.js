@@ -145,7 +145,16 @@ async function yemUrunuKaydet() {
         const result = id ? await api.updateYemUrunu(id, veri) : await api.postYemUrunu(veri);
         gosterMesaj(result.message, 'success');
         yemUrunuModal.hide();
-        await Promise.all([yemUrunleriniYukle(id ? mevcutYemSayfasi : 1), yemSeciciyiDoldur()]);
+        
+        // --- DEĞİŞİKLİK BURADA ---
+        if (id) {
+            store.updateYemUrun(result.urun);
+        } else {
+            store.addYemUrun(result.urun);
+        }
+        yemUrunleriniYukle(mevcutYemSayfasi); // Arayüzü yeniden çizmek için çağırıyoruz
+        yemSeciciyiDoldur(); // Dropdown'u güncelle
+        
     } catch (error) {
         gosterMesaj(error.message, 'danger');
     } finally {
@@ -159,19 +168,24 @@ async function yemUrunuSil() {
     yemSilmeOnayModal.hide();
     if (!navigator.onLine) {
         gosterMesaj('İnternet yok. Silme işlemi kaydedildi, bağlantı kurulunca uygulanacak.', 'info');
-        await kaydetSilmeIslemiCevrimdisi('yem_urunu', parseInt(id));
-        document.getElementById(`yem-urun-${id}`)?.remove();
+        await kaydetSilmeIslemiCevrimdisi('yem_urunu', id);
+        store.removeYemUrun(id); // Bellekten de sil
+        yemUrunleriniYukle(mevcutYemSayfasi); // Arayüzü güncelle
         return;
     }
-    const silinecekElement = document.getElementById(`yem-urun-${id}`);
-    if (silinecekElement) { silinecekElement.style.opacity = '0'; setTimeout(() => silinecekElement.remove(), 400); }
+    
     try {
         const result = await api.deleteYemUrunu(id);
         gosterMesaj(result.message, 'success');
-        await Promise.all([yemUrunleriniYukle(1), yemSeciciyiDoldur()]);
+        
+        // --- DEĞİŞİKLİK BURADA ---
+        store.removeYemUrun(id);
+        yemUrunleriniYukle(mevcutYemSayfasi); // Arayüzü güncelle
+        yemSeciciyiDoldur(); // Dropdown'u güncelle
+
     } catch (error) {
         gosterMesaj(error.message, 'danger');
-        await yemUrunleriniYukle(mevcutYemSayfasi);
+        await yemUrunleriniYukle(mevcutYemSayfasi); // Hata olursa listeyi sunucudan tekrar çekerek senkronize et
     }
 }
 

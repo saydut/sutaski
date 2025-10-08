@@ -188,7 +188,16 @@ async function tedarikciKaydet() {
         const result = id ? await api.updateTedarikci(id, veri) : await api.postTedarikci(veri);
         gosterMesaj(result.message, "success");
         tedarikciModal.hide();
-        await verileriYukle();
+        
+        // --- DEĞİŞİKLİK BURADA ---
+        // Tüm listeyi yeniden çekmek yerine, store'u güncelleyip arayüzü yeniden çiziyoruz.
+        if (id) {
+            store.updateTedarikci(result.tedarikci);
+        } else {
+            store.addTedarikci(result.tedarikci);
+        }
+        verileriIsleVeGoster(mevcutSayfa); // Arayüzü anında güncelle
+
     } catch (error) {
         gosterMesaj(error.message || "Bir hata oluştu.", "danger");
     } finally {
@@ -206,8 +215,11 @@ async function tedarikciSil() {
     try {
         const result = await api.deleteTedarikci(id);
         gosterMesaj(result.message, 'success');
-        silmeOnayModal.hide();
-        await verileriYukle(); 
+        
+        // --- DEĞİŞİKLİK BURADA ---
+        store.removeTedarikci(id);
+        verileriIsleVeGoster(mevcutSayfa); // Arayüzü anında güncelle
+        
     } catch (error) {
         gosterMesaj(error.message || 'Silme işlemi başarısız.', 'danger');
     }

@@ -89,8 +89,13 @@ def add_yem_urunu():
             "stok_miktari_kg": str(Decimal(stok)),
             "birim_fiyat": str(Decimal(fiyat))
         }
-        supabase.table('yem_urunleri').insert(yeni_urun).execute()
-        return jsonify({"message": "Yeni yem ürünü başarıyla eklendi."}), 201
+        # --- DEĞİŞİKLİK BURADA: Eklenen ürünü geri döndürmek için .select() ekledik ---
+        response = supabase.table('yem_urunleri').insert(yeni_urun).select().execute()
+        
+        # Dönen verinin ilk elemanını alıyoruz
+        eklenen_urun = response.data[0] if response.data else None
+
+        return jsonify({"message": "Yeni yem ürünü başarıyla eklendi.", "urun": eklenen_urun}), 201
     except (InvalidOperation, TypeError):
         return jsonify({"error": "Lütfen stok ve fiyat için geçerli sayılar girin."}), 400
     except Exception as e:
@@ -111,13 +116,15 @@ def update_yem_urunu(id):
             "birim_fiyat": str(Decimal(data.get('birim_fiyat')))
         }
         
-        # --- GÜVENLİK GÜNCELLEMESİ ---
-        response = supabase.table('yem_urunleri').update(guncel_veri).eq('id', id).eq('sirket_id', sirket_id).execute()
+        # --- DEĞİŞİKLİK BURADA: Güncellenen ürünü geri döndürmek için .select() ekledik ---
+        response = supabase.table('yem_urunleri').update(guncel_veri).eq('id', id).eq('sirket_id', sirket_id).select().execute()
 
         if not response.data:
             return jsonify({"error": "Yem ürünü bulunamadı veya bu işlem için yetkiniz yok."}), 404
             
-        return jsonify({"message": "Yem ürünü başarıyla güncellendi."})
+        guncellenen_urun = response.data[0]
+
+        return jsonify({"message": "Yem ürünü başarıyla güncellendi.", "urun": guncellenen_urun})
     except (InvalidOperation, TypeError):
         return jsonify({"error": "Lütfen stok ve fiyat için geçerli sayılar girin."}), 400
     except Exception as e:

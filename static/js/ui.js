@@ -2,8 +2,33 @@
 // ARAYÜZ YÖNETİMİ (ui.js)
 // Bu dosya, DOM manipülasyonu ile ilgili tüm fonksiyonları içerir.
 // HTML elementlerini günceller, modalları yönetir, animasyonları kontrol eder.
-// Kendi içinde state tutmaz, veriyi parametre olarak alır ve ekrana basar.
 // ====================================================================================
+
+/**
+ * Kullanıcıya dinamik olarak bir mesaj gösterir.
+ * @param {string} mesaj Gösterilecek metin.
+ * @param {string} tip Mesajın türü (success, danger, warning, info).
+ * @param {number} sure Ms cinsinden ne kadar süre ekranda kalacağı.
+ */
+function gosterMesaj(mesaj, tip = 'info', sure = 5000) {
+    const container = document.getElementById('alert-container');
+    if (!container) {
+        console.error("'alert-container' ID'li element sayfada bulunamadı.");
+        return;
+    }
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${tip} alert-dismissible fade show`;
+    alertDiv.role = 'alert';
+    alertDiv.innerHTML = `${mesaj} <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
+    container.appendChild(alertDiv);
+    setTimeout(() => {
+        const alertInstance = bootstrap.Alert.getOrCreateInstance(alertDiv);
+        if(alertInstance) { 
+            alertInstance.close(); 
+        }
+    }, sure);
+}
+
 
 const ui = {
     // Modal ve kütüphane instance'ları
@@ -142,8 +167,6 @@ const ui = {
         }
         return { tumGirdiler, toplamGirdi };
     },
-
-// ESKİ renderGirdilerListesi FONKSİYONUNU SİLİP YERİNE BU ÜÇ FONKSİYONU EKLE
 
 /**
  * Girdileri seçilen görünüme göre yönlendiren ana render fonksiyonu.
