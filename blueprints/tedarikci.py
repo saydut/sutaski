@@ -46,26 +46,32 @@ def get_tedarikci_detay(id):
 def get_tedarikci_ozet(tedarikci_id):
     try:
         sirket_id = session['user']['sirket_id']
-        response = supabase.table('tedarikciler').select(
-            'isim, sut_girdileri(litre, fiyat), yem_islemleri(toplam_tutar), finansal_islemler(tutar)'
-        ).eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
-        if not response.data:
+
+        # Tedarikçi ismini almak için ek bir sorgu yapıyoruz
+        tedarikci_res = supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
+        if not tedarikci_res.data:
             return jsonify({"error": "Tedarikçi bulunamadı."}), 404
-        td = response.data
-        toplam_sut_alacagi = sum(Decimal(str(g.get('litre', '0'))) * Decimal(str(g.get('fiyat', '0'))) for g in td.get('sut_girdileri', []))
-        toplam_yem_borcu = sum(Decimal(str(y.get('toplam_tutar', '0'))) for y in td.get('yem_islemleri', []))
-        toplam_odeme = sum(Decimal(str(f.get('tutar', '0'))) for f in td.get('finansal_islemler', []))
-        net_bakiye = toplam_sut_alacagi - toplam_yem_borcu - toplam_odeme
+
+        # Yeni RPC fonksiyonumuzu çağırarak tüm özet verisini tek seferde alıyoruz
+        summary_res = supabase.rpc('get_supplier_summary', {
+            'p_sirket_id': sirket_id,
+            'p_tedarikci_id': tedarikci_id
+        }).execute()
+        
+        ozet_verisi = summary_res.data
+        
+        # Gelen veriye tedarikçi ismini de ekleyerek frontend'e gönderiyoruz
         sonuc = {
-            "isim": td.get('isim', 'Bilinmeyen Tedarikçi'),
-            "toplam_sut_alacagi": f"{toplam_sut_alacagi:.2f}",
-            "toplam_yem_borcu": f"{toplam_yem_borcu:.2f}",
-            "toplam_odeme": f"{toplam_odeme:.2f}",
-            "net_bakiye": f"{net_bakiye:.2f}"
+            "isim": tedarikci_res.data.get('isim', 'Bilinmeyen Tedarikçi'),
+            "toplam_sut_alacagi": f"{Decimal(ozet_verisi.get('toplam_sut_alacagi', 0)):.2f}",
+            "toplam_yem_borcu": f"{Decimal(ozet_verisi.get('toplam_yem_borcu', 0)):.2f}",
+            "toplam_odeme": f"{Decimal(ozet_verisi.get('toplam_odeme', 0)):.2f}",
+            "net_bakiye": f"{Decimal(ozet_verisi.get('net_bakiye', 0)):.2f}"
         }
         return jsonify(sonuc)
+
     except Exception as e:
-        print(f"Tedarikçi özet hatası: {e}")
+        print(f"Tedarikçi özet (RPC) hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir özet hatası oluştu."}), 500
 
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/sut_girdileri')
@@ -202,21 +208,32 @@ def get_tedarikciler_liste():
     try:
         sirket_id = session['user']['sirket_id']
         sayfa = int(request.args.get('sayfa', 1))
-        limit = 15
+        limit = 15 # Sayfa başına 15 kayıt getirelim
         offset = (sayfa - 1) * limit
         arama_terimi = request.args.get('arama', '')
         sirala_sutun = request.args.get('sirala', 'isim')
         sirala_yon = request.args.get('yon', 'asc')
+
+        # Supabase sorgumuzu oluşturuyoruz
         query = supabase.table('tedarikci_ozetleri').select(
             'id, isim, telefon_no, tc_no, adres, toplam_litre', 
-            count='estimated'
+            count='estimated' # Tahmini toplam kayıt sayısını al (daha hızlıdır)
         ).eq('sirket_id', sirket_id)
+
+        # Arama terimi varsa, sorguya ekle
         if arama_terimi:
             query = query.ilike('isim', f'%{arama_terimi}%')
+        
+        # Sıralama yönünü belirle
         descending = sirala_yon == 'desc'
+        
+        # Sıralama, sayfalama ve çalıştırma
         query = query.order(sirala_sutun, desc=descending).range(offset, offset + limit - 1)
+        
         response = query.execute()
+
         return jsonify({"tedarikciler": response.data, "toplam_kayit": response.count})
+
     except Exception as e:
         print(f"Tedarikçi listesi hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
