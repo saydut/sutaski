@@ -48,19 +48,16 @@ def get_gunluk_ozet():
 def get_haftalik_ozet():
     try:
         sirket_id = session['user']['sirket_id']
-        today = datetime.now(turkey_tz).date()
-        turkce_aylar = {"Jan": "Oca", "Feb": "Şub", "Mar": "Mar", "Apr": "Nis","May": "May", "Jun": "Haz", "Jul": "Tem", "Aug": "Ağu","Sep": "Eyl", "Oct": "Eki", "Nov": "Kas", "Dec": "Ara"}
-        labels, data = [], []
-        for i in range(7):
-            target_date = today - timedelta(days=i)
-            gun, ay_ingilizce = target_date.strftime('%d %b').split()
-            labels.append(f"{gun} {turkce_aylar.get(ay_ingilizce, ay_ingilizce)}")
-            start_tr = turkey_tz.localize(datetime.combine(target_date, datetime.min.time()))
-            end_tr = turkey_tz.localize(datetime.combine(target_date, datetime.max.time()))
-            response = supabase.table('sut_girdileri').select('litre').eq('sirket_id', sirket_id).gte('taplanma_tarihi', start_tr.astimezone(pytz.utc).isoformat()).lte('taplanma_tarihi', end_tr.astimezone(pytz.utc).isoformat()).execute()
-            data.append(float(sum(Decimal(str(item.get('litre', '0'))) for item in response.data)))
-        return jsonify({'labels': labels[::-1], 'data': data[::-1]})
+        
+        # Tek bir RPC çağrısıyla tüm haftalık veriyi hazır olarak alıyoruz
+        response = supabase.rpc('get_weekly_summary', {'p_sirket_id': sirket_id}).execute()
+        
+        # Gelen veri zaten {'labels': [...], 'data': [...]} formatında olduğu için
+        # direkt olarak istemciye gönderiyoruz.
+        return jsonify(response.data)
+
     except Exception as e:
+        print(f"Haftalık özet (RPC) hatası: {e}")
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @rapor_bp.route('/tedarikci_dagilimi')
@@ -68,17 +65,21 @@ def get_haftalik_ozet():
 def get_tedarikci_dagilimi():
     try:
         sirket_id = session['user']['sirket_id']
-        start_date = datetime.now(turkey_tz).date() - timedelta(days=30)
-        start_tr = turkey_tz.localize(datetime.combine(start_date, datetime.min.time()))
-        response = supabase.table('sut_girdileri').select('litre, tedarikciler(isim)').eq('sirket_id', sirket_id).gte('taplanma_tarihi', start_tr.astimezone(pytz.utc).isoformat()).execute()
-        dagilim = {}
-        for girdi in response.data:
-            if girdi.get('tedarikciler') and girdi['tedarikciler'].get('isim'):
-                isim = girdi['tedarikciler']['isim']
-                dagilim[isim] = dagilim.get(isim, Decimal(0)) + Decimal(str(girdi.get('litre', '0')))
-        sorted_dagilim = dict(sorted(dagilim.items(), key=lambda item: item[1], reverse=True))
-        return jsonify({'labels': list(sorted_dagilim.keys()), 'data': [float(v) for v in sorted_dagilim.values()]})
+        
+        # 1. Yeni ve güçlü RPC fonksiyonumuzu çağırıyoruz
+        response = supabase.rpc('get_supplier_distribution', {'p_sirket_id': sirket_id}).execute()
+        
+        # 2. Veritabanından zaten işlenmiş olarak gelen veriyi alıyoruz
+        dagilim_verisi = response.data
+        
+        # 3. Veriyi Chart.js'in beklediği formata dönüştürüyoruz
+        labels = [item['name'] for item in dagilim_verisi]
+        data = [float(item['litre']) for item in dagilim_verisi]
+        
+        return jsonify({'labels': labels, 'data': data})
+        
     except Exception as e:
+        print(f"Tedarikçi dağılımı (RPC) hatası: {e}") # Hata takibi için loglama ekledik
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
 
 @rapor_bp.route('/detayli_rapor', methods=['GET'])

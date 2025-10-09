@@ -1,5 +1,3 @@
--- supabase/rpc/get_monthly_supplier_report_data.sql DOSYASININ DÜZELTİLMİŞ NİHAİ İÇERİĞİ
-
 CREATE OR REPLACE FUNCTION get_monthly_supplier_report_data(
     p_sirket_id integer,
     p_tedarikci_id integer,
@@ -8,6 +6,7 @@ CREATE OR REPLACE FUNCTION get_monthly_supplier_report_data(
 )
 RETURNS json
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
     start_utc timestamptz;
@@ -17,11 +16,9 @@ DECLARE
     finansal_islemler_json json;
     ozet_json json;
 BEGIN
-    -- Tarih aralığını Türkiye saatine göre doğru ve kesin bir şekilde belirleyelim
     start_utc := (p_start_date::date)::timestamp AT TIME ZONE 'Europe/Istanbul';
     end_utc := ((p_end_date::date) + interval '1 day')::timestamp AT TIME ZONE 'Europe/Istanbul';
 
-    -- 1. Süt Girdilerini Gruplayarak ve Tarihi Formatlayarak Çek (DÜZELTİLMİŞ SORGU)
     SELECT COALESCE(json_agg(t), '[]'::json) INTO sut_girdileri_json
     FROM (
         SELECT
@@ -29,7 +26,7 @@ BEGIN
             g.fiyat,
             g.litre,
             g.toplam_tutar,
-            g.tutar -- Müstahsil şablonu için de ekleyelim
+            g.tutar
         FROM (
             SELECT
                 (sg.taplanma_tarihi AT TIME ZONE 'Europe/Istanbul')::date AS tarih_gunu,
@@ -46,7 +43,6 @@ BEGIN
         ORDER BY g.tarih_gunu
     ) t;
 
-    -- 2. Yem İşlemlerini Çek (Tarihi formatlayarak)
     SELECT COALESCE(json_agg(y), '[]'::json) INTO yem_islemleri_json
     FROM (
         SELECT
@@ -54,10 +50,8 @@ BEGIN
             yi.miktar_kg,
             yi.islem_anindaki_birim_fiyat,
             yi.toplam_tutar,
-            -- DİKKAT: Yem ürünleri tablosunda isim "yem_adi" olarak geçiyor
             yu.yem_adi
         FROM yem_islemleri yi
-        -- DİKKAT: Tablo adı "yem_urunleri" olmalı
         JOIN yem_urunleri yu ON yi.yem_urun_id = yu.id
         WHERE yi.sirket_id = p_sirket_id
           AND yi.tedarikci_id = p_tedarikci_id
@@ -65,7 +59,6 @@ BEGIN
         ORDER BY yi.islem_tarihi
     ) y;
 
-    -- 3. Finansal İşlemleri Çek (Tarihi formatlayarak)
     SELECT COALESCE(json_agg(f), '[]'::json) INTO finansal_islemler_json
     FROM (
         SELECT 
@@ -78,14 +71,12 @@ BEGIN
         ORDER BY fi.islem_tarihi
     ) f;
 
-    -- 4. Özet Toplamları Hesapla
     SELECT json_build_object(
         'toplam_sut_tutari', COALESCE((SELECT SUM((j->>'toplam_tutar')::numeric) FROM json_array_elements(sut_girdileri_json) j), 0),
         'toplam_yem_borcu', COALESCE((SELECT SUM((j->>'toplam_tutar')::numeric) FROM json_array_elements(yem_islemleri_json) j), 0),
         'toplam_odeme', COALESCE((SELECT SUM((j->>'tutar')::numeric) FROM json_array_elements(finansal_islemler_json) j), 0)
     ) INTO ozet_json;
 
-    -- 5. Tüm Sonuçları Tek Bir JSON olarak Döndür
     RETURN json_build_object(
         'sut_girdileri', sut_girdileri_json,
         'yem_islemleri', yem_islemleri_json,
