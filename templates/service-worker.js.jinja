@@ -180,7 +180,8 @@ self.addEventListener('fetch', event => {
    const title = payload.title || 'Yeni Bildirim';
    const options = {
        body: payload.body || 'Yeni bir bildiriminiz var.',
-       icon: payload.icon || '/static/images/icon.png',+       badge: '/static/images/favicon.ico', // Android'de bildirim çubuğunda görünen küçük ikon
+       icon: payload.icon || '/static/images/icon.png',       
+       badge: '/static/images/favicon.ico', // Android'de bildirim çubuğunda görünen küçük ikon
        data: {
            url: payload.data ? payload.data.url : '/' // Bildirime tıklanınca açılacak sayfa
        }
