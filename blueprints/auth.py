@@ -1,13 +1,12 @@
-from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session, flash
-from extensions import supabase, bcrypt, turkey_tz
-from decorators import login_required
-from datetime import datetime
-from postgrest import APIError
+# blueprints/auth.py (SERVİS KATMANINI KULLANACAK ŞEKİLDE GÜNCELLENDİ)
 
-# Blueprint'i oluşturuyoruz. url_prefix kullanmıyoruz çünkü /login gibi kök yolları kullanacağız.
+from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session, flash
+from decorators import login_required
+from services.auth_service import auth_service # <-- YENİ: Servisi import et
+
 auth_bp = Blueprint('auth', __name__)
 
-# --- ARAYÜZ SAYFALARI (AUTH) ---
+# --- ARAYÜZ SAYFALARI ---
 
 @auth_bp.route('/register')
 def register_page():
@@ -18,128 +17,59 @@ def login_page():
     return render_template('login.html')
     
 @auth_bp.route('/logout')
+@login_required
 def logout():
     session.pop('user', None)
     flash("Başarıyla çıkış yaptınız.", "success")
     return redirect(url_for('auth.login_page'))
 
-# --- API ADRESLERİ (AUTH) ---
+# --- API ADRESLERİ ---
 
 @auth_bp.route('/api/register', methods=['POST'])
-def register_user():
+def register_user_api():
     try:
         data = request.get_json()
-        kullanici_adi = data['kullanici_adi'].strip()
-        sifre = data['sifre']
-        sirket_adi = data['sirket_adi'].strip()
-
-        # Gerekli alanların kontrolü
-        if not all([kullanici_adi, sifre, sirket_adi]):
-            return jsonify({"error": "Tüm alanların doldurulması zorunludur."}), 400
-
-        kullanici_var_mi = supabase.table('kullanicilar').select('id', count='exact').eq('kullanici_adi', kullanici_adi).execute()
-        if kullanici_var_mi.count > 0:
-            return jsonify({"error": "Bu kullanıcı adı zaten mevcut."}), 400
-
-        sirket_id = None
-        # Büyük/küçük harf duyarsız olarak şirket ara (daha kullanıcı dostu)
-        sirket_response = supabase.table('sirketler').select('id, sirket_adi').ilike('sirket_adi', sirket_adi).execute()
-        
-        # Eğer bir veya daha fazla sonuç varsa, tam eşleşme olup olmadığını kontrol et
-        if sirket_response.data:
-            for sirket in sirket_response.data:
-                # Kullanıcının girdiği isimle veritabanındaki birebir aynıysa o şirketi kullan
-                if sirket['sirket_adi'] == sirket_adi:
-                    sirket_id = sirket['id']
-                    break
-        
-        # Eğer tam eşleşen bir şirket bulunamadıysa, yeni bir tane oluşturmayı dene
-        if sirket_id is None:
-            try:
-                yeni_sirket_response = supabase.table('sirketler').insert({'sirket_adi': sirket_adi}).execute()
-                sirket_id = yeni_sirket_response.data[0]['id']
-            except APIError as e:
-                # Veritabanındaki UNIQUE kuralı sayesinde, başka bir işlem aynı anda bu şirketi oluşturursa
-                # burada hata alırız ve kullanıcıya bilgi veririz.
-                if "violates unique constraint" in e.message:
-                    return jsonify({"error": f"'{sirket_adi}' adında bir şirket zaten mevcut. Lütfen tam adını doğru yazdığınızdan emin olun veya farklı bir isim deneyin."}), 409
-                else:
-                    raise # Farklı bir veritabanı hatasıysa yeniden fırlat
-
-        hashed_sifre = bcrypt.generate_password_hash(sifre).decode('utf-8')
-        
-        supabase.table('kullanicilar').insert({
-            'kullanici_adi': kullanici_adi, 
-            'sifre': hashed_sifre,
-            'sirket_id': sirket_id
-        }).execute()
-
-        return jsonify({"message": "Kayıt başarılı!"}), 201
-
+        result = auth_service.register_user(
+            kullanici_adi=data.get('kullanici_adi', '').strip(),
+            sifre=data.get('sifre'),
+            sirket_adi=data.get('sirket_adi', '').strip()
+        )
+        return jsonify(result), 201
+    except ValueError as ve:
+        # Servisten gelen beklenen hatalar (örn: kullanıcı adı mevcut)
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        print(f"Kayıt Hatası: {e}")
-        return jsonify({"error": "Kayıt sırasında bir sunucu hatası oluştu."}), 500
-
+        # Servisten gelen beklenmedik hatalar
+        return jsonify({"error": str(e)}), 500
 
 @auth_bp.route('/api/login', methods=['POST'])
-def login():
+def login_api():
     try:
         data = request.get_json()
-        kullanici_adi = data['kullanici_adi']
-        sifre = data['sifre']
-
-        user_response = supabase.table('kullanicilar').select('*, sirketler(sirket_adi, lisans_bitis_tarihi)').eq('kullanici_adi', kullanici_adi).execute()
+        session_data = auth_service.login_user(
+            kullanici_adi=data.get('kullanici_adi'),
+            sifre=data.get('sifre')
+        )
+        session['user'] = session_data
         
-        if not user_response.data:
-            return jsonify({"error": "Bu kullanıcı adına sahip bir hesap bulunamadı."}), 404
-
-        user = user_response.data[0]
-        
-        # --- NİHAİ LİSANS KONTROLÜ ---
-        # Kullanıcı 'admin' değilse lisansını kontrol et
-        if user.get('rol') != 'admin':
-            lisans_bilgisi = user.get('sirketler')
-            if not lisans_bilgisi or not lisans_bilgisi.get('lisans_bitis_tarihi'):
-                return jsonify({"error": "Şirketiniz için bir lisans tanımlanmamıştır."}), 403
-            
-            try:
-                lisans_bitis_tarihi_str = lisans_bilgisi['lisans_bitis_tarihi']
-                lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis_tarihi_str, '%Y-%m-%d').date()
-                bugun_tr = datetime.now(turkey_tz).date()
-                
-                # *** MANTIKSAL DÜZELTME: Lisansın son günü dahil edilmeyecek şekilde kontrol ***
-                # Eğer bugün, lisansın bittiği güne eşit veya ondan sonraysa girişi engelle.
-                if bugun_tr >= lisans_bitis_tarihi_obj:
-                    return jsonify({"error": "Şirketinizin lisans süresi dolmuştur. Lütfen sistem yöneticinizle iletişime geçin."}), 403
-            except (ValueError, TypeError):
-                return jsonify({"error": "Lisans tarihi formatı geçersiz. Yöneticinizle iletişime geçin."}), 500
-        # --- LİSANS KONTROLÜ SONU ---
-
-        if bcrypt.check_password_hash(user['sifre'], sifre):
-            session_data = {
-                'id': user['id'],
-                'kullanici_adi': user['kullanici_adi'],
-                'sirket_id': user['sirket_id'],
-                'rol': user['rol'],
-                'sirket_adi': user['sirketler']['sirket_adi'] if user.get('sirketler') else 'Atanmamış',
-                'lisans_bitis_tarihi': user['sirketler']['lisans_bitis_tarihi'] if user.get('sirketler') else None
-            }
-            session['user'] = session_data
-            
-            # Başarılı yanıta kullanıcı ve lisans verisini de ekliyoruz.
-            return jsonify({
-                "message": "Giriş başarılı!",
-                "user": session_data 
-            }), 200
-        else:
-            return jsonify({"error": "Yanlış şifre."}), 401
+        return jsonify({
+            "message": "Giriş başarılı!",
+            "user": session_data 
+        }), 200
+    except ValueError as ve:
+        # Servisten gelen beklenen hatalar (örn: yanlış şifre, lisans sorunu)
+        return jsonify({"error": str(ve)}), 401 # 401 Unauthorized daha uygun
     except Exception as e:
-        print(f"Giriş Hatası: {e}")
-        return jsonify({"error": "Giriş yapılırken bir sunucu hatası oluştu."}), 500
+        # Servisten gelen beklenmedik hatalar
+        return jsonify({"error": str(e)}), 500
 
+# Şifre değiştirme fonksiyonu zaten kullanıcıya özel olduğu için
+# bunu bir servis katmanına taşımak çok büyük bir avantaj sağlamaz.
+# Şimdilik burada kalabilir. İleride gerekirse "user_service" gibi bir yapıya taşınabilir.
 @auth_bp.route('/api/user/change_password', methods=['POST'])
 @login_required
 def change_password():
+    from extensions import supabase, bcrypt
     try:
         data = request.get_json()
         mevcut_sifre = data.get('mevcut_sifre')
