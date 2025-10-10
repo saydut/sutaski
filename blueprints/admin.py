@@ -164,3 +164,38 @@ def delete_surum_notu(id):
         return jsonify({"error": str(ve)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+# blueprints/admin.py dosyasının en altına ekle
+
+# blueprints/admin.py dosyasının en altına bu fonksiyonu ekle
+
+@admin_bp.route('/api/admin/send_notification', methods=['POST'])
+@login_required
+@admin_required
+def send_notification_to_user():
+    """Belirli bir kullanıcıya admin panelinden bildirim gönderir."""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        title = data.get('title')
+        body = data.get('body')
+
+        if not all([user_id, title, body]):
+            return jsonify({"error": "Kullanıcı ID, başlık ve içerik alanları zorunludur."}), 400
+
+        # Push servisini kullanarak bildirimi gönder
+        # ÖNEMLİ: Bu import'u fonksiyonun içine taşıyalım ki blueprint'ler arası döngüsel import riski olmasın.
+        from services.push_service import push_service
+        sent_count = push_service.send_notification_to_user(
+            user_id=user_id,
+            title=title,
+            body=body
+        )
+
+        if sent_count > 0:
+            return jsonify({"message": f"Bildirim, kullanıcının {sent_count} cihazına başarıyla gönderildi."})
+        else:
+            return jsonify({"error": "Kullanıcının kayıtlı bir bildirim aboneliği bulunamadı."}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

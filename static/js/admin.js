@@ -1,4 +1,4 @@
-let sirketSilmeOnayModal, sifreSifirlaModal, surumDuzenleModal;
+let sirketSilmeOnayModal, sifreSifirlaModal, surumDuzenleModal, bildirimGonderModal;
 let tumSurumNotlari = []; // Sürüm notlarını burada saklayacağız
 
 // Tarih seçicileri için global bir obje
@@ -22,6 +22,7 @@ window.onload = function() {
     sirketSilmeOnayModal = new bootstrap.Modal(document.getElementById('sirketSilmeOnayModal'));
     sifreSifirlaModal = new bootstrap.Modal(document.getElementById('sifreSifirlaModal'));
     surumDuzenleModal = new bootstrap.Modal(document.getElementById('surumDuzenleModal'));
+    bildirimGonderModal = new bootstrap.Modal(document.getElementById('bildirimGonderModal')); // YENİ SATIR
     
     // Yeni sürüm notu için tarih seçiciyi başlat
     flatpickr("#yayin-tarihi-input", {
@@ -267,6 +268,7 @@ function kullanicilariDoldur(kullanicilar) {
                 <td class="text-center d-flex gap-1 justify-content-center">
                     <button class="btn btn-sm btn-success" onclick="rolGuncelle(${kullanici.id})" title="Rolü Kaydet"><i class="bi bi-check-lg"></i></button>
                     <button class="btn btn-sm btn-warning" onclick="sifreSifirlamaAc(${kullanici.id}, '${kullanici.kullanici_adi}')" title="Şifre Sıfırla"><i class="bi bi-key"></i></button>
+                    <button class="btn btn-sm btn-info" onclick="bildirimModaliniAc(${kullanici.id}, '${kullanici.kullanici_adi}')" title="Bildirim Gönder"><i class="bi bi-bell"></i></button>
                 </td>
             </tr>
         `;
@@ -479,5 +481,44 @@ async function toggleMaintenanceMode() {
     } catch (error) {
         gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
         switchInput.checked = !yeniDurum; // Hata olursa anahtarı geri al
+    }
+}
+
+// static/js/admin.js dosyasının en altına ekle
+
+function bildirimModaliniAc(kullaniciId, kullaniciAdi) {
+    document.getElementById('bildirim-gonderilecek-kullanici-id').value = kullaniciId;
+    document.getElementById('bildirim-gonderilecek-kullanici').textContent = kullaniciAdi;
+    document.getElementById('bildirim-baslik-input').value = '';
+    document.getElementById('bildirim-icerik-input').value = '';
+    bildirimGonderModal.show();
+}
+
+async function bildirimGonder() {
+    const user_id = document.getElementById('bildirim-gonderilecek-kullanici-id').value;
+    const title = document.getElementById('bildirim-baslik-input').value;
+    const body = document.getElementById('bildirim-icerik-input').value;
+
+    if (!title || !body) {
+        gosterMesaj("Lütfen başlık ve içerik alanlarını doldurun.", "warning");
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/send_notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: parseInt(user_id), title, body })
+        });
+        const result = await response.json();
+
+        if (response.ok) {
+            gosterMesaj(result.message, 'success');
+            bildirimGonderModal.hide();
+        } else {
+            throw new Error(result.error || 'Bilinmeyen bir hata oluştu.');
+        }
+    } catch (error) {
+        gosterMesaj(error.message, 'danger');
     }
 }

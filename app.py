@@ -12,6 +12,7 @@ from blueprints.admin import admin_bp
 from blueprints.yem import yem_bp
 from blueprints.finans import finans_bp
 from blueprints.profil import profil_bp
+from blueprints.push import push_bp
 
 # Yeniden yapılandırma sonrası eklenen yeni blueprint'ler
 from blueprints.tedarikci import tedarikci_bp
@@ -110,6 +111,7 @@ def create_app():
     app.register_blueprint(sut_bp)
     app.register_blueprint(rapor_bp)
     app.register_blueprint(profil_bp)
+    app.register_blueprint(push_bp)
 
     return app
 

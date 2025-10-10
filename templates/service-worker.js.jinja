@@ -163,3 +163,54 @@ self.addEventListener('fetch', event => {
     );
 });
 
+ // YENİ: Push bildirimlerini dinleyen olay
+ self.addEventListener('push', event => {
+   console.log('[Service Worker] Push Alındı.');
+   
+   let payload = {};
+   try {
+       payload = event.data.json();
+   } catch (e) {
+       payload = {
+           title: 'Süt Takip Sistemi',
+           body: event.data.text()
+       };
+   }
+
+   const title = payload.title || 'Yeni Bildirim';
+   const options = {
+       body: payload.body || 'Yeni bir bildiriminiz var.',
+       icon: payload.icon || '/static/images/icon.png',+       badge: '/static/images/favicon.ico', // Android'de bildirim çubuğunda görünen küçük ikon
+       data: {
+           url: payload.data ? payload.data.url : '/' // Bildirime tıklanınca açılacak sayfa
+       }
+   };
+
+   event.waitUntil(self.registration.showNotification(title, options));
+ });
+
+ // YENİ: Bildirime tıklanma olayını yönet
+ self.addEventListener('notificationclick', event => {
+    event.notification.close(); // Bildirimi kapat
+
+    const urlToOpen = event.notification.data.url || '/';
+
+    event.waitUntil(
+        clients.matchAll({
+            type: 'window',
+            includeUncontrolled: true
+        }).then(clientList => {
+            // Eğer uygulama zaten bir sekmede açıksa, o sekmeye odaklan
+            for (let i = 0; i < clientList.length; i++) {
+                let client = clientList[i];
+                if (client.url === urlToOpen && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            // Eğer açık değilse, yeni bir sekmede aç
+            if (clients.openWindow) {
+                return clients.openWindow(urlToOpen);
+            }
+        })
+    );
+ });
