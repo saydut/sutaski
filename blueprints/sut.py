@@ -1,54 +1,29 @@
-# blueprints/sut.py
+# blueprints/sut.py (SERVİS KATMANINI KULLANACAK ŞEKİLDE GÜNCELLENDİ)
 
 from flask import Blueprint, jsonify, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
-from extensions import supabase, turkey_tz
-from decimal import Decimal, InvalidOperation
-from utils import parse_supabase_timestamp
+from extensions import turkey_tz
 import logging
-from datetime import datetime, timedelta
-import pytz
+from datetime import datetime
+
+# YENİ: Veritabanı mantığını içeren servis dosyasını import ediyoruz
+from services.sut_service import sut_service
 
 sut_bp = Blueprint('sut', __name__, url_prefix='/api')
 logger = logging.getLogger(__name__)
 
-# YARDIMCI FONKSİYON (EKSİK OLAN PARÇA)
-def get_guncel_ozet(sirket_id, tarih_str):
-    """Belirtilen tarih için RPC kullanarak özet veriyi çeker."""
-    try:
-        response = supabase.rpc('get_daily_summary_rpc', {
-            'target_sirket_id': sirket_id,
-            'target_date': tarih_str
-        }).execute()
-        return response.data[0] if response.data else {'toplam_litre': 0, 'girdi_sayisi': 0}
-    except Exception as e:
-        logger.error(f"!!! GÜNCEL ÖZET ÇEKİLİRKEN HATA: {e}")
-        return {'toplam_litre': 0, 'girdi_sayisi': 0}
-
-
 @sut_bp.route('/sut_girdileri', methods=['GET'])
 @login_required
 def get_sut_girdileri():
+    """Süt girdilerini servis üzerinden listeler."""
     try:
         sirket_id = session['user']['sirket_id']
         secilen_tarih_str = request.args.get('tarih')
         sayfa = int(request.args.get('sayfa', 1))
-        limit = 6
-        offset = (sayfa - 1) * limit
         
-        query = supabase.table('sut_girdileri').select(
-            'id,litre,fiyat,taplanma_tarihi,duzenlendi_mi,kullanicilar(kullanici_adi),tedarikciler(isim)', 
-            count='exact'
-        ).eq('sirket_id', sirket_id)
+        girdiler, toplam_sayi = sut_service.get_paginated_list(sirket_id, secilen_tarih_str, sayfa)
         
-        if secilen_tarih_str:
-            target_date = datetime.strptime(secilen_tarih_str, '%Y-%m-%d').date()
-            start_utc = turkey_tz.localize(datetime.combine(target_date, datetime.min.time())).astimezone(pytz.utc).isoformat()
-            end_utc = turkey_tz.localize(datetime.combine(target_date, datetime.max.time())).astimezone(pytz.utc).isoformat()
-            query = query.gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc)
-            
-        data = query.order('id', desc=True).range(offset, offset + limit - 1).execute()
-        return jsonify({"girdiler": data.data, "toplam_girdi_sayisi": data.count})
+        return jsonify({"girdiler": girdiler, "toplam_girdi_sayisi": toplam_sayi})
     except Exception as e:
         logger.error(f"Süt girdileri listeleme hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
@@ -58,28 +33,21 @@ def get_sut_girdileri():
 @lisans_kontrolu
 @modification_allowed
 def add_sut_girdisi():
+    """Yeni bir süt girdisi eklemek için servisi çağırır."""
     try:
         yeni_girdi = request.get_json()
-        litre = Decimal(yeni_girdi.get('litre'))
-        fiyat = Decimal(yeni_girdi.get('fiyat'))
+        sirket_id = session['user']['sirket_id']
+        kullanici_id = session['user']['id']
+
+        data = sut_service.add_entry(sirket_id, kullanici_id, yeni_girdi)
         
-        if litre <= 0 or fiyat <= 0:
-            return jsonify({"error": "Litre ve fiyat pozitif bir değer olmalıdır."}), 400
-            
-        data = supabase.table('sut_girdileri').insert({
-            'tedarikci_id': yeni_girdi['tedarikci_id'], 
-            'litre': str(litre),
-            'fiyat': str(fiyat),
-            'kullanici_id': session['user']['id'], 
-            'sirket_id': session['user']['sirket_id']
-        }).execute()
-        
+        # Güncel özet, arayüzün anında güncellenmesi için hala gerekli
         bugun_str = datetime.now(turkey_tz).date().isoformat()
-        yeni_ozet = get_guncel_ozet(session['user']['sirket_id'], bugun_str)
+        yeni_ozet = sut_service.get_daily_summary(sirket_id, bugun_str)
         
-        return jsonify({"status": "success", "data": data.data, "yeni_ozet": yeni_ozet})
-    except (InvalidOperation, TypeError, ValueError):
-        return jsonify({"error": "Lütfen geçerli bir litre ve fiyat değeri girin."}), 400
+        return jsonify({"status": "success", "data": data, "yeni_ozet": yeni_ozet})
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
         logger.error(f"Süt girdisi ekleme hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda bir hata oluştu."}), 500
@@ -89,51 +57,19 @@ def add_sut_girdisi():
 @lisans_kontrolu
 @modification_allowed
 def update_sut_girdisi(girdi_id):
+    """Bir süt girdisini düzenlemek için servisi çağırır."""
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
+        kullanici_id = session['user']['id']
         
-        # Güncellenecek verileri tutacak bir sözlük oluştur
-        guncellenecek_veri = { 'duzenlendi_mi': True }
+        guncel_girdi, girdi_tarihi_str = sut_service.update_entry(girdi_id, sirket_id, kullanici_id, data)
         
-        # Gerekli verileri al ve kontrol et
-        yeni_litre = data.get('yeni_litre')
-        yeni_fiyat = data.get('yeni_fiyat')
-        duzenleme_sebebi = data.get('duzenleme_sebebi', '').strip() or '-' # Boşsa '-' yap
-
-        if not yeni_litre or not yeni_fiyat:
-            return jsonify({"error": "Yeni litre ve fiyat değerleri zorunludur."}), 400
-
-        try:
-            guncellenecek_veri['litre'] = str(Decimal(yeni_litre))
-            guncellenecek_veri['fiyat'] = str(Decimal(yeni_fiyat))
-        except (InvalidOperation, TypeError):
-            return jsonify({"error": "Lütfen geçerli sayısal değerler girin."}), 400
-
-        # Mevcut girdiyi al (güvenlik ve geçmiş kaydı için)
-        mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
-        if not mevcut_girdi_res.data:
-            return jsonify({"error": "Girdi bulunamadı veya bu işlem için yetkiniz yok."}), 404
+        yeni_ozet = sut_service.get_daily_summary(sirket_id, girdi_tarihi_str)
         
-        # Geçmiş kaydını oluştur
-        supabase.table('girdi_gecmisi').insert({
-            'orijinal_girdi_id': girdi_id,
-            'duzenleyen_kullanici_id': session['user']['id'],
-            'duzenleme_sebebi': duzenleme_sebebi,
-            'eski_litre_degeri': mevcut_girdi_res.data['litre'],
-            'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'),
-            'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']
-        }).execute()
-
-        # Süt girdisini yeni verilerle güncelle
-        guncel_girdi = supabase.table('sut_girdileri').update(guncellenecek_veri).eq('id', girdi_id).execute()
-
-        # Güncellemenin yapıldığı tarihin özetini yeniden hesapla
-        girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
-        girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
-        yeni_ozet = get_guncel_ozet(sirket_id, girdi_tarihi_str)
-        
-        return jsonify({"status": "success", "data": guncel_girdi.data, "yeni_ozet": yeni_ozet})
+        return jsonify({"status": "success", "data": guncel_girdi, "yeni_ozet": yeni_ozet})
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
         logger.error(f"Süt girdisi düzenleme hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
@@ -143,20 +79,16 @@ def update_sut_girdisi(girdi_id):
 @lisans_kontrolu
 @modification_allowed
 def delete_sut_girdisi(girdi_id):
+    """Bir süt girdisini silmek için servisi çağırır."""
     try:
-        mevcut_girdi_res = supabase.table('sut_girdileri').select('sirket_id, taplanma_tarihi').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
-        if not mevcut_girdi_res.data:
-             return jsonify({"error": "Girdi bulunamadı veya silme yetkiniz yok."}), 404
+        sirket_id = session['user']['sirket_id']
+        girdi_tarihi_str = sut_service.delete_entry(girdi_id, sirket_id)
         
-        girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
-        girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
-
-        supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
-        supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
-        
-        yeni_ozet = get_guncel_ozet(session['user']['sirket_id'], girdi_tarihi_str)
+        yeni_ozet = sut_service.get_daily_summary(sirket_id, girdi_tarihi_str)
         
         return jsonify({"message": "Girdi başarıyla silindi.", "yeni_ozet": yeni_ozet}), 200
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 404
     except Exception as e:
         logger.error(f"Süt girdisi silme hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
@@ -164,13 +96,13 @@ def delete_sut_girdisi(girdi_id):
 @sut_bp.route('/girdi_gecmisi/<int:girdi_id>')
 @login_required
 def get_girdi_gecmisi(girdi_id):
+    """Bir girdinin düzenleme geçmişini servis üzerinden getirir."""
     try:
-        original_girdi_response = supabase.table('sut_girdileri').select('sirket_id').eq('id', girdi_id).eq('sirket_id', session['user']['sirket_id']).single().execute()
-        if not original_girdi_response.data:
-            return jsonify({"error": "Yetkisiz erişim veya girdi bulunamadı."}), 403
-        
-        gecmis_data = supabase.table('girdi_gecmisi').select('*,duzenleyen_kullanici_id(kullanici_adi)').eq('orijinal_girdi_id', girdi_id).order('created_at', desc=True).execute()
-        return jsonify(gecmis_data.data)
+        sirket_id = session['user']['sirket_id']
+        gecmis_data = sut_service.get_entry_history(girdi_id, sirket_id)
+        return jsonify(gecmis_data)
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 403
     except Exception as e:
         logger.error(f"Girdi geçmişi hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500

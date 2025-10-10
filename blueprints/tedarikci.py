@@ -1,12 +1,14 @@
-# blueprints/tedarikci.py (Yeniden Yapılandırıldı)
+# blueprints/tedarikci.py (SERVİS KATMANINI KULLANACAK ŞEKİLDE GÜNCELLENDİ)
 
 from flask import Blueprint, jsonify, request, session
 from decorators import login_required, lisans_kontrolu, modification_allowed
-from extensions import supabase
-from postgrest import APIError
 from decimal import Decimal
-# Rapor oluşturma mantığı yeni servis dosyasına taşındı.
+
+# Rapor oluşturma servisi
 from services.report_service import generate_hesap_ozeti_pdf, generate_mustahsil_makbuzu_pdf
+
+# YENİ: Veritabanı mantığını içeren servislerimizi import ediyoruz
+from services.tedarikci_service import tedarikci_service, paged_data_service
 
 tedarikci_bp = Blueprint('tedarikci', __name__, url_prefix='/api')
 
@@ -14,125 +16,81 @@ tedarikci_bp = Blueprint('tedarikci', __name__, url_prefix='/api')
 @tedarikci_bp.route('/tedarikciler_dropdown')
 @login_required
 def get_tedarikciler_for_dropdown():
-    """Sadece ID ve İsim içeren, sıralanmış tam tedarikçi listesini döndürür."""
+    """Dropdown için tüm tedarikçileri servis üzerinden getirir."""
     try:
         sirket_id = session['user']['sirket_id']
-        response = supabase.table('tedarikci_ozetleri').select(
-            'id, isim, telefon_no, tc_no, adres, toplam_litre'
-        ).eq('sirket_id', sirket_id).order('isim', desc=False).execute()
-        return jsonify(response.data)
+        data = tedarikci_service.get_all_for_dropdown(sirket_id)
+        return jsonify(data)
     except Exception as e:
-        print(f"Dropdown için tedarikçi listesi hatası: {e}")
-        return jsonify({"error": "Liste alınamadı."}), 500
+        return jsonify({"error": f"Liste alınamadı: {e}"}), 500
     
 @tedarikci_bp.route('/tedarikci/<int:id>')
 @login_required
 def get_tedarikci_detay(id):
-    """Tek bir tedarikçinin tüm detaylarını ID ile getirir."""
+    """Tek bir tedarikçiyi servis üzerinden getirir."""
     try:
         sirket_id = session['user']['sirket_id']
-        response = supabase.table('tedarikciler').select(
-            'id, isim, tc_no, telefon_no, adres'
-        ).eq('id', id).eq('sirket_id', sirket_id).single().execute()
-        if not response.data:
+        data = tedarikci_service.get_by_id(sirket_id, id)
+        if not data:
             return jsonify({"error": "Tedarikçi bulunamadı veya bu tedarikçiyi görme yetkiniz yok."}), 404
-        return jsonify(response.data)
+        return jsonify(data)
     except Exception as e:
-        print(f"Tedarikçi detay hatası: {e}")
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        return jsonify({"error": f"Sunucuda beklenmedik bir hata oluştu: {e}"}), 500
 
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/ozet')
 @login_required
 def get_tedarikci_ozet(tedarikci_id):
+    """Tedarikçi özetini servis üzerinden hesaplatır."""
     try:
         sirket_id = session['user']['sirket_id']
+        tedarikci_data, ozet_verisi = tedarikci_service.get_summary_by_id(sirket_id, tedarikci_id)
 
-        # Tedarikçi ismini almak için ek bir sorgu yapıyoruz
-        tedarikci_res = supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
-        if not tedarikci_res.data:
+        if not tedarikci_data:
             return jsonify({"error": "Tedarikçi bulunamadı."}), 404
 
-        # Yeni RPC fonksiyonumuzu çağırarak tüm özet verisini tek seferde alıyoruz
-        summary_res = supabase.rpc('get_supplier_summary', {
-            'p_sirket_id': sirket_id,
-            'p_tedarikci_id': tedarikci_id
-        }).execute()
-        
-        ozet_verisi = summary_res.data
-        
-        # Gelen veriye tedarikçi ismini de ekleyerek frontend'e gönderiyoruz
         sonuc = {
-            "isim": tedarikci_res.data.get('isim', 'Bilinmeyen Tedarikçi'),
+            "isim": tedarikci_data.get('isim', 'Bilinmeyen Tedarikçi'),
             "toplam_sut_alacagi": f"{Decimal(ozet_verisi.get('toplam_sut_alacagi', 0)):.2f}",
             "toplam_yem_borcu": f"{Decimal(ozet_verisi.get('toplam_yem_borcu', 0)):.2f}",
             "toplam_odeme": f"{Decimal(ozet_verisi.get('toplam_odeme', 0)):.2f}",
             "net_bakiye": f"{Decimal(ozet_verisi.get('net_bakiye', 0)):.2f}"
         }
         return jsonify(sonuc)
-
     except Exception as e:
-        print(f"Tedarikçi özet (RPC) hatası: {e}")
-        return jsonify({"error": "Sunucuda beklenmedik bir özet hatası oluştu."}), 500
+        return jsonify({"error": f"Sunucuda beklenmedik bir özet hatası oluştu: {e}"}), 500
 
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/sut_girdileri')
 @login_required
 def get_sut_girdileri_sayfali(tedarikci_id):
-    """Tedarikçinin süt girdilerini sayfalayarak getirir."""
     try:
         sayfa = int(request.args.get('sayfa', 1))
-        limit = 10
-        offset = (sayfa - 1) * limit
         sirket_id = session['user']['sirket_id']
-        query = supabase.table('sut_girdileri').select(
-            '*, kullanicilar(kullanici_adi)', count='exact'
-        ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order(
-            'taplanma_tarihi', desc=True
-        ).range(offset, offset + limit - 1)
-        response = query.execute()
+        response = paged_data_service.get_sut_girdileri(sirket_id, tedarikci_id, sayfa)
         return jsonify({"girdiler": response.data, "toplam_kayit": response.count})
     except Exception as e:
-        print(f"Sayfalı süt girdisi hatası: {e}")
-        return jsonify({"error": "Süt girdileri listelenemedi."}), 500
+        return jsonify({"error": f"Süt girdileri listelenemedi: {e}"}), 500
 
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/yem_islemleri')
 @login_required
 def get_yem_islemleri_sayfali(tedarikci_id):
-    """Tedarikçinin yem işlemlerini sayfalayarak getirir."""
     try:
         sayfa = int(request.args.get('sayfa', 1))
-        limit = 10
-        offset = (sayfa - 1) * limit
         sirket_id = session['user']['sirket_id']
-        query = supabase.table('yem_islemleri').select(
-            '*, kullanicilar(kullanici_adi), yem_urunleri(yem_adi)', count='exact'
-        ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order(
-            'islem_tarihi', desc=True
-        ).range(offset, offset + limit - 1)
-        response = query.execute()
+        response = paged_data_service.get_yem_islemleri(sirket_id, tedarikci_id, sayfa)
         return jsonify({"islemler": response.data, "toplam_kayit": response.count})
     except Exception as e:
-        print(f"Sayfalı yem işlemi hatası: {e}")
-        return jsonify({"error": "Yem işlemleri listelenemedi."}), 500
+        return jsonify({"error": f"Yem işlemleri listelenemedi: {e}"}), 500
 
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/finansal_islemler')
 @login_required
 def get_finansal_islemler_sayfali(tedarikci_id):
-    """Tedarikçinin finansal işlemlerini sayfalayarak getirir."""
     try:
         sayfa = int(request.args.get('sayfa', 1))
-        limit = 10
-        offset = (sayfa - 1) * limit
         sirket_id = session['user']['sirket_id']
-        query = supabase.table('finansal_islemler').select(
-            '*, kullanicilar(kullanici_adi)', count='exact'
-        ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order(
-            'islem_tarihi', desc=True
-        ).range(offset, offset + limit - 1)
-        response = query.execute()
+        response = paged_data_service.get_finansal_islemler(sirket_id, tedarikci_id, sayfa)
         return jsonify({"islemler": response.data, "toplam_kayit": response.count})
     except Exception as e:
-        print(f"Sayfalı finans işlemi hatası: {e}")
-        return jsonify({"error": "Finansal işlemler listelenemedi."}), 500
+        return jsonify({"error": f"Finansal işlemler listelenemedi: {e}"}), 500
 
 # --- CRUD İŞLEMLERİ ---
 @tedarikci_bp.route('/tedarikci_ekle', methods=['POST'])
@@ -143,19 +101,12 @@ def add_tedarikci():
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
-        isim = data.get('isim')
-        if not isim:
-            return jsonify({"error": "Tedarikçi ismi zorunludur."}), 400
-        yeni_veri = {'isim': isim, 'sirket_id': sirket_id}
-        if data.get('tc_no'): yeni_veri['tc_no'] = data.get('tc_no')
-        if data.get('telefon_no'): yeni_veri['telefon_no'] = data.get('telefon_no')
-        if data.get('adres'): yeni_veri['adres'] = data.get('adres')
-        response = supabase.table('tedarikciler').insert(yeni_veri).execute()
-        return jsonify({"message": "Tedarikçi başarıyla eklendi.", "tedarikci": response.data[0]}), 201
-    except APIError as e:
-        return jsonify({"error": f"Veritabanı hatası: {e.message}"}), 500
+        yeni_tedarikci = tedarikci_service.create(sirket_id, data)
+        return jsonify({"message": "Tedarikçi başarıyla eklendi.", "tedarikci": yeni_tedarikci}), 201
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        return jsonify({"error": f"Sunucu hatası: {e}"}), 500
 
 @tedarikci_bp.route('/tedarikci_duzenle/<int:id>', methods=['PUT'])
 @login_required
@@ -165,25 +116,12 @@ def update_tedarikci(id):
     try:
         data = request.get_json()
         sirket_id = session['user']['sirket_id']
-        guncellenecek_veri = {}
-        if 'isim' in data and data.get('isim'):
-            guncellenecek_veri['isim'] = data.get('isim')
-        else:
-             return jsonify({"error": "Tedarikçi ismi boş bırakılamaz."}), 400
-        if 'tc_no' in data: guncellenecek_veri['tc_no'] = data.get('tc_no')
-        if 'telefon_no' in data: guncellenecek_veri['telefon_no'] = data.get('telefon_no')
-        if 'adres' in data: guncellenecek_veri['adres'] = data.get('adres')
-        if not guncellenecek_veri:
-            return jsonify({"error": "Güncellenecek veri bulunamadı."}), 400
-        response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', id).eq('sirket_id', sirket_id).execute()
-        if not response.data:
-            return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
-        return jsonify({"message": "Tedarikçi bilgileri güncellendi.", "tedarikci": response.data[0]})
-    except APIError as e:
-        return jsonify({"error": f"Veritabanı hatası: {e.message}"}), 500
+        guncellenen_tedarikci = tedarikci_service.update(sirket_id, id, data)
+        return jsonify({"message": "Tedarikçi bilgileri güncellendi.", "tedarikci": guncellenen_tedarikci})
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        print(f"Tedarikçi GÜNCELLEME KRİTİK HATA: {e}")
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        return jsonify({"error": f"Sunucu hatası: {e}"}), 500
 
 @tedarikci_bp.route('/tedarikci_sil/<int:id>', methods=['DELETE'])
 @login_required
@@ -192,53 +130,30 @@ def update_tedarikci(id):
 def delete_tedarikci(id):
     try:
         sirket_id = session['user']['sirket_id']
-        response = supabase.table('tedarikciler').delete().eq('id', id).eq('sirket_id', sirket_id).execute()
-        if not response.data:
-            return jsonify({"error": "Tedarikçi bulunamadı veya bu işlem için yetkiniz yok."}), 404
+        tedarikci_service.delete(sirket_id, id)
         return jsonify({"message": "Tedarikçi başarıyla silindi."})
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 404
     except Exception as e:
-        if 'violates foreign key constraint' in str(e).lower():
-            return jsonify({"error": "Bu tedarikçiye ait süt veya yem girdisi olduğu için silinemiyor."}), 409
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        return jsonify({"error": f"Sunucu hatası: {e}"}), 500
 
 @tedarikci_bp.route('/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
-    """Tedarikçiler sayfasındaki ana listeyi sayfalama, arama ve sıralama yaparak getirir."""
+    """Tedarikçileri listelemek için servis katmanını kullanır."""
     try:
         sirket_id = session['user']['sirket_id']
         sayfa = int(request.args.get('sayfa', 1))
-        limit = 15 # Sayfa başına 15 kayıt getirelim
-        offset = (sayfa - 1) * limit
-        arama_terimi = request.args.get('arama', '')
+        arama = request.args.get('arama', '')
         sirala_sutun = request.args.get('sirala', 'isim')
         sirala_yon = request.args.get('yon', 'asc')
-
-        # Supabase sorgumuzu oluşturuyoruz
-        query = supabase.table('tedarikci_ozetleri').select(
-            'id, isim, telefon_no, tc_no, adres, toplam_litre', 
-            count='estimated' # Tahmini toplam kayıt sayısını al (daha hızlıdır)
-        ).eq('sirket_id', sirket_id)
-
-        # Arama terimi varsa, sorguya ekle
-        if arama_terimi:
-            query = query.ilike('isim', f'%{arama_terimi}%')
         
-        # Sıralama yönünü belirle
-        descending = sirala_yon == 'desc'
-        
-        # Sıralama, sayfalama ve çalıştırma
-        query = query.order(sirala_sutun, desc=descending).range(offset, offset + limit - 1)
-        
-        response = query.execute()
-
+        response = tedarikci_service.get_paginated_list(sirket_id, sayfa, 15, arama, sirala_sutun, sirala_yon)
         return jsonify({"tedarikciler": response.data, "toplam_kayit": response.count})
-
     except Exception as e:
-        print(f"Tedarikçi listesi hatası: {e}")
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        return jsonify({"error": f"Sunucu hatası: {e}"}), 500
 
-# --- PDF OLUŞTURMA ENDPOINT'LERİ ---
+# --- PDF ENDPOINT'LERİ (Bunlar zaten servis kullanıyor, değişiklik yok) ---
 
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/hesap_ozeti_pdf')
 @login_required
@@ -270,4 +185,3 @@ def tedarikci_mustahsil_makbuzu_pdf(tedarikci_id):
     except Exception as e:
         print(f"Müstahsil PDF endpoint hatası: {e}")
         return jsonify({"error": "PDF oluşturulurken sunucuda bir hata oluştu."}), 500
-
