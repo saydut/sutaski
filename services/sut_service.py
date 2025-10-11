@@ -1,5 +1,5 @@
 # services/sut_service.py
-# YENİ DOSYA: Bu dosya, süt girdileriyle ilgili tüm veritabanı işlemlerini merkezileştirir.
+# YENİ FONKSİYON EKLENDİ: Bu dosya, süt girdileriyle ilgili tüm veritabanı işlemlerini merkezileştirir.
 
 import logging
 from extensions import supabase, turkey_tz
@@ -141,6 +141,22 @@ class SutService:
         except Exception as e:
             logger.error(f"Hata (get_entry_history): {e}", exc_info=True)
             raise
+
+    def get_last_price_for_supplier(self, sirket_id: int, tedarikci_id: int):
+        """Bir tedarikçi için girilen en son süt fiyatını getirir."""
+        try:
+            response = supabase.table('sut_girdileri').select(
+                'fiyat'
+            ).eq('sirket_id', sirket_id).eq(
+                'tedarikci_id', tedarikci_id
+            ).order(
+                'taplanma_tarihi', desc=True
+            ).limit(1).single().execute()
+            
+            return response.data if response.data else {}
+        except Exception as e:
+            logger.error(f"Hata (get_last_price_for_supplier): {e}", exc_info=True)
+            raise Exception("Son fiyat bilgisi alınamadı.")
 
 # Servis'ten bir örnek (instance) oluşturalım ki blueprint'ler bunu kullanabilsin.
 sut_service = SutService()

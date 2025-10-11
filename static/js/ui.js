@@ -58,7 +58,21 @@ const ui = {
         if (document.getElementById('veri-giris-paneli').style.display !== 'none' && document.getElementById('tedarikci-sec')) {
             this.tedarikciSecici = new TomSelect("#tedarikci-sec", {
                 create: false,
-                sortField: { field: "text", direction: "asc" }
+                sortField: { field: "text", direction: "asc" },
+                onChange: (value) => {
+                    if (value && navigator.onLine) {
+                        // Seçim yapıldığında ve internet varsa, son fiyatı getir
+                        api.fetchSonFiyat(value).then(data => {
+                           if(data && data.son_fiyat) {
+                               const fiyatInput = document.getElementById('fiyat-input');
+                               fiyatInput.value = parseFloat(data.son_fiyat).toFixed(2);
+                               // Kullanıcının dikkatini çekmek için küçük bir animasyon
+                               fiyatInput.classList.add('fiyat-guncellendi');
+                               setTimeout(() => fiyatInput.classList.remove('fiyat-guncellendi'), 500);
+                           }
+                        }).catch(err => console.warn("Son fiyat getirilemedi:", err));
+                    }
+                }
             });
         }
     },

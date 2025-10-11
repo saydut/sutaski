@@ -106,3 +106,15 @@ def get_girdi_gecmisi(girdi_id):
     except Exception as e:
         logger.error(f"Girdi geçmişi hatası: {e}", exc_info=True)
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+
+@sut_bp.route('/tedarikci/<int:tedarikci_id>/son_fiyat', methods=['GET'])
+@login_required
+def get_son_fiyat(tedarikci_id):
+    """Bir tedarikçi için girilen en son süt fiyatını döndürür."""
+    try:
+        sirket_id = session['user']['sirket_id']
+        data = sut_service.get_last_price_for_supplier(sirket_id, tedarikci_id)
+        return jsonify({"son_fiyat": data.get('fiyat')})
+    except Exception as e:
+        logger.error(f"Son fiyat API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Fiyat bilgisi alınamadı."}), 500
