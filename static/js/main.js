@@ -175,7 +175,20 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
     const effectiveDate = tarih || (ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : utils.getLocalDateString(new Date()));
     const cacheKey = `girdiler_${effectiveDate}_sayfa_${sayfa}`;
 
-    ui.toggleGirdilerListLoading(true);
+    const listeElementi = document.getElementById('girdiler-listesi');
+    listeElementi.innerHTML = ''; // Önce temizle
+    for (let i = 0; i < 3; i++) { // Örnek olarak 3 tane iskelet gösterelim
+        listeElementi.innerHTML += `
+            <div class="list-group-item">
+                <div class="skeleton skeleton-text" style="width: 60%;"></div>
+                <div class="skeleton skeleton-text" style="width: 40%; height: 0.8rem;"></div>
+            </div>
+        `;
+    }
+    // YÜKLEME ANİMASYONU SONU
+
+    document.getElementById('veri-yok-mesaji').style.display = 'none';
+
     document.getElementById('veri-yok-mesaji').style.display = 'none';
 
     // --- YENİ ÇEVRİMDIŞI MANTIĞI ---

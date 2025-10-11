@@ -438,3 +438,21 @@ h5 { font-size: 0.95rem; }
     background-color: var(--primary); /* Arka planı ana tema rengimiz yapar. */
     color: #FFFFFF; /* Yazı rengini okunabilirlik için beyaz yapar. */
 }
+
+@keyframes pulse {
+    50% { opacity: .5; }
+}
+.skeleton {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    background-color: var(--input-bg); /* Tema ile uyumlu renk */
+    border-radius: 0.75rem;
+}
+.skeleton-text {
+    height: 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 0.5rem;
+}
+.skeleton-card {
+    padding: 1rem;
+    height: 110px; /* Kart yüksekliğine benzer bir değer */
+}
