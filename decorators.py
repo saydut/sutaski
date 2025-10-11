@@ -45,7 +45,7 @@ def lisans_kontrolu(f):
 
                 # *** MANTIKSAL DÜZELTME: Lisansın son günü dahil edilmeyecek şekilde kontrol ***
                 # Eğer bugün, lisansın bittiği güne eşit veya ondan sonraysa kullanıcıyı at.
-                if bugun_tr > lisans_bitis_tarihi_obj:
+                if bugun_tr >= lisans_bitis_tarihi_obj:
                     flash("Şirketinizin lisans süresi dolmuştur. Lütfen sistem yöneticinizle iletişime geçin.", "danger")
                     session.pop('user', None) # Güvenlik için oturumu sonlandır
                     return redirect(url_for('auth.login_page'))

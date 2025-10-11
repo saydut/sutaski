@@ -44,7 +44,7 @@ class YemService:
                 "stok_miktari_kg": str(Decimal(data.get('stok_miktari_kg'))),
                 "birim_fiyat": str(Decimal(data.get('birim_fiyat')))
             }
-            response = supabase.table('yem_urunleri').insert(yeni_urun).select().execute()
+            response = supabase.table('yem_urunleri').insert(yeni_urun).execute()
             return response.data[0]
         except (InvalidOperation, TypeError, ValueError):
             raise ValueError("Lütfen stok ve fiyat için geçerli sayılar girin.")
