@@ -78,7 +78,14 @@ const ui = {
         this.tarihFiltreleyici = flatpickr("#tarih-filtre", {
             dateFormat: "d.m.Y",
             locale: "tr",
-            defaultDate: "today"
+            defaultDate: "today",
+            // YENİ: Tarih değiştiğinde filtrelemeyi otomatik tetikle
+            onChange: function(selectedDates, dateStr, instance) {
+                // `girdileriFiltrele` fonksiyonunun main.js'de tanımlı olduğunu varsayıyoruz.
+                if (typeof girdileriFiltrele === 'function') {
+                    girdileriFiltrele();
+                }
+            }
         });
         
         if (document.getElementById('veri-giris-paneli').style.display !== 'none' && document.getElementById('tedarikci-sec')) {
@@ -170,15 +177,43 @@ const ui = {
     },
     
     /**
-     * Süt girdileri listesi için yükleniyor animasyonunu yönetir.
-     * @param {boolean} isLoading - Yükleniyor durumu.
+     * YENİ: Girdiler listesi için mevcut görünüme uygun bir yükleniyor iskeleti gösterir.
+     * @param {string} gorunum - 'liste' veya 'kart'.
      */
-    toggleGirdilerListLoading(isLoading) {
-        const listeElementi = document.getElementById('girdiler-listesi');
-        if (isLoading) {
-            listeElementi.innerHTML = '<div class="text-center p-5"><div class="spinner-border"></div></div>';
+    showGirdilerLoadingSkeleton(gorunum) {
+        const listeContainer = document.getElementById('girdiler-listesi');
+        const kartContainer = document.getElementById('girdiler-kart-listesi');
+        const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+
+        listeContainer.innerHTML = '';
+        kartContainer.innerHTML = '';
+        veriYokMesaji.style.display = 'none';
+        const girdilerSayfaBasi = 6; // main.js'dekiyle aynı olmalı
+
+        if (gorunum === 'liste') {
+            for (let i = 0; i < girdilerSayfaBasi; i++) {
+                listeContainer.innerHTML += `
+                    <div class="list-group-item">
+                        <div class="skeleton skeleton-text" style="width: 60%;"></div>
+                        <div class="skeleton skeleton-text" style="width: 40%; height: 0.8rem;"></div>
+                    </div>
+                `;
+            }
+        } else { // kart görünümü
+            for (let i = 0; i < girdilerSayfaBasi; i++) {
+                kartContainer.innerHTML += `
+                    <div class="col-xl-6 col-12">
+                        <div class="card p-2 skeleton-card" style="height: 120px;">
+                            <div class="skeleton skeleton-text" style="width: 70%;"></div>
+                            <div class="skeleton skeleton-text" style="width: 50%; height: 0.8rem;"></div>
+                            <div class="skeleton skeleton-text" style="width: 90%; margin-top: 1rem;"></div>
+                        </div>
+                    </div>
+                `;
+            }
         }
     },
+
 
     /**
      * Sunucudan gelen ve çevrimdışı kaydedilen girdileri birleştirir.
@@ -218,20 +253,19 @@ const ui = {
  */
 renderGirdiler(girdiler, gorunum) {
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    const listeKonteyneri = document.getElementById('liste-gorunumu');
-    const kartKonteyneri = document.getElementById('kart-gorunumu');
+    const listeListesi = document.getElementById('girdiler-listesi');
+    const kartListesi = document.getElementById('girdiler-kart-listesi');
 
-    // Önce tüm alanları temizle
-    document.getElementById('girdiler-listesi').innerHTML = '';
-    document.getElementById('girdiler-kart-listesi').innerHTML = '';
-    veriYokMesaji.style.display = 'none';
-
+    // Sadece iç listeleri temizle
+    listeListesi.innerHTML = '';
+    kartListesi.innerHTML = '';
+    
     if (girdiler.length === 0) {
         veriYokMesaji.style.display = 'block';
-        listeKonteyneri.style.display = 'none';
-        kartKonteyneri.style.display = 'none';
         return;
     }
+
+    veriYokMesaji.style.display = 'none';
 
     if (gorunum === 'liste') {
         this.renderGirdilerAsList(girdiler);
@@ -508,3 +542,5 @@ renderGirdilerAsCards(girdiler) {
         return true;
     }
 };
+
+
