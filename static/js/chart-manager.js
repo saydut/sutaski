@@ -1,7 +1,7 @@
 // static/js/chart-manager.js
 
 // Sayfadaki tüm aktif Chart.js instance'larını tutacak olan dizi
-const registeredCharts = [];
+let registeredCharts = []; // GÜNCELLENDİ: const'tan let'e çevrildi ki yeniden atanabilsin.
 
 /**
  * Yeni oluşturulan bir chart'ı yönetim listesine ekler.
@@ -11,6 +11,17 @@ function registerChart(chartInstance) {
     if (chartInstance) {
         registeredCharts.push(chartInstance);
     }
+}
+
+/**
+ * Bir chart'ı yönetim listesinden kaldırır.
+ * Bu fonksiyon, bir chart .destroy() edilmeden hemen önce çağrılmalıdır.
+ * @param {Chart} chartInstance - Kaldırılacak chart nesnesi.
+ */
+function unregisterChart(chartInstance) {
+    if (!chartInstance) return;
+    // Grafiği, ID'sine göre listeden filtreleyerek kaldırıyoruz.
+    registeredCharts = registeredCharts.filter(chart => chart.id !== chartInstance.id);
 }
 
 /**
@@ -31,6 +42,7 @@ function updateAllChartThemes() {
     const lineBorderColor = isDark ? 'rgba(76, 125, 255, 1)' : 'rgba(74, 144, 226, 1)';
 
     registeredCharts.forEach(chart => {
+        if (!chart) return; // Ekstra güvenlik kontrolü
         // Genel ayarlar
         if (chart.options.scales.y) chart.options.scales.y.ticks.color = textColor;
         if (chart.options.scales.x) chart.options.scales.x.ticks.color = textColor;

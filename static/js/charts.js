@@ -18,9 +18,8 @@ const charts = {
             if (!canvas) return; // Canvas elementi yoksa işlemi durdur
             const ctx = canvas.getContext('2d');
             
-            // --- HATA DÜZELTMESİ ---
-            // Grafiği yok etmeden önce var olup olmadığını kontrol et
             if (this.haftalikChart) {
+                unregisterChart(this.haftalikChart); // YENİ: Grafiği yok etmeden önce kaydını sil.
                 this.haftalikChart.destroy();
                 this.haftalikChart = null; // Referansı temizle
             }
@@ -50,7 +49,7 @@ const charts = {
                 }
             });
 
-            registerChart(this.haftalikChart);
+            registerChart(this.haftalikChart); // YENİ: Yeni grafiği kaydet.
             if (typeof updateAllChartThemes === 'function') {
                 updateAllChartThemes();
             }
@@ -70,9 +69,8 @@ const charts = {
         if (!canvas) return; // Canvas elementi yoksa işlemi durdur
         const ctx = canvas.getContext('2d');
 
-        // --- HATA DÜZELTMESİ ---
-        // Grafiği yok etmeden önce var olup olmadığını kontrol et
         if (this.tedarikciChart) {
+            unregisterChart(this.tedarikciChart); // YENİ: Grafiği yok etmeden önce kaydını sil.
             this.tedarikciChart.destroy();
             this.tedarikciChart = null; // Referansı temizle
         }
@@ -129,7 +127,7 @@ const charts = {
                 }
             });
 
-            registerChart(this.tedarikciChart);
+            registerChart(this.tedarikciChart); // YENİ: Yeni grafiği kaydet.
             if (typeof updateAllChartThemes === 'function') {
                 updateAllChartThemes();
             }
@@ -140,4 +138,3 @@ const charts = {
         }
     }
 };
-

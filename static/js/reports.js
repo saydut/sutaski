@@ -91,8 +91,11 @@ async function raporOlustur() {
     if (!navigator.onLine) {
         mesajElementi.innerHTML = '<p class="text-warning">Rapor oluşturmak için internet bağlantısı gereklidir.</p>';
         mesajElementi.style.display = 'block';
-        if (detayliChart) detayliChart.destroy(); // İnternet yoksa grafiği temizle
-        detayliChart = null; // Grafiği null yap
+        if (detayliChart) {
+            unregisterChart(detayliChart); // YENİ: Kaydı sil.
+            detayliChart.destroy();
+        }
+        detayliChart = null;
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         return;
     }
@@ -100,9 +103,8 @@ async function raporOlustur() {
     mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Rapor oluşturuluyor...</p>';
     mesajElementi.style.display = 'block';
     
-    // --- HATA DÜZELTMESİ BURADA ---
-    // Grafiği yok etmeden önce var olup olmadığını kontrol et
     if (detayliChart) {
+        unregisterChart(detayliChart); // YENİ: Grafiği yok etmeden önce kaydını sil.
         detayliChart.destroy();
         detayliChart = null;
     }
@@ -154,7 +156,7 @@ async function raporOlustur() {
                 }
             }
         });
-        registerChart(detayliChart);
+        registerChart(detayliChart); // YENİ: Yeni grafiği kaydet.
 
         if (typeof updateAllChartThemes === 'function') updateAllChartThemes();
     } catch (error) {
