@@ -1,18 +1,21 @@
 # services/tedarikci_service.py
-# YENİ DOSYA: Bu dosya, tedarikçilerle ilgili tüm veritabanı işlemlerini merkezileştirir.
+# GÜNCELLENDİ: Bu dosya artık yavaş olan "view" yerine hızlı olan RPC fonksiyonunu kullanacak.
 
 from extensions import supabase
 from postgrest import APIError
 from decimal import Decimal
+from collections import namedtuple
 
 class TedarikciService:
     """Tedarikçi veritabanı işlemleri için servis katmanı."""
 
     def get_all_for_dropdown(self, sirket_id: int):
-        """Dropdown menüler için tüm tedarikçileri (özet bilgiyle) getirir."""
+        """Dropdown menüler için tüm tedarikçileri getirir."""
         try:
-            response = supabase.table('tedarikci_ozetleri').select(
-                'id, isim, telefon_no, tc_no, adres, toplam_litre'
+            # View kaldırıldığı için, artık direkt tedarikciler tablosundan çekiyoruz.
+            # Dropdown'da toplam litre bilgisi kritik değil, performansı artırmak için kaldırıyoruz.
+            response = supabase.table('tedarikciler').select(
+                'id, isim'
             ).eq('sirket_id', sirket_id).order('isim', desc=False).execute()
             return response.data
         except Exception as e:
@@ -48,23 +51,35 @@ class TedarikciService:
             raise
     
     def get_paginated_list(self, sirket_id: int, sayfa: int, limit: int, arama: str, sirala_sutun: str, sirala_yon: str):
-        """Tedarikçileri sayfalama, arama ve sıralama yaparak getirir."""
+        """Tedarikçileri sayfalama, arama ve sıralama yaparak yeni RPC fonksiyonu ile getirir."""
         try:
             offset = (sayfa - 1) * limit
-            query = supabase.table('tedarikci_ozetleri').select(
-                'id, isim, telefon_no, tc_no, adres, toplam_litre', 
-                count='estimated'
-            ).eq('sirket_id', sirket_id)
+            
+            params = {
+                'p_sirket_id': sirket_id,
+                'p_limit': limit,
+                'p_offset': offset,
+                'p_search_term': arama,
+                'p_sort_column': sirala_sutun,
+                'p_sort_direction': sirala_yon
+            }
 
-            if arama:
-                query = query.ilike('isim', f'%{arama}%')
+            # Yeni ve performanslı RPC'mizi çağırıyoruz
+            response = supabase.rpc('get_paginated_suppliers', params).execute()
             
-            descending = sirala_yon == 'desc'
-            query = query.order(sirala_sutun, desc=descending).range(offset, offset + limit - 1)
+            # supabase-py v2 RPC'den tek bir JSON objesi döner
+            result = response.data
             
-            return query.execute()
+            tedarikciler = result.get('data', [])
+            toplam_kayit = result.get('count', 0)
+
+            # Blueprint katmanıyla uyumlu bir dönüş tipi sağlıyoruz.
+            APIResponse = namedtuple('APIResponse', ['data', 'count'])
+            
+            return APIResponse(data=tedarikciler, count=toplam_kayit)
+
         except Exception as e:
-            print(f"Hata (get_paginated_list): {e}")
+            print(f"Hata (get_paginated_list with RPC): {e}")
             raise
 
     def create(self, sirket_id: int, data: dict):

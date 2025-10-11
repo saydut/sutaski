@@ -1,6 +1,21 @@
-// static/js/tedarikci_detay.js (MERKEZİ SAYFALAMA KULLANAN YENİ VERSİYON)
+// static/js/tedarikci_detay.js (MERKEZİ YÜKLEYİCİYİ KULLANACAK ŞEKİLDE REFAKTÖR EDİLDİ)
 
 let mevcutGorunum = 'tablo';
+const yuklenenSekmeler = { sut: false, yem: false, finans: false };
+const KAYIT_SAYISI = 10;
+
+// --- Sayfa Yüklendiğinde Çalışan Ana Fonksiyon ---
+window.onload = () => {
+    mevcutGorunum = localStorage.getItem('tedarikciDetayGorunum') || 'tablo';
+    gorunumuAyarla(mevcutGorunum);
+
+    ayYilSecicileriniDoldur('rapor-ay', 'rapor-yil');
+    ozetVerileriniYukle();
+    sutGirdileriniYukle(1); // İlk sekmeyi direkt yükle
+    sekmeOlaylariniAyarla();
+};
+
+// --- Arayüz ve Olay Yönetimi Fonksiyonları ---
 
 function gorunumuAyarla(aktifGorunum) {
     document.querySelectorAll('.gorunum-konteyneri-detay').forEach(el => {
@@ -20,31 +35,15 @@ function gorunumuDegistir(yeniGorunum) {
     localStorage.setItem('tedarikciDetayGorunum', yeniGorunum);
     gorunumuAyarla(yeniGorunum);
 
+    // Görünüm değiştiğinde mevcut aktif sekmeyi yeniden yükle
     const aktifSekme = document.querySelector('.nav-tabs .nav-link.active');
     if (aktifSekme.id === 'sut-tab') sutGirdileriniYukle(1);
     else if (aktifSekme.id === 'yem-tab') yemIslemleriniYukle(1);
     else if (aktifSekme.id === 'finans-tab') finansalIslemleriYukle(1);
 }
 
-
-const yuklenenSekmeler = {
-    sut: false,
-    yem: false,
-    finans: false
-};
-const KAYIT_SAYISI = 10;
-
-window.onload = () => {
-    mevcutGorunum = localStorage.getItem('tedarikciDetayGorunum') || 'tablo';
-    gorunumuAyarla(mevcutGorunum);
-
-    ayYilSecicileriniDoldur('rapor-ay', 'rapor-yil');
-    ozetVerileriniYukle();
-    sutGirdileriniYukle(1); // İlk sekmeyi direkt yükle
-    sekmeOlaylariniAyarla();
-};
-
 function sekmeOlaylariniAyarla() {
+    // Sekmeler daha önce yüklenmediyse, gösterildiğinde veri yüklemesini tetikle
     document.getElementById('yem-tab').addEventListener('show.bs.tab', () => {
         if (!yuklenenSekmeler.yem) yemIslemleriniYukle(1);
     }, { once: true });
@@ -54,7 +53,7 @@ function sekmeOlaylariniAyarla() {
     }, { once: true });
 }
 
-// ARTIK BU DOSYADA YEREL BİR "sayfalamaNavOlustur" FONKSİYONU YOK.
+// --- Veri Yükleme Fonksiyonları (REFAKTÖR EDİLDİ) ---
 
 async function ozetVerileriniYukle() {
     const ozetKartlariContainer = document.getElementById('ozet-kartlari');
@@ -63,28 +62,19 @@ async function ozetVerileriniYukle() {
     ozetKartlariContainer.innerHTML = '<div class="col-12 text-center p-5"><div class="spinner-border"></div></div>';
 
     try {
-        const response = await fetch(`/api/tedarikci/${TEDARIKCI_ID}/ozet`);
-        if (!response.ok) throw new Error('Özet verileri alınamadı.');
-        const data = await response.json();
-        
+        const data = await api.request(`/api/tedarikci/${TEDARIKCI_ID}/ozet`);
         baslikElementi.innerText = data.isim;
         ozetKartlariniDoldur(data);
-
     } catch (error) {
         baslikElementi.innerText = "Hata";
         ozetKartlariContainer.innerHTML = `<div class="col-12 text-center p-4 text-danger">${error.message}</div>`;
     }
 }
 
-// ESKİ sutGirdileriniYukle, yemIslemleriniYukle, finansalIslemleriYukle FONKSİYONLARINI SİL
-// VE YERİNE AŞAĞIDAKİ TÜM KOD BLOĞUNU YAPIŞTIR
-
-// --- Veri Yükleme Fonksiyonları ---
-
 async function sutGirdileriniYukle(sayfa = 1) {
     yuklenenSekmeler.sut = true;
     await genelVeriYukleyici({
-        apiURL: `/api/tedarikci/${TEDARIKCI_ID}/sut_girdileri?sayfa=${sayfa}`,
+        apiURL: `/api/tedarikci/${TEDARIKCI_ID}/sut_girdileri?sayfa=${sayfa}&limit=${KAYIT_SAYISI}`,
         veriAnahtari: 'girdiler',
         tabloBodyId: 'sut-girdileri-tablosu',
         kartContainerId: 'sut-kart-gorunumu',
@@ -102,7 +92,7 @@ async function sutGirdileriniYukle(sayfa = 1) {
 async function yemIslemleriniYukle(sayfa = 1) {
     yuklenenSekmeler.yem = true;
     await genelVeriYukleyici({
-        apiURL: `/api/tedarikci/${TEDARIKCI_ID}/yem_islemleri?sayfa=${sayfa}`,
+        apiURL: `/api/tedarikci/${TEDARIKCI_ID}/yem_islemleri?sayfa=${sayfa}&limit=${KAYIT_SAYISI}`,
         veriAnahtari: 'islemler',
         tabloBodyId: 'yem-islemleri-tablosu',
         kartContainerId: 'yem-kart-gorunumu',
@@ -120,7 +110,7 @@ async function yemIslemleriniYukle(sayfa = 1) {
 async function finansalIslemleriYukle(sayfa = 1) {
     yuklenenSekmeler.finans = true;
     await genelVeriYukleyici({
-        apiURL: `/api/tedarikci/${TEDARIKCI_ID}/finansal_islemler?sayfa=${sayfa}`,
+        apiURL: `/api/tedarikci/${TEDARIKCI_ID}/finansal_islemler?sayfa=${sayfa}&limit=${KAYIT_SAYISI}`,
         veriAnahtari: 'islemler',
         tabloBodyId: 'finansal-islemler-tablosu',
         kartContainerId: 'finans-kart-gorunumu',
@@ -135,7 +125,7 @@ async function finansalIslemleriYukle(sayfa = 1) {
     });
 }
 
-// --- Render Fonksiyonları ---
+// --- Render Fonksiyonları (DEĞİŞİKLİK YOK) ---
 
 function renderSutAsTable(container, veriler) {
     veriler.forEach(girdi => {
@@ -236,11 +226,6 @@ function renderFinansAsCards(container, veriler) {
     });
 }
 
-// --- Genel Veri Yükleme Motoru ---
-
-
-
-
 function ozetKartlariniDoldur(ozet) {
     const container = document.getElementById('ozet-kartlari');
     const toplam_sut_alacagi = parseFloat(ozet.toplam_sut_alacagi || 0).toFixed(2);
@@ -256,10 +241,7 @@ function ozetKartlariniDoldur(ozet) {
     `;
 }
 
-
-
-
-
+// --- PDF Fonksiyonları (DEĞİŞİKLİK YOK) ---
 function hesapOzetiIndir() {
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
