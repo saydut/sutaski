@@ -29,6 +29,32 @@ function gosterMesaj(mesaj, tip = 'info', sure = 5000) {
     }, sure);
 }
 
+/**
+ * Bir sayıyı 0'dan hedef değere doğru animasyonla artırır.
+ * @param {HTMLElement} element - Sayının gösterileceği HTML elementi.
+ * @param {number} finalValue - Ulaşılacak son değer.
+ * @param {number} duration - Animasyonun milisaniye cinsinden süresi.
+ * @param {string} suffix - Sayının sonuna eklenecek metin (örn: ' L').
+ * @param {number} decimalPlaces - Ondalık basamak sayısı.
+ */
+function animateCounter(element, finalValue, duration = 1200, suffix = '', decimalPlaces = 0) {
+    let startTimestamp = null;
+    const step = (timestamp) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        // Animasyonu daha yumuşak başlatıp bitirmek için bir "easing" fonksiyonu
+        const easedProgress = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+        const currentValue = easedProgress * finalValue;
+        
+        element.textContent = currentValue.toFixed(decimalPlaces).replace('.', ',') + suffix;
+        
+        if (progress < 1) {
+            window.requestAnimationFrame(step);
+        }
+    };
+    window.requestAnimationFrame(step);
+}
+
 
 const ui = {
     // Modal ve kütüphane instance'ları
@@ -109,7 +135,7 @@ const ui = {
     },
 
     /**
-     * Özet panellerini gelen veriyle günceller.
+     * Özet panellerini gelen veriyle günceller ve sayıları animasyonlu gösterir.
      * @param {object|null} data - {toplam_litre, girdi_sayisi} içeren obje.
      * @param {string} effectiveDate - Panelin başlığında gösterilecek tarih.
      * @param {boolean} isError - Hata olup olmadığı.
@@ -135,8 +161,11 @@ const ui = {
             toplamLitrePanel.textContent = 'Hata';
             girdiSayisiPanel.textContent = 'Hata';
         } else if (data) {
-            toplamLitrePanel.textContent = `${data.toplam_litre} L`;
-            girdiSayisiPanel.textContent = data.girdi_sayisi;
+            const toplamLitre = parseFloat(data.toplam_litre) || 0;
+            const girdiSayisi = parseInt(data.girdi_sayisi, 10) || 0;
+            
+            animateCounter(toplamLitrePanel, toplamLitre, 1000, ' L', 2); // 1 saniye, ' L' eki, 2 ondalık
+            animateCounter(girdiSayisiPanel, girdiSayisi, 800, '', 0);   // 0.8 saniye, ek yok, 0 ondalık
         }
     },
     

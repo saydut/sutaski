@@ -3,8 +3,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeToggle = document.getElementById('theme-toggle');
     if (themeToggle) {
         themeToggle.addEventListener('click', () => {
+            // Animasyon için class ekle
+            themeToggle.classList.add('rotating');
+
             const currentTheme = document.documentElement.getAttribute('data-theme');
             setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+            
+            // Animasyon bittikten sonra class'ı kaldır ki tekrar tetiklenebilsin
+            themeToggle.addEventListener('transitionend', () => {
+                themeToggle.classList.remove('rotating');
+            }, { once: true });
         });
     }
 
