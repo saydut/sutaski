@@ -161,8 +161,14 @@ a:hover {
     border-radius: 1rem;
 }
 .modal-header, .modal-footer { border-color: var(--border); }
-.btn-close {
+
+/* SADECE MODAL İÇİNDEKİ ÇARPI İKONUNUN RENGİNİ DEĞİŞTİR */
+.modal-content .btn-close {
     filter: invert(var(--is-dark, 0));
+}
+
+/* TÜM ÇARPI İKONLARI İÇİN GENEL GÖRSEL STİLLER */
+.btn-close {
     opacity: 0.7;
     transition: opacity 0.2s, transform 0.2s;
 }
