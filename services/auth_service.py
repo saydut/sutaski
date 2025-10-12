@@ -46,18 +46,20 @@ class AuthService:
             raise Exception("Kayıt sırasında beklenmedik bir sunucu hatası oluştu.")
 
     def _get_or_create_sirket(self, sirket_adi):
-        """Verilen isimde bir şirket arar, bulamazsa yenisini oluşturur."""
-        # Büyük/küçük harf duyarsız arama yap
-        sirket_response = supabase.table('sirketler').select('id, sirket_adi').ilike('sirket_adi', sirket_adi).execute()
+        """Verilen isimde bir şirket arar (büyük/küçük harf duyarsız), 
+           bulamazsa standart bir formatta yenisini oluşturur."""
         
-        # Eşleşme varsa, tam olarak aynı isimde olanı bul
+        formatted_name = sirket_adi.strip().title()
+
+        # DEĞİŞİKLİK 1: .single() komutunu buradan kaldırdık.
+        sirket_response = supabase.table('sirketler').select('id').eq('sirket_adi', formatted_name).execute()
+        
+        # DEĞİŞİKLİK 2: Artık bir liste beklediğimiz için ilk elemanı seçiyoruz.
         if sirket_response.data:
-            for sirket in sirket_response.data:
-                if sirket['sirket_adi'] == sirket_adi:
-                    return sirket['id']
+            return sirket_response.data[0]['id']
         
-        # Tam eşleşme yoksa, yeni şirket oluştur
-        yeni_sirket_response = supabase.table('sirketler').insert({'sirket_adi': sirket_adi}).execute()
+        # Eğer bulunamadıysa, yeni şirketi standart formatta oluştur.
+        yeni_sirket_response = supabase.table('sirketler').insert({'sirket_adi': formatted_name}).execute()
         return yeni_sirket_response.data[0]['id']
 
 
