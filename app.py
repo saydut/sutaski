@@ -80,7 +80,7 @@ def create_app():
         except (ValueError, TypeError):
             return value
 
-    @lru_cache(maxsize=None)
+#    @lru_cache(maxsize=None)
     def get_version_info():
         try:
             all_versions_res = supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).order('id', desc=True).execute()
