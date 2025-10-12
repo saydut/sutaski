@@ -9,7 +9,11 @@ CREATE OR REPLACE FUNCTION get_paginated_suppliers(
     p_sort_column text,
     p_sort_direction text
 )
-RETURNS json AS $$
+RETURNS json 
+LANGUAGE plpgsql
+-- GÜVENLİK GÜNCELLEMESİ: Arama yolunu sadece 'public' şeması ile kısıtlar.
+SET search_path = public
+AS $$
 DECLARE
     suppliers_data json;
     total_count integer;
@@ -18,8 +22,9 @@ BEGIN
     -- İlk olarak, arama kriterine uyan toplam tedarikçi sayısını buluyoruz.
     -- Bu, sayfalama (pagination) için gereklidir.
     EXECUTE format(
-        'SELECT count(*) FROM tedarikciler WHERE sirket_id = %L AND isim ILIKE %L',
+        'SELECT count(*) FROM tedarikciler WHERE sirket_id = %L AND (isim ILIKE %L OR telefon_no ILIKE %L)',
         p_sirket_id,
+        '%' || p_search_term || '%',
         '%' || p_search_term || '%'
     ) INTO total_count;
 
@@ -43,12 +48,13 @@ BEGIN
                     WHERE sirket_id = %L
                     GROUP BY tedarikci_id
                 ) s ON td.id = s.tedarikci_id
-                WHERE td.sirket_id = %L AND td.isim ILIKE %L
+                WHERE td.sirket_id = %L AND (td.isim ILIKE %L OR td.telefon_no ILIKE %L)
                 ORDER BY toplam_litre %s
                 LIMIT %L OFFSET %L
             ) t',
             p_sirket_id,
             p_sirket_id,
+            '%' || p_search_term || '%',
             '%' || p_search_term || '%',
             p_sort_direction,
             p_limit,
@@ -61,7 +67,7 @@ BEGIN
             'WITH paginated_suppliers AS (
                 SELECT *
                 FROM tedarikciler
-                WHERE sirket_id = %L AND isim ILIKE %L
+                WHERE sirket_id = %L AND (isim ILIKE %L OR telefon_no ILIKE %L)
                 ORDER BY %I %s
                 LIMIT %L OFFSET %L
             )
@@ -84,6 +90,7 @@ BEGIN
             ) t',
             p_sirket_id,
             '%' || p_search_term || '%',
+            '%' || p_search_term || '%',
             p_sort_column, p_sort_direction,
             p_limit, p_offset,
             p_sirket_id,
@@ -99,4 +106,4 @@ BEGIN
         'count', total_count
     );
 END;
-$$ LANGUAGE plpgsql;
+$$;

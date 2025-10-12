@@ -118,3 +118,29 @@ def get_son_fiyat(tedarikci_id):
     except Exception as e:
         logger.error(f"Son fiyat API hatası: {e}", exc_info=True)
         return jsonify({"error": "Fiyat bilgisi alınamadı."}), 500
+
+# --- AKILLI DOĞRULAMA İÇİN YENİ ENDPOINT ---
+@sut_bp.route('/tedarikci/<int:tedarikci_id>/stats', methods=['GET'])
+@login_required
+def get_tedarikci_stats(tedarikci_id):
+    """Bir tedarikçinin süt girdisi istatistiklerini getirir."""
+    try:
+        from extensions import supabase
+        sirket_id = session['user']['sirket_id']
+        
+        # HATA DÜZELTMESİ: Parametreler doğru formatta gönderiliyor.
+        params = {
+            'p_sirket_id': sirket_id,
+            'p_tedarikci_id': tedarikci_id
+        }
+        response = supabase.rpc('get_supplier_stats', params).execute()
+        
+        if not response.data:
+            # Eğer hiç girdi yoksa, boş bir istatistik döndür
+            return jsonify([{"ortalama_litre": 0, "standart_sapma": 0}])
+            
+        return jsonify(response.data)
+    except Exception as e:
+        logger.error(f"İstatistik API hatası: {e}", exc_info=True)
+        return jsonify({"error": "İstatistik verisi alınamadı."}), 500
+

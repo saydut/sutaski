@@ -49,7 +49,7 @@
                     <div class="col-lg-12 col-6"><div class="card p-3 text-center"><div id="girdi-sayisi-baslik" class="ozet-baslik">BUGÜNKÜ TOPLAM GİRDİ</div><div class="ozet-deger" id="bugunku-girdi-sayisi"><div class="spinner-border spinner-border-sm" role="status"></div></div></div></div>
                 </div>
                 <div id="veri-giris-paneli" style="display: {% if session.get('user', {}).get('rol') == 'muhasebeci' %}none{% else %}block{% endif %};">
-                    <div class="card"><div class="card-body p-3"><h5 class="card-title mb-2">Yeni Süt Girdisi Ekle</h5><div class="mb-2"><label for="tedarikci-sec" class="form-label">Tedarikçi Seçin</label><select id="tedarikci-sec" placeholder="Tedarikçi ara..."></select></div><div class="mb-2"><label for="litre-input" class="form-label">Litre (Örn: 25.5)</label><input type="number" step="0.1" class="form-control form-control-sm" id="litre-input" placeholder="Litre miktarını girin"></div><div class="mb-2"><label for="fiyat-input" class="form-label">Litre Fiyatı (TL)</label><input type="number" step="0.01" class="form-control form-control-sm" id="fiyat-input" placeholder="Örn: 15.50"></div><div class="d-grid"><button class="btn btn-primary btn-sm" onclick="sutGirdisiEkle()">Kaydet</button></div></div></div>
+                    <div class="card"><div class="card-body p-3"><h5 class="card-title mb-2">Yeni Süt Girdisi Ekle</h5><div class="mb-2"><label for="tedarikci-sec" class="form-label">Tedarikçi Seçin</label><select id="tedarikci-sec" placeholder="Tedarikçi ara..."></select></div><div class="mb-2"><label for="litre-input" class="form-label">Litre (Örn: 25.5)</label><input type="number" step="0.1" class="form-control form-control-sm" id="litre-input" placeholder="Litre miktarını girin"></div><div class="mb-2"><label for="fiyat-input" class="form-label">Litre Fiyatı (TL)</label><input type="number" step="0.01" class="form-control form-control-sm" id="fiyat-input" placeholder="Örn: 15.50"></div><div class="d-grid"><button class="btn btn-primary btn-sm" id="kaydet-girdi-btn">Kaydet</button></div></div></div>
                 </div>
             </div>
             <div class="col-lg-8 col-12">
@@ -70,12 +70,10 @@
                         </div>
 
                         <div id="liste-gorunumu" class="gorunum-konteyneri">
-                            <!-- DEĞİŞİKLİK: Minimum yükseklik (min-height) stilini buradan kaldırdık. -->
                             <div id="girdiler-listesi" class="list-group" style="overflow-y: auto;"></div>
                         </div>
 
                         <div id="kart-gorunumu" class="gorunum-konteyneri" style="display: none;">
-                            <!-- DEĞİŞİKLİK: Minimum yükseklik (min-height) stilini buradan kaldırdık. -->
                             <div id="girdiler-kart-listesi" class="row g-3" style="overflow-y: auto;">
                                 </div>
                         </div>
@@ -93,6 +91,25 @@
     <div class="modal fade" id="duzenleModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Girdiyi Düzenle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" id="edit-girdi-id"><div class="mb-2"><label for="edit-litre-input" class="form-label">Yeni Litre Değeri</label><input type="number" step="0.1" class="form-control form-control-sm" id="edit-litre-input"></div><div class="mb-2"><label for="edit-fiyat-input" class="form-label">Yeni Litre Fiyatı (TL)</label><input type="number" step="0.01" class="form-control form-control-sm" id="edit-fiyat-input"></div><div class="mb-2"><label for="edit-sebep-input" class="form-label">Düzenleme Sebebi (İsteğe bağlı)</label><textarea class="form-control form-control-sm" id="edit-sebep-input" rows="2" placeholder="Neden düzenliyorsunuz?"></textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sutGirdisiDuzenle()">Kaydet</button></div></div></div></div>
     <div class="modal fade" id="gecmisModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Girdi Düzenleme Geçmişi</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body" id="gecmis-modal-body"></div></div></div></div>
     <div class="modal fade" id="silmeOnayModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-warning">Silme Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Bu girdiyi silmek istediğinize emin misiniz?</p><input type="hidden" id="silinecek-girdi-id"></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-danger btn-sm" onclick="sutGirdisiSil()">Evet, Sil</button></div></div></div></div>
+    
+    <!-- AKILLI DOĞRULAMA İÇİN ONAY MODALI -->
+    <div class="modal fade" id="veriOnayModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title text-warning"><i class="bi bi-exclamation-triangle-fill me-2"></i>Değer Onayı</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="onay-mesaji">Girdiğiniz değer, bu tedarikçinin ortalamasının dışında görünüyor. Bu değerden emin misiniz?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hayır, Düzelt</button>
+                    <button type="button" class="btn btn-primary" id="onayla-ve-kaydet-btn">Evet, Onayla ve Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
 {% endblock %}
 
 {% block scripts %}
@@ -103,5 +120,4 @@
     <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% endblock %}
-
 

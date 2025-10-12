@@ -5,22 +5,13 @@
 // api.js, ui.js ve charts.js fonksiyonlarını çağırır.
 // ====================================================================================
 
+// --- Global Değişkenler ---
+let mevcutGorunum = 'liste';
+let mevcutSayfa = 1;
+const girdilerSayfaBasi = 6;
+let mevcutTedarikciIstatistikleri = null; // Tedarikçi istatistiklerini saklamak için yeni değişken
+let veriOnayModal = null; // Onay modalı için yeni değişken
 
-function gorunumuAyarla(aktifGorunum) {
-    document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
-    document.getElementById(`${aktifGorunum}-gorunumu`).style.display = 'block';
-
-    document.getElementById('btn-view-list').classList.toggle('active', aktifGorunum === 'liste');
-    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
-}
-
-function gorunumuDegistir(yeniGorunum) {
-    if (mevcutGorunum === yeniGorunum) return;
-    mevcutGorunum = yeniGorunum;
-    localStorage.setItem('anaPanelGorunum', yeniGorunum);
-    gorunumuAyarla(yeniGorunum);
-    girdileriGoster(1, ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null);
-}
 /**
  * Uygulama kabuğu yüklendiğinde çalışır.
  * Tarayıcıda kayıtlı kullanıcı varsa bilgileri ekrana basar.
@@ -29,30 +20,19 @@ function gorunumuDegistir(yeniGorunum) {
 function initOfflineState() {
     const offlineUserString = localStorage.getItem('offlineUser');
     
-    // Eğer body etiketinde sunucudan gelen bir kullanıcı rolü yoksa 
-    // (yani sayfa önbellekten yüklenmişse)
     if (!document.body.dataset.userRole) {
         if (offlineUserString) {
             const user = JSON.parse(offlineUserString);
             
-            // Placeholder'ları ve data-* özelliklerini doldur
             document.body.dataset.userRole = user.rol;
             document.body.dataset.lisansBitis = user.lisans_bitis_tarihi;
 
             const userNameEl = document.getElementById('user-name-placeholder');
             const companyNameEl = document.getElementById('company-name-placeholder');
-            const adminLinkContainer = document.getElementById('admin-panel-link-container');
             const veriGirisPaneli = document.getElementById('veri-giris-paneli');
             
             if (userNameEl) userNameEl.textContent = user.kullanici_adi;
             if (companyNameEl) companyNameEl.textContent = user.sirket_adi;
-
-            // Rol bazlı arayüz elemanlarını göster/gizle
-            if (user.rol === 'admin' && adminLinkContainer) {
-                adminLinkContainer.style.display = 'block';
-            } else if (adminLinkContainer) {
-                adminLinkContainer.style.display = 'none';
-            }
             
             if (user.rol === 'muhasebeci' && veriGirisPaneli) {
                 veriGirisPaneli.style.display = 'none';
@@ -61,50 +41,76 @@ function initOfflineState() {
             }
 
         } else if (!navigator.onLine) {
-            // Hem yerel kayıt yok hem de internet yoksa, giriş sayfasına git
             window.location.href = '/login';
         }
     }
 }
-let mevcutGorunum = 'liste';
-let mevcutSayfa = 1;
-const girdilerSayfaBasi = 6;
 
 // Uygulama başlangıç noktası
 window.onload = async function() {
-    // Çevrimdışı durumu ve PWA kabuğunu başlat
     initOfflineState();
-
-    // UI component'lerini (modallar, tarih seçiciler vb.) başlat
-    ui.init();
-
-    // Lisans durumunu kontrol et ve gerekiyorsa uyarı göster
+    ui.init(); // Temel UI bileşenlerini (modallar, flatpickr) başlatır
+    veriOnayModal = new bootstrap.Modal(document.getElementById('veriOnayModal')); 
     ui.lisansUyarisiKontrolEt();
+
+    // --- TomSelect (Tedarikçi Seçici) BAŞLATMA KODU BURAYA TAŞINDI ---
+    if (document.getElementById('veri-giris-paneli').style.display !== 'none' && document.getElementById('tedarikci-sec')) {
+        ui.tedarikciSecici = new TomSelect("#tedarikci-sec", {
+            create: false,
+            sortField: { field: "text", direction: "asc" },
+            onChange: (value) => {
+                // Seçili tedarikçinin istatistiklerini çek
+                if (value && navigator.onLine) {
+                    api.fetchTedarikciIstatistikleri(value)
+                        .then(data => {
+                            mevcutTedarikciIstatistikleri = data[0] || null;
+                            console.log("İstatistikler yüklendi:", mevcutTedarikciIstatistikleri);
+                        })
+                        .catch(err => {
+                            console.warn("Tedarikçi istatistikleri alınamadı:", err);
+                            mevcutTedarikciIstatistikleri = null;
+                        });
+
+                    // Son fiyatı getir
+                    api.fetchSonFiyat(value).then(data => {
+                       if(data && data.son_fiyat) {
+                           const fiyatInput = document.getElementById('fiyat-input');
+                           fiyatInput.value = parseFloat(data.son_fiyat).toFixed(2);
+                           fiyatInput.classList.add('fiyat-guncellendi');
+                           setTimeout(() => fiyatInput.classList.remove('fiyat-guncellendi'), 500);
+                       }
+                    }).catch(err => console.warn("Son fiyat getirilemedi:", err));
+                } else {
+                    // Seçim temizlenirse istatistikleri de temizle
+                    mevcutTedarikciIstatistikleri = null;
+                }
+            }
+        });
+    }
+    // --- BİTİŞ ---
 
     mevcutGorunum = localStorage.getItem('anaPanelGorunum') || 'liste';
     gorunumuAyarla(mevcutGorunum);
 
-    // Başlangıç verilerini yükle (özet, grafikler, tedarikçiler ve ilk sayfa girdileri)
     await baslangicVerileriniYukle();
 
-    // --- YENİ EKLENDİ: Modal olay dinleyicisi ---
-    // Düzenleme veya Silme modal'ı tamamen kapandıktan sonra grafikleri yenile.
+    // --- BUTON DİNLEYİCİSİ DÜZELTMESİ ---
+    const kaydetBtn = document.getElementById('kaydet-girdi-btn');
+    if(kaydetBtn) {
+        kaydetBtn.addEventListener('click', sutGirdisiEkle);
+    }
+    // --- BİTİŞ ---
+
     const duzenleModalEl = document.getElementById('duzenleModal');
     const silmeOnayModalEl = document.getElementById('silmeOnayModal');
     
     const grafikYenileCallback = () => {
-        console.log('Modal kapandı, grafikler yenileniyor...');
         charts.haftalikGrafigiOlustur();
         charts.tedarikciGrafigiOlustur();
     };
 
-    if (duzenleModalEl) {
-        duzenleModalEl.addEventListener('hidden.bs.modal', grafikYenileCallback);
-    }
-    if (silmeOnayModalEl) {
-        silmeOnayModalEl.addEventListener('hidden.bs.modal', grafikYenileCallback);
-    }
-    // --- YENİ KOD SONU ---
+    if (duzenleModalEl) duzenleModalEl.addEventListener('hidden.bs.modal', grafikYenileCallback);
+    if (silmeOnayModalEl) silmeOnayModalEl.addEventListener('hidden.bs.modal', grafikYenileCallback);
 };
 
 /**
@@ -124,37 +130,31 @@ async function baslangicVerileriniYukle() {
     }
 
     await Promise.all(promises);
-    girdileriGoster(1); // İlk sayfa girdilerini yükle
+    girdileriGoster(1);
 }
 
 /**
- * Seçilen tarihe göre özet verilerini (toplam litre ve girdi sayısı) yükler ve arayüzü günceller.
- * @param {string|null} tarih - 'YYYY-MM-DD' formatında tarih. Boş bırakılırsa bugün.
+ * Seçilen tarihe göre özet verilerini yükler ve arayüzü günceller.
  */
 async function ozetVerileriniYukle(tarih = null) {
     ui.toggleOzetPanelsLoading(true);
     const effectiveDate = tarih || utils.getLocalDateString(new Date());
     const cacheKey = `ozet_${effectiveDate}`;
 
-    // --- YENİ ÇEVRİMDIŞI MANTIĞI ---
     if (!navigator.onLine) {
         const cachedData = localStorage.getItem(cacheKey);
         if (cachedData) {
-            console.log("Özet verisi önbellekten yüklendi.");
             ui.updateOzetPanels(JSON.parse(cachedData), effectiveDate);
         } else {
-            console.warn("Çevrimdışı modda özet verisi için önbellek bulunamadı.");
-            ui.updateOzetPanels(null, effectiveDate, true); // Önbellek yoksa hata göster
+            ui.updateOzetPanels(null, effectiveDate, true);
         }
         ui.toggleOzetPanelsLoading(false);
-        return; // İnternet yoksa burada bitir.
+        return;
     }
 
-    // --- ÇEVRİMİÇİ MANTIĞI (Değişiklik yok) ---
     try {
         const data = await api.fetchGunlukOzet(effectiveDate);
         ui.updateOzetPanels(data, effectiveDate);
-        // Başarılı olursa veriyi önbelleğe kaydet
         localStorage.setItem(cacheKey, JSON.stringify(data));
     } catch (error) {
         console.error("Özet yüklenirken hata:", error);
@@ -165,40 +165,29 @@ async function ozetVerileriniYukle(tarih = null) {
 }
 
 /**
- * Belirtilen sayfa ve tarih için süt girdilerini sunucudan ve/veya yerel veritabanından alır,
- * ardından arayüzde gösterir.
- * @param {number} sayfa - Gösterilecek sayfa numarası.
- * @param {string|null} tarih - Filtrelenecek tarih ('YYYY-MM-DD'). Boş bırakılırsa bugün.
+ * Süt girdilerini sunucudan/yerelden alır ve arayüzde gösterir.
  */
 async function girdileriGoster(sayfa = 1, tarih = null) {
     mevcutSayfa = sayfa;
     const effectiveDate = tarih || (ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : utils.getLocalDateString(new Date()));
     const cacheKey = `girdiler_${effectiveDate}_sayfa_${sayfa}`;
 
-    // YÜKLEME ANİMASYONU BAŞLANGICI
-    // ui.js'deki merkezi iskelet göstericiyi çağırıyoruz.
     ui.showGirdilerLoadingSkeleton(mevcutGorunum);
 
-    // --- YENİ ÇEVRİMDIŞI MANTIĞI ---
     if (!navigator.onLine) {
         const cachedData = localStorage.getItem(cacheKey);
         if (cachedData) {
-            console.log("Girdiler önbellekten yüklendi.");
             const { girdiler, toplam_girdi_sayisi } = JSON.parse(cachedData);
             ui.renderGirdiler(girdiler, mevcutGorunum);
             ui.sayfalamaNavOlustur('girdiler-sayfalama', toplam_girdi_sayisi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, effectiveDate));
         } else {
-            console.warn("Çevrimdışı modda girdiler için önbellek bulunamadı.");
-            ui.renderGirdiler([], mevcutGorunum); // Boş liste göster
+            ui.renderGirdiler([], mevcutGorunum);
         }
         return; 
     }
     
-    // --- ÇEVRİMİÇİ MANTIĞI ---
     try {
         const sunucuVerisi = await api.fetchSutGirdileri(effectiveDate, sayfa);
-        
-        // Başarılı olursa veriyi önbelleğe kaydet
         localStorage.setItem(cacheKey, JSON.stringify(sunucuVerisi));
 
         const bekleyenGirdiler = await bekleyenGirdileriGetir();
@@ -209,7 +198,7 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
 
     } catch (error) {
         console.error("Girdileri gösterirken hata:", error);
-        ui.renderGirdiler([], mevcutGorunum); // Hata durumunda boş liste göster
+        ui.renderGirdiler([], mevcutGorunum);
     }
 }
 
@@ -228,15 +217,10 @@ async function tedarikcileriYukle() {
     }
 }
 
-
 // ====================================================================================
 // OLAY YÖNETİCİLERİ (EVENT HANDLERS)
-// Kullanıcı etkileşimlerine yanıt veren fonksiyonlar.
 // ====================================================================================
 
-/**
- * 'Filtrele' butonuna tıklandığında çalışır.
- */
 function girdileriFiltrele() {
     const secilenTarih = ui.tarihFiltreleyici.selectedDates[0];
     if (secilenTarih) {
@@ -247,24 +231,14 @@ function girdileriFiltrele() {
     }
 }
 
-/**
- * 'Temizle' butonuna tıklandığında filtreyi temizler ve bugünün verilerini yükler.
- */
 function filtreyiTemizle() {
     ui.tarihFiltreleyici.setDate(new Date(), true);
     baslangicVerileriniYukle();
 }
 
-/**
- * Yeni süt girdisi ekleme formunu yönetir.
- */
-/**
- * Yeni süt girdisi ekleme formunu yönetir. (HATA YÖNETİMİ DÜZELTİLDİ)
- * İnternet varsa, kullanıcıyı bekletmemek için "İyimser Arayüz Güncellemesi" yapar.
- * İnternet yoksa, veriyi çevrimdışı kaydeder.
- */
+// --- AKILLI DOĞRULAMA ENTEGRASYONU ---
+
 async function sutGirdisiEkle() {
-    // 1. Formdan verileri al ve kontrol et
     const { tedarikciId, litre, fiyat } = ui.getGirdiFormVerisi();
     if (!tedarikciId || !litre || !fiyat || parseFloat(litre) <= 0) {
         gosterMesaj("Lütfen tüm alanları doğru doldurun ve litre 0'dan büyük olsun.", "warning");
@@ -277,13 +251,68 @@ async function sutGirdisiEkle() {
         fiyat: parseFloat(fiyat)
     };
 
-    // --- ÇEVRİMDIŞI MANTIĞI ---
+    // Değeri doğrula ve kaydetme işlemine devam et
+    await degeriDogrulaVeKaydet(yeniGirdi);
+}
+
+/**
+ * Girilen değeri tedarikçinin istatistikleriyle karşılaştırır ve gerekirse onay ister.
+ * @param {object} girdi - Kaydedilecek girdi verisi.
+ */
+async function degeriDogrulaVeKaydet(girdi) {
+    // Çevrimdışıysak veya istatistik verisi yoksa, kontrol etmeden direkt kaydet.
+    if (!navigator.onLine || !mevcutTedarikciIstatistikleri) {
+        await gercekKaydetmeIsleminiYap(girdi);
+        return;
+    }
+
+    const { ortalama_litre, standart_sapma } = mevcutTedarikciIstatistikleri;
+    const girilenLitre = girdi.litre;
+
+    // Anlamlı bir istatistik varsa (ortalama 0'dan büyükse) kontrol yap.
+    if (ortalama_litre > 0) {
+        let altSinir, ustSinir;
+
+        if (standart_sapma > 0) {
+            // DURUM 1: Verilerde değişkenlik var. İstatistiksel aralığı kullan.
+            altSinir = ortalama_litre - (standart_sapma * 2);
+            ustSinir = ortalama_litre + (standart_sapma * 2);
+        } else {
+            // DURUM 2 (HATA DÜZELTMESİ): Standart sapma 0. Tüm geçmiş girdiler aynı.
+            const tolerans = Math.max(ortalama_litre * 0.5, 5); 
+            altSinir = ortalama_litre - tolerans;
+            ustSinir = ortalama_litre + tolerans;
+        }
+
+        // Eğer girilen değer hesaplanan "normal" aralığın dışındaysa...
+        if (girilenLitre < altSinir || girilenLitre > ustSinir) {
+            const mesaj = `Girdiğiniz <strong>${girilenLitre} Litre</strong> değeri, bu tedarikçinin ortalama (${ortalama_litre.toFixed(1)} L) girdisinden farklı görünüyor. Emin misiniz?`;
+            document.getElementById('onay-mesaji').innerHTML = mesaj;
+            
+            document.getElementById('onayla-ve-kaydet-btn').onclick = async () => {
+                veriOnayModal.hide();
+                await gercekKaydetmeIsleminiYap(girdi);
+            };
+
+            veriOnayModal.show();
+            return; // Onay beklediğimiz için burada duruyoruz.
+        }
+    }
+
+    // Değer normalse veya kontrol için yeterli veri yoksa, direkt kaydet.
+    await gercekKaydetmeIsleminiYap(girdi);
+}
+
+/**
+ * Asıl kaydetme mantığını içeren fonksiyon (iyimser güncelleme ve çevrimdışı).
+ * @param {object} yeniGirdi - Kaydedilecek girdi verisi.
+ */
+async function gercekKaydetmeIsleminiYap(yeniGirdi) {
     if (!navigator.onLine) {
         ui.toggleGirdiKaydetButton(true);
         try {
             const isOfflineUserValid = await ui.checkOfflineUserLicense();
             if (!isOfflineUserValid) return; 
-            
             const basarili = await kaydetCevrimdisi(yeniGirdi);
             if (basarili) {
                 ui.resetGirdiFormu();
@@ -295,11 +324,10 @@ async function sutGirdisiEkle() {
         return;
     }
 
-    // --- İYİMSER (OPTIMISTIC) GÜNCELLEME MANTIĞI ---
     const listeElementi = document.getElementById('girdiler-listesi');
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
     const geciciId = `gecici-${Date.now()}`;
-    const tedarikciAdi = ui.tedarikciSecici.options[tedarikciId].text;
+    const tedarikciAdi = ui.tedarikciSecici.options[yeniGirdi.tedarikci_id].text;
     const kullaniciAdi = JSON.parse(localStorage.getItem('offlineUser'))?.kullanici_adi || 'Siz';
 
     const geciciElement = document.createElement('div');
@@ -308,16 +336,15 @@ async function sutGirdisiEkle() {
     geciciElement.style.opacity = '0.6';
     geciciElement.innerHTML = `
         <div class="d-flex w-100 justify-content-between">
-            <h5 class="mb-1 girdi-baslik">${tedarikciAdi} - ${litre} Litre <span class="badge bg-info text-dark ms-2"><i class="bi bi-arrow-repeat"></i> Kaydediliyor...</span></h5>
+            <h5 class="mb-1 girdi-baslik">${tedarikciAdi} - ${yeniGirdi.litre} Litre <span class="badge bg-info text-dark ms-2"><i class="bi bi-arrow-repeat"></i> Kaydediliyor...</span></h5>
         </div>
         <p class="mb-1 girdi-detay">Toplayan: ${kullaniciAdi} | Saat: ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</p>
     `;
     
-    // "Veri Yok" mesajını gizle ve geçici elemanı ekle
     veriYokMesaji.style.display = 'none';
     listeElementi.prepend(geciciElement);
 
-    const orjinalFormVerisi = { tedarikciId, litre, fiyat };
+    const orjinalFormVerisi = { ...yeniGirdi };
     ui.resetGirdiFormu();
 
     try {
@@ -326,39 +353,31 @@ async function sutGirdisiEkle() {
         const bugun = utils.getLocalDateString();
         ui.updateOzetPanels(result.yeni_ozet, bugun);
         
-        // Grafik güncellemelerini HEMEN ÇAĞIRMIYORUZ.
         charts.haftalikGrafigiOlustur();
         charts.tedarikciGrafigiOlustur();
 
-        // Başarılı kayıttan sonra listeyi sunucudan gelen en güncel haliyle yenile
         await girdileriGoster(1, bugun);
 
     } catch (error) {
         console.error("İyimser ekleme başarısız oldu:", error);
         gosterMesaj("Kayıt başarısız. İnternet bağlantınızı kontrol edin.", "danger");
         
-        const silinecekElement = document.getElementById(geciciId);
-        if (silinecekElement) silinecekElement.remove();
-
-        // Formu eski haline getir
-        ui.tedarikciSecici.setValue(orjinalFormVerisi.tedarikciId);
+        document.getElementById(geciciId)?.remove();
+        
+        ui.tedarikciSecici.setValue(orjinalFormVerisi.tedarikci_id);
         document.getElementById('litre-input').value = orjinalFormVerisi.litre;
         document.getElementById('fiyat-input').value = orjinalFormVerisi.fiyat;
         
-        // Listeyi kontrol et, eğer tamamen boş kaldıysa "Veri Yok" mesajını geri getir
         if (listeElementi.children.length === 0) {
             veriYokMesaji.style.display = 'block';
         }
     }
 }
 
-/**
- * Mevcut bir süt girdisini düzenleme formunu yönetir.
- */
+// --- DİĞER OLAY YÖNETİCİLERİ ---
+
 async function sutGirdisiDuzenle() {
     const { girdiId, yeniLitre, yeniFiyat, duzenlemeSebebi } = ui.getDuzenlemeFormVerisi();
-    
-    // Düzenleme sebebi artık zorunlu değil
     if (!yeniLitre || !yeniFiyat) {
         gosterMesaj("Lütfen yeni litre ve fiyat değerlerini girin.", "warning");
         return;
@@ -372,38 +391,20 @@ async function sutGirdisiDuzenle() {
         });
         gosterMesaj("Girdi başarıyla güncellendi.", "success");
         ui.duzenleModal.hide();
-        
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
-        
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
-        
-        // Grafik güncellemelerini HEMEN ÇAĞIRMIYORUZ.
-        // Modal kapandıktan sonra tetiklenecekler.
-
         await girdileriGoster(mevcutSayfa, formatliTarih);
-
     } catch (error) {
         gosterMesaj(`Girdi düzenlenemedi: ${error.message || 'Bilinmeyen hata.'}`, "danger");
     }
 }
 
-/**
- * Bir süt girdisini silme işlemini yönetir.
- */
-/**
- * Bir süt girdisini iyimser (optimistic) bir şekilde siler.
- * Önce arayüzden kaldırır, sonra sunucuya isteği gönderir.
- */
 async function sutGirdisiSil() {
     const girdiId = ui.getSilinecekGirdiId();
     ui.silmeOnayModal.hide();
 
-    // DÜZELTME: Mevcut görünüme göre doğru elemanı seçiyoruz
     const silinecekElement = document.getElementById(mevcutGorunum === 'liste' ? `girdi-liste-${girdiId}` : `girdi-kart-${girdiId}`);
-    if (!silinecekElement) {
-        console.error("Silinecek element bulunamadı!");
-        return;
-    }
+    if (!silinecekElement) return;
 
     const parent = silinecekElement.parentNode;
     const nextSibling = silinecekElement.nextSibling;
@@ -411,28 +412,17 @@ async function sutGirdisiSil() {
     silinecekElement.style.opacity = '0';
     silinecekElement.style.transform = 'translateX(-50px)';
     
-    setTimeout(() => {
-        if (silinecekElement.parentNode) {
-            parent.removeChild(silinecekElement);
-        }
-    }, 400);
+    setTimeout(() => silinecekElement.remove(), 400);
 
     try {
         const result = await api.deleteSutGirdisi(girdiId);
         gosterMesaj(result.message, 'success');
         const formatliTarih = ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null;
         ui.updateOzetPanels(result.yeni_ozet, formatliTarih);
-        
-        // Grafik güncellemelerini HEMEN ÇAĞIRMIYORUZ.
-        // Modal kapandıktan sonra tetiklenecekler.
-
-        // Silme sonrası listeyi yenilerken toplam girdi sayısı değişebileceği için ilk sayfaya dönmek en sağlıklısı
         await girdileriGoster(1, formatliTarih);
-
     } catch (error) {
         console.error("İyimser silme başarısız oldu:", error);
         gosterMesaj('Silme işlemi başarısız, girdi geri yüklendi.', 'danger');
-
         silinecekElement.style.opacity = '1';
         silinecekElement.style.transform = 'translateX(0)';
         if (!silinecekElement.parentNode) {
@@ -441,10 +431,6 @@ async function sutGirdisiSil() {
     }
 }
 
-/**
- * Bir girdinin düzenleme geçmişini API'den alır ve modal'da gösterir.
- * @param {number} girdiId - Geçmişi gösterilecek girdinin ID'si.
- */
 async function gecmisiGoster(girdiId) {
     ui.gecmisModal.show();
     ui.renderGecmisModalContent(null, true); 
@@ -456,16 +442,12 @@ async function gecmisiGoster(girdiId) {
     }
 }
 
-/**
- * Kullanıcının şifresini değiştirme işlemini yönetir.
- */
 async function sifreDegistir() {
     const { mevcutSifre, yeniSifre, yeniSifreTekrar } = ui.getSifreDegistirmeFormVerisi();
     if (!mevcutSifre || !yeniSifre || !yeniSifreTekrar) {
         gosterMesaj("Lütfen tüm şifre alanlarını doldurun.", "warning");
         return;
     }
-
     try {
         const result = await api.postChangePassword({ mevcut_sifre: mevcutSifre, yeni_sifre: yeniSifre, yeni_sifre_tekrar: yeniSifreTekrar });
         gosterMesaj(result.message, 'success');
@@ -475,15 +457,11 @@ async function sifreDegistir() {
     }
 }
 
-/**
- * Görüntülenen verileri CSV formatında dışa aktarır.
- */
 async function verileriDisaAktar() {
     const secilenTarih = ui.tarihFiltreleyici.selectedDates[0];
     const formatliTarih = secilenTarih ? utils.getLocalDateString(secilenTarih) : null;
     try {
         const { filename, blob } = await api.fetchCsvExport(formatliTarih);
-        
         const objectUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.style.display = 'none';
@@ -491,13 +469,27 @@ async function verileriDisaAktar() {
         a.download = filename;
         document.body.appendChild(a);
         a.click();
-        
         window.URL.revokeObjectURL(objectUrl);
         a.remove();
-        
         gosterMesaj("Veriler başarıyla CSV olarak indirildi.", "success");
     } catch (error) {
         gosterMesaj(error.message, "danger");
     }
 }
+
+function gorunumuAyarla(aktifGorunum) {
+    document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
+    document.getElementById(`${aktifGorunum}-gorunumu`).style.display = 'block';
+    document.getElementById('btn-view-list').classList.toggle('active', aktifGorunum === 'liste');
+    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
+}
+
+function gorunumuDegistir(yeniGorunum) {
+    if (mevcutGorunum === yeniGorunum) return;
+    mevcutGorunum = yeniGorunum;
+    localStorage.setItem('anaPanelGorunum', yeniGorunum);
+    gorunumuAyarla(yeniGorunum);
+    girdileriGoster(1, ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null);
+}
+
 

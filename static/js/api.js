@@ -39,6 +39,7 @@ const api = {
 
     // --- Tedarikçi API'ları ---
     fetchTedarikciler() { return this.request('/api/tedarikciler_dropdown', { cache: 'no-cache' }); },
+    fetchTedarikciIstatistikleri(tedarikciId) { return this.request(`/api/tedarikci/${tedarikciId}/stats`); },
     fetchSonFiyat(tedarikciId) { return this.request(`/api/tedarikci/${tedarikciId}/son_fiyat`); },
     postTedarikci(veri) { return this.request('/api/tedarikci_ekle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     updateTedarikci(id, veri) { return this.request(`/api/tedarikci_duzenle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
