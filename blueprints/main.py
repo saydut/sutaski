@@ -14,12 +14,27 @@ main_bp = Blueprint(
 
 
 # --- ARAYÜZ SAYFALARI ---
+# --- YENİ: Tanıtım Sayfası Rotası ---
 @main_bp.route('/')
+def landing_page():
+    """
+    Uygulamanın ana tanıtım sayfasını (landing page) gösterir.
+    Bu sayfa herkese açıktır, giriş yapmak gerekmez.
+    """
+    # Eğer kullanıcı zaten giriş yapmışsa, onu doğrudan panele yönlendir.
+    if 'user' in session:
+        return redirect(url_for('main.panel'))
+    # Henüz giriş yapmamışsa, yeni tanıtım sayfamızı göster.
+    return render_template('landing.html')
+
+
+# --- GÜNCELLENDİ: Ana Panel Rotası ---
+# Adı "anasayfa" yerine "panel" oldu ve yolu "/panel" olarak değişti.
+@main_bp.route('/panel')
 @login_required
 @lisans_kontrolu
-def anasayfa():
+def panel():
     # Service Worker'ın uygulama kabuğunu önbelleğe alması için özel kontrol
-    # Eğer istek Service Worker'dan geliyorsa, giriş kontrolü yapmadan boş şablonu döndür
     if request.headers.get('X-Cache-Me') == 'true':
         return render_template('index.html', session={})
 

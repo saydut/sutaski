@@ -1,5 +1,5 @@
-{% if request.endpoint != 'main.anasayfa' %}
-<a href="{{ url_for('main.anasayfa') }}" class="btn btn-secondary btn-sm">Ana Panele Dön</a>
+{% if request.endpoint != 'main.panel' %}
+<a href="{{ url_for('main.panel') }}" class="btn btn-secondary btn-sm">Ana Panele Dön</a>
 {% endif %}
 
 <div class="btn-group">
@@ -7,7 +7,7 @@
         <i class="bi bi-lightning-charge-fill"></i> Hızlı İşlemler
     </button>
     <ul class="dropdown-menu dropdown-menu-end">
-        <li><a class="dropdown-item" href="{{ url_for('main.anasayfa') }}"><i class="bi bi-house-door-fill me-2"></i>Ana Panele Dön</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('main.panel') }}"><i class="bi bi-house-door-fill me-2"></i>Ana Panele Dön</a></li>
         <li><hr class="dropdown-divider"></li>
         <li><a class="dropdown-item" href="{{ url_for('main.tedarikciler_sayfasi') }}"><i class="bi bi-people-fill me-2"></i>Tedarikçi Yönetimi</a></li>
         <li><a class="dropdown-item" href="{{ url_for('yem.yem_yonetimi_sayfasi') }}"><i class="bi bi-inboxes-fill me-2"></i>Yem Yönetimi</a></li>

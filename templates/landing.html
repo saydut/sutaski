@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Dijital Mandıra - Hesap Kitabını Kapatın, Kâra Odaklanın{% endblock %}
+
+{% block content %}
+<!-- NAVİGASYON BARI -->
+<nav class="navbar navbar-expand-lg navbar-dark sticky-top" style="background-color: var(--surface); box-shadow: 0 4px 6px -1px var(--shadow);">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="#">
+            <img src="{{ url_for('static', filename='images/icon.png') }}" alt="Logo" width="40" height="40" class="d-inline-block align-text-top me-2">
+            Dijital Mandıra
+        </a>
+        <div class="d-flex">
+            <a href="{{ url_for('auth.login_page') }}" class="btn btn-outline-primary me-2">Giriş Yap</a>
+            <a href="{{ url_for('auth.register_page') }}" class="btn btn-primary">Ücretsiz Başla</a>
+        </div>
+    </div>
+</nav>
+
+<!-- KAHRAMAN BÖLÜMÜ (VİDEOLU) -->
+<div class="hero-gradient">
+    <div class="container text-center py-5 my-5">
+        <h1 class="display-4 fw-bold">Hesap Kitabını Kapatın, Kâra Odaklanın.</h1>
+        <p class="lead col-lg-8 mx-auto text-secondary" style="font-size: 1.25rem; font-weight: 300;">
+            Süt toplama operasyonunuzdaki kağıt işlerini, hesap hatalarını ve zaman kaybını ortadan kaldırın. Dijital Mandıra ile tüm işletmeniz cebinizde.
+        </p>
+        <a href="#fiyatlandirma" class="btn btn-success btn-lg mt-3 shadow">Fiyatları Gör ve Başla</a>
+        <div class="col-lg-10 mx-auto mt-5 pt-5">
+            <div class="laptop-mockup">
+                 <video src="{{ url_for('static', filename='images/app/anasayfa.mp4') }}" class="img-fluid rounded-top" autoplay loop muted playsinline alt="Panel Videosu"></video>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ÖZELLİKLER ÖZET BÖLÜMÜ -->
+<div class="container py-5">
+    <div class="text-center">
+        <h2 class="fw-bold">Dijital Mandıra Nedir?</h2>
+        <img src="{{ url_for('static', filename='images/icon.png') }}" alt="Dijital Mandıra Logo" class="my-4" style="max-width: 180px; border-radius: 1.5rem;">
+    </div>
+    <div class="row g-4">
+        <div class="col-md-4"><div class="card p-3 text-center h-100"><i class="bi bi-truck fs-1 text-primary"></i><h5 class="mt-3">Kolay Veri Girişi</h5><p class="text-secondary">Sahada, internetiniz olmasa bile günlük süt, yem ve ödeme verilerinizi saniyeler içinde kaydedin.</p></div></div>
+        <div class="col-md-4"><div class="card p-3 text-center h-100"><i class="bi bi-file-earmark-pdf fs-1 text-success"></i><h5 class="mt-3">Otomatik Raporlama</h5><p class="text-secondary">Tek tuşla profesyonel PDF hesap özetleri ve müstahsil makbuzları oluşturun, zamandan kazanın.</p></div></div>
+        <div class="col-md-4"><div class="card p-3 text-center h-100"><i class="bi bi-bar-chart-line-fill fs-1 text-warning"></i><h5 class="mt-3">Anlaşılır Analizler</h5><p class="text-secondary">Grafiksel raporlarla işletmenizin performansını anlık olarak takip edin, doğru kararlar alın.</p></div></div>
+    </div>
+</div>
+
+
+<!-- MOBİL ÖNCELİKLİ BÖLÜM (ANİMASYONLU) -->
+<div class="py-5 my-5" style="background-color: var(--surface);">
+    <div class="container">
+        <div class="text-center mb-5">
+            <h2 class="fw-bold">İşletmeniz Her An, Her Yerde Cebinizde</h2>
+            <p class="text-secondary col-lg-6 mx-auto">Dijital Mandıra, PWA teknolojisi sayesinde telefonunuza bir uygulama gibi kurulur ve her an parmağınızın ucunda olur.</p>
+        </div>
+        <div class="row align-items-center g-4">
+            <div class="col-lg-4 text-lg-end">
+                <div class="mb-4"><h5 class="fw-bold"><i class="bi bi-phone-stack text-primary"></i> Telefona Yükle & Anında Eriş</h5><p class="text-secondary small">Uygulama mağazası olmadan, tek tıkla telefonunuzun ana ekranına ekleyin ve anında erişin.</p></div>
+                <div><h5 class="fw-bold"><i class="bi bi-bell-fill text-primary"></i> Anlık Bildirimlerle Haberdar Ol</h5><p class="text-secondary small">Güncellemelerden ve gün sonu özetlerinden anlık bildirimlerle haberdar olun, hiçbir detayı kaçırmayın.</p></div>
+            </div>
+            
+            <div class="col-lg-4">
+                <div class="phone-slideshow mx-auto">
+                    <img src="{{ url_for('static', filename='images/app/mobil-panel.jpg') }}" class="img-fluid rounded shadow-lg active" alt="Mobil Panel Görüntüsü">
+                    <img src="{{ url_for('static', filename='images/app/mobil-tedarikci.jpg') }}" class="img-fluid rounded shadow-lg" alt="Mobil Tedarikçi Yönetimi">
+                    <img src="{{ url_for('static', filename='images/app/mobil-finans.jpg') }}" class="img-fluid rounded shadow-lg" alt="Mobil Finans Yönetimi">
+                    <img src="{{ url_for('static', filename='images/app/mobil-bildirim.jpg') }}" class="img-fluid rounded shadow-lg" alt="Mobil Bildirim">
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="mb-4"><h5 class="fw-bold"><i class="bi bi-card-list text-primary"></i> Tüm Yönetim Parmağınızın Ucunda</h5><p class="text-secondary small">Tedarikçi listesi, yem ve finans yönetimi gibi tüm özelliklere mobil uyumlu arayüzden kolayca ulaşın.</p></div>
+                <div><h5 class="fw-bold"><i class="bi bi-shield-check text-primary"></i> Güvenli ve Hızlı</h5><p class="text-secondary small">Tüm verileriniz güvenli bir şekilde saklanır ve mobil cihazınızda bile hızlı bir şekilde çalışır.</p></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- NEDEN DİJİTAL MANDIRA? BÖLÜMÜ -->
+<div class="container py-5 my-5 neden-dijital-mandira">
+    <div class="row g-5 align-items-center">
+        <div class="col-lg-4">
+             <h2 class="fw-bold">Sizin İçin, Sahada Geliştirildi</h2>
+             <p class="text-secondary" style="font-size: 1.1rem; line-height: 1.6;">Bu program, ofiste değil, doğrudan süt toplama sahasında, sizin gibi kullanıcıların ihtiyaçları dinlenerek geliştirildi. Amacımız, teknolojiyi sizin için en basit ve en faydalı hale getirmek.</p>
+        </div>
+        <div class="col-lg-8">
+            <div class="row g-4">
+                <div class="col-md-6"><div class="card p-3 h-100"><h5 class="text-primary fw-bold">Kullanıcı Odaklı Tasarım</h5><p class="text-secondary small">Teknolojiyle aranız iyi olmasa bile dakikalar içinde kullanmaya başlayabileceğiniz, basit ve anlaşılır bir arayüz.</p></div></div>
+                <div class="col-md-6"><div class="card p-3 h-100"><h5 class="text-primary fw-bold">Çevrimdışı Gücü</h5><p class="text-secondary small">İnternetin çekmediği köylerde veya depolarda bile veri girişine devam edin. İşleriniz asla aksamasın.</p></div></div>
+                <div class="col-md-6"><div class="card p-3 h-100"><h5 class="text-primary fw-bold">7/24 WhatsApp Desteği</h5><p class="text-secondary small">Aklınıza takılan her soruda veya yaşadığınız her problemde size bir mesaj kadar yakınız.</p></div></div>
+                 <div class="col-md-6"><div class="card p-3 h-100"><h5 class="text-primary fw-bold">Sürekli Gelişim</h5><p class="text-secondary small">Sizden gelen geri bildirimlerle sürekli yeni özellikler ekliyor ve programı güncel tutuyoruz.</p></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- İNTERAKTİF ÖZELLİKLER BÖLÜMÜ (EKSİKSİZ) -->
+<div class="py-5 my-5" style="background-color: var(--surface);">
+    <div class="container">
+        <h2 class="text-center mb-5 fw-bold">Detaylı Özellikler</h2>
+        <div class="row g-5">
+            <div class="col-lg-4">
+                <div class="nav flex-column nav-pills feature-tabs-nav" role="tablist" aria-orientation="vertical">
+                    <a class="nav-link active" id="tab-nav-rapor" data-bs-toggle="pill" data-bs-target="#tab-content-rapor" role="tab">Anlık Raporlama ve Analiz</a>
+                    <a class="nav-link" id="tab-nav-tedarikci" data-bs-toggle="pill" data-bs-target="#tab-content-tedarikci" role="tab">Hatasız Tedarikçi Yönetimi</a>
+                    <a class="nav-link" id="tab-nav-finans" data-bs-toggle="pill" data-bs-target="#tab-content-finans" role="tab">Yem, Stok ve Finans Takibi</a>
+                    <a class="nav-link" id="tab-nav-muhasebeci" data-bs-toggle="pill" data-bs-target="#tab-content-muhasebeci" role="tab">Ekip Yönetimi & Muhasebeci Modu</a>
+                    <a class="nav-link" id="tab-nav-arayuz" data-bs-toggle="pill" data-bs-target="#tab-content-arayuz" role="tab">Her Cihaza Uyumlu Modern Arayüz</a>
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="tab-content feature-tabs-content">
+                    <div class="tab-pane fade show active" id="tab-content-rapor" role="tabpanel">
+                        <h4 class="fw-bold">Veriye Dayalı Kararlar Alın</h4>
+                        <p class="text-secondary mb-4" style="font-size: 1.1rem;">Tek tuşla profesyonel PDF hesap özetleri veya resmi müstahsil makbuzları oluşturarak saatler süren evrak işinden kurtulun.</p>
+                        <img src="{{ url_for('static', filename='images/app/raporsayfasi.png') }}" class="img-fluid rounded shadow-lg">
+                    </div>
+                    <div class="tab-pane fade" id="tab-content-tedarikci" role="tabpanel">
+                        <h4 class="fw-bold">Hesaplar Hiç Karışmasın</h4>
+                        <p class="text-secondary mb-4" style="font-size: 1.1rem;">Tedarikçi hesaplarındaki karmaşaya son verin. Kimin ne kadar alacağı var, tüm detaylarıyla anında görün.</p>
+                        <video src="{{ url_for('static', filename='images/app/tedarikcidetayvideo.mp4') }}" class="img-fluid rounded shadow-lg" autoplay loop muted playsinline alt="Tedarikçi Detay Videosu"></video>
+                    </div>
+                    <div class="tab-pane fade" id="tab-content-finans" role="tabpanel">
+                        <h4 class="fw-bold">Gelir-Gider Tam Kontrol Altında</h4>
+                        <p class="text-secondary mb-4" style="font-size: 1.1rem;">Yem stoklarınızı, alış fiyatlarınızı ve tedarikçiye yaptığınız yem çıkışlarını yönetin. Yaptığınız ödemelerle alacak-verecek hesabını hatasız yapın.</p>
+                        <img src="{{ url_for('static', filename='images/app/finanssayfasi.png') }}" class="img-fluid rounded shadow-lg">
+                    </div>
+                    <div class="tab-pane fade" id="tab-content-muhasebeci" role="tabpanel">
+                        <h4 class="fw-bold">Kontrol Sizde Olsun</h4>
+                        <p class="text-secondary mb-4" style="font-size: 1.1rem;">"Muhasebeci Modu" ile kullanıcılarınız tüm finansal verileri ve raporları görebilir, ancak veri ekleme, silme veya düzenleme yapamaz.</p>
+                        <img src="{{ url_for('static', filename='images/app/profil.png') }}" class="img-fluid rounded shadow-lg">
+                    </div>
+                    <div class="tab-pane fade" id="tab-content-arayuz" role="tabpanel">
+                         <h4 class="fw-bold">Göz Yormayan, Kolay Arayüz</h4>
+                        <p class="text-secondary mb-4" style="font-size: 1.1rem;">İster aydınlık, ister koyu tema... Göz zevkinize uygun, her cihazda (bilgisayar, tablet, telefon) sorunsuz çalışan modern bir arayüzle işlerinizi keyifle yönetin.</p>
+                        <video src="{{ url_for('static', filename='images/app/temadegisimi.mp4') }}" class="img-fluid rounded shadow-lg" autoplay loop muted playsinline alt="Tema Değişimi Videosu"></video>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FİYATLANDIRMA BÖLÜMÜ -->
+<div class="container py-5" id="fiyatlandirma">
+    <h2 class="text-center mb-5 fw-bold">İşletmenize En Uygun Planı Seçin</h2>
+    <div class="row justify-content-center g-4">
+        <div class="col-lg-4 col-md-6"><div class="card p-4 text-center h-100"><h5 class="fw-bold">Aylık Plan</h5><h1 class="my-4">2.000<span class="fs-4"> TL/ay</span></h1><p class="text-secondary">Kısa süreli veya dönemsel ihtiyaçlar için ideal.</p><a href="https://wa.me/905539571515?text=Merhaba,%20Dijital%20Mandıra%20aylık%20planı%20hakkında%20bilgi%20almak%20istiyorum." target="_blank" class="btn btn-outline-primary mt-auto">Bilgi Al</a></div></div>
+        <div class="col-lg-4 col-md-6"><div class="card p-4 text-center h-100 border-primary border-2 position-relative"><span class="position-absolute top-0 start-50 translate-middle badge rounded-pill bg-primary">En Popüler</span><h5 class="fw-bold">Yıllık Plan</h5><h1 class="my-4">20.000<span class="fs-4"> TL/yıl</span></h1><p class="text-secondary"><strong class="text-success">2 Ay Ücretsiz!</strong> Aylık 1.666 TL'ye gelir.</p><a href="https://wa.me/905539571515?text=Merhaba,%20Dijital%20Mandıra%20yıllık%20planı%20hakkında%20bilgi%20almak%20istiyorum." target="_blank" class="btn btn-primary mt-auto">Satın Al</a></div></div>
+        <div class="col-lg-4 col-md-6"><div class="card p-4 text-center h-100"><h5 class="fw-bold">3 Yıllık Plan</h5><h1 class="my-4">50.000<span class="fs-4"> TL/3 yıl</span></h1><p class="text-secondary"><strong class="text-success">En Avantajlı Paket!</strong> Uzun vadede maliyeti düşürün.</p><a href="https://wa.me/905539571515?text=Merhaba,%20Dijital%20Mandıra%203%20yıllık%20planı%20hakkında%20bilgi%20almak%20istiyorum." target="_blank" class="btn btn-outline-primary mt-auto">Bilgi Al</a></div></div>
+    </div>
+</div>
+
+<!-- SSS VE İLETİŞİM BÖLÜMÜ -->
+<div class="py-5 my-5" style="background-color: var(--surface);">
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-6 mb-4 mb-lg-0"><h3 class="fw-bold mb-4">Aklınıza Takılan Bir Soru mu Var?</h3><div class="accordion" id="faqAccordion"><div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">Verilerim güvende mi?</button></h2><div id="collapseOne" class="accordion-collapse collapse" data-bs-parent="#faqAccordion"><div class="accordion-body text-secondary"><strong>Evet, kesinlikle.</strong> Tüm verileriniz endüstri standardı güvenlik önlemleriyle korunan bulut sunucularda saklanır ve düzenli olarak yedeklenir.</div></div></div><div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">İnternetim kesilirse ne olur?</button></h2><div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#faqAccordion"><div class="accordion-body text-secondary">Programımız çevrimdışı çalışmak üzere tasarlandı. Bağlantı kurulduğu an tüm verileriniz otomatik olarak eşitlenir. İşleriniz asla aksamaz.</div></div></div><div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree">Kurulum veya destek için yardım ediyor musunuz?</button></h2><div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#faqAccordion"><div class="accordion-body text-secondary"><strong>Elbette!</strong> WhatsApp destek hattımız üzerinden kurulum, kullanım ve aklınıza takılan her konuda size bir mesaj kadar yakınız.</div></div></div></div></div>
+            <div class="col-lg-6 text-center text-lg-start"><div class="card p-4 h-100 d-flex flex-column justify-content-center align-items-center"><h3 class="fw-bold">Dijital Mandıra'yı Denemeye Hazır mısınız?</h3><p class="text-secondary">Demo talep etmek veya daha detaylı bilgi almak için bize WhatsApp üzerinden bir mesaj göndermeniz yeterli.</p><a href="https://wa.me/905539571515?text=Merhaba,%20Dijital%20Mandıra%20uygulamanız%20için%20demo%20talep%20etmek%20istiyorum." class="btn btn-success btn-lg mt-3" target="_blank"><i class="bi bi-whatsapp me-2"></i>Hemen Ulaşın</a></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="container py-4 text-center text-secondary">
+    <small>&copy; 2025 Dijital Mandıra. Tüm hakları saklıdır.</small>
+</footer>
+{% endblock %}
+
+{% block scripts %}
+<!-- MOBİL SLIDESHOW İÇİN JAVASCRIPT KODU -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const slideshow = document.querySelector('.phone-slideshow');
+    if (slideshow) {
+        const images = slideshow.querySelectorAll('img');
+        let currentIndex = 0;
+        
+        setInterval(() => {
+            if (images.length > 0) {
+                images[currentIndex].classList.remove('active');
+                currentIndex = (currentIndex + 1) % images.length;
+                images[currentIndex].classList.add('active');
+            }
+        }, 3000); // Her 3 saniyede bir resim değiştir
+    }
+});
+</script>
+{% endblock %}
+

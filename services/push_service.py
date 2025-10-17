@@ -33,7 +33,7 @@ class PushService:
             logger.error(f"Abonelik kaydı hatası: {e}", exc_info=True)
             raise Exception("Abonelik kaydedilirken bir sunucu hatası oluştu.")
 
-    def send_notification_to_user(self, user_id, title, body, url="/"):
+    def send_notification_to_user(self, user_id, title, body, url="/panel"):
         """Belirli bir kullanıcıya bildirim gönderir."""
         try:
             subscriptions_res = supabase.table('push_subscriptions').select('subscription_data').eq('user_id', user_id).execute()

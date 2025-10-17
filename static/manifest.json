@@ -1,7 +1,7 @@
 {
-  "name": "Süt Takip Sistemi",
-  "short_name": "SütTakip",
-  "description": "Süt toplama verilerinizi kolayca yönetin.",
+  "name": "Dijital Mandıra",
+  "short_name": "DijitalMandıra",
+  "description": "Süt toplama ve mandıra yönetimi operasyonlarınızı kolayca yönetin.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
