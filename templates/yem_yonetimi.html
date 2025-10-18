@@ -31,10 +31,20 @@
                         <label for="yem-urun-sec" class="form-label">Yem Ürünü</label>
                         <select id="yem-urun-sec" placeholder="Yem seçin..." autocomplete="off"></select>
                     </div>
-                    <div class="mb-2">
-                        <label for="miktar-input" class="form-label">Miktar (KG)</label>
-                        <input type="number" step="0.5" class="form-control form-control-sm" id="miktar-input" placeholder="Örn: 50.5">
+                    
+                    <!-- GÜNCELLEME: Miktar girişleri için yeni yapı -->
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label for="miktar-kg-input" class="form-label">Miktar (KG)</label>
+                            <input type="number" step="0.1" class="form-control form-control-sm" id="miktar-kg-input" placeholder="Örn: 50.5">
+                        </div>
+                        <!-- Bu alan varsayılan olarak gizli olacak -->
+                        <div class="col-6" id="cuval-cikis-alani" style="display: none;">
+                            <label for="miktar-cuval-input" class="form-label">Miktar (Çuval)</label>
+                            <input type="number" step="0.5" class="form-control form-control-sm" id="miktar-cuval-input" placeholder="Örn: 1.5">
+                        </div>
                     </div>
+
                      <div class="mb-3">
                         <label for="aciklama-input" class="form-label">Açıklama (İsteğe bağlı)</label>
                         <textarea class="form-control form-control-sm" id="aciklama-input" rows="2" placeholder="Örn: Ay sonu mahsuplaşılacak"></textarea>
@@ -71,7 +81,7 @@
                                     <tr>
                                         <th>Yem Adı</th>
                                         <th class="text-end">Stok (KG)</th>
-                                        <th class="text-end">Birim Fiyat (TL)</th>
+                                        <th class="text-end">Fiyat</th>
                                         <th class="text-center">İşlemler</th>
                                     </tr>
                                 </thead>
@@ -136,7 +146,7 @@
 </div>
 
 <div class="modal fade" id="yemUrunuModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="yemUrunuModalLabel">Yeni Yem Ürünü Ekle</h5>
@@ -150,12 +160,34 @@
                         <input type="text" class="form-control form-control-sm" id="yem-adi-input" placeholder="Örn: Süt Yemi 18 Protein" required>
                     </div>
                     <div class="mb-2">
-                        <label for="yem-stok-input" class="form-label">Mevcut Stok (KG) <span class="text-danger">*</span></label>
+                        
+                        <!-- GÜNCELLEME: Etikete ID eklendi -->
+                        <label for="yem-stok-input" class="form-label" id="yem-stok-label">Mevcut Stok (KG) <span class="text-danger">*</span></label>
                         <input type="number" step="1" class="form-control form-control-sm" id="yem-stok-input" placeholder="Örn: 5000" required>
                     </div>
+                    <hr>
                     <div class="mb-2">
-                        <label for="yem-fiyat-input" class="form-label">Birim Fiyat (TL) <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" class="form-control form-control-sm" id="yem-fiyat-input" placeholder="Örn: 14.75" required>
+                        <label for="fiyatlandirma-tipi-sec" class="form-label">Fiyatlandırma Tipi</label>
+                        <select id="fiyatlandirma-tipi-sec" class="form-select form-select-sm">
+                            <option value="kg">KG Başı Fiyat</option>
+                            <option value="cuval">Çuval Başı Fiyat</option>
+                        </select>
+                    </div>
+                    <div id="kg-fiyat-alani">
+                        <label for="yem-fiyat-input" class="form-label">Birim Fiyat (TL/KG) <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="yem-fiyat-input" placeholder="Örn: 14.75">
+                    </div>
+                    <div id="cuval-fiyat-alani" style="display: none;">
+                         <div class="row g-2">
+                            <div class="col-6">
+                                <label for="cuval-agirlik-input" class="form-label">Çuval Ağırlığı (KG)<span class="text-danger">*</span></label>
+                                <input type="number" step="0.5" class="form-control form-control-sm" id="cuval-agirlik-input" placeholder="Örn: 50">
+                            </div>
+                            <div class="col-6">
+                                <label for="cuval-fiyat-input" class="form-label">Çuval Fiyatı (TL)<span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" id="cuval-fiyat-input" placeholder="Örn: 850.00">
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -237,3 +269,5 @@
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script src="{{ url_for('static', filename='js/yem_yonetimi.js') }}"></script>
 {% endblock %}
+
+

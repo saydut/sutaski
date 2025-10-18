@@ -2,7 +2,7 @@
 
 import logging
 from flask import g
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, DivisionByZero
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +15,9 @@ class YemService:
         """Yem ürünlerini sayfalayarak listeler."""
         try:
             offset = (sayfa - 1) * limit
+            # GÜNCELLEME: Yeni eklenen cuval alanlarını da seçiyoruz.
             query = g.supabase.table('yem_urunleri').select(
-                '*', count='exact'
+                '*, cuval_agirligi_kg, cuval_fiyati', count='exact'
             ).eq('sirket_id', sirket_id).order('yem_adi').range(offset, offset + limit - 1)
             response = query.execute()
             return response.data, response.count
@@ -27,27 +28,64 @@ class YemService:
     def get_all_products_for_dropdown(self, sirket_id: int):
         """Dropdown menüler için tüm yem ürünlerini listeler."""
         try:
+            # GÜNCELLEME: Yeni eklenen cuval alanlarını da seçiyoruz.
             response = g.supabase.table('yem_urunleri').select(
-                'id, yem_adi, stok_miktari_kg'
+                'id, yem_adi, stok_miktari_kg, birim_fiyat, cuval_agirligi_kg, cuval_fiyati'
             ).eq('sirket_id', sirket_id).order('yem_adi').execute()
             return response.data
         except Exception as e:
             logger.error(f"Hata (get_all_products_for_dropdown): {e}", exc_info=True)
             raise Exception("Ürün listesi alınamadı.")
 
+    def _prepare_product_data(self, sirket_id: int, data: dict):
+        """Gelen veriye göre yem ürünü verisini hazırlar ve KG fiyatını/stoğunu hesaplar."""
+        fiyatlandirma_tipi = data.get('fiyatlandirma_tipi')
+        yem_adi = data.get('yem_adi')
+        
+        if not yem_adi:
+            raise ValueError("Yem adı zorunludur.")
+
+        urun_verisi = {
+            "sirket_id": sirket_id,
+            "yem_adi": yem_adi,
+            "cuval_agirligi_kg": None,
+            "cuval_fiyati": None
+        }
+
+        if fiyatlandirma_tipi == 'cuval':
+            cuval_fiyati = Decimal(data.get('cuval_fiyati', '0'))
+            cuval_agirligi_kg = Decimal(data.get('cuval_agirligi_kg', '0'))
+            stok_adedi = Decimal(data.get('stok_adedi', '0'))
+
+            if cuval_fiyati <= 0 or cuval_agirligi_kg <= 0 or stok_adedi < 0:
+                raise ValueError("Çuval fiyatı, ağırlığı ve stok adedi pozitif değerler olmalıdır.")
+            
+            # Arka planda KG birim fiyatını ve toplam KG stoğunu hesapla
+            urun_verisi["birim_fiyat"] = str(cuval_fiyati / cuval_agirligi_kg)
+            urun_verisi["stok_miktari_kg"] = str(stok_adedi * cuval_agirligi_kg)
+            urun_verisi["cuval_fiyati"] = str(cuval_fiyati)
+            urun_verisi["cuval_agirligi_kg"] = str(cuval_agirligi_kg)
+        else: # Varsayılan KG
+            birim_fiyat = Decimal(data.get('birim_fiyat', '0'))
+            stok_miktari_kg = Decimal(data.get('stok_miktari_kg', '0'))
+
+            if birim_fiyat <= 0 or stok_miktari_kg < 0:
+                raise ValueError("Birim fiyat ve stok pozitif değerler olmalıdır.")
+            urun_verisi["birim_fiyat"] = str(birim_fiyat)
+            urun_verisi["stok_miktari_kg"] = str(stok_miktari_kg)
+        
+        return urun_verisi
+
     def add_product(self, sirket_id: int, data: dict):
         """Yeni bir yem ürünü ekler."""
         try:
-            yeni_urun = {
-                "sirket_id": sirket_id,
-                "yem_adi": data.get('yem_adi'),
-                "stok_miktari_kg": str(Decimal(data.get('stok_miktari_kg'))),
-                "birim_fiyat": str(Decimal(data.get('birim_fiyat')))
-            }
+            yeni_urun = self._prepare_product_data(sirket_id, data)
             response = g.supabase.table('yem_urunleri').insert(yeni_urun).execute()
             return response.data[0]
-        except (InvalidOperation, TypeError, ValueError):
-            raise ValueError("Lütfen stok ve fiyat için geçerli sayılar girin.")
+        except (InvalidOperation, TypeError, DivisionByZero):
+            raise ValueError("Lütfen tüm fiyat ve ağırlık alanlarına geçerli sayılar girin.")
+        except ValueError as ve:
+            raise ve
         except Exception as e:
             logger.error(f"Hata (add_product): {e}", exc_info=True)
             raise Exception("Ürün eklenirken bir sunucu hatası oluştu.")
@@ -55,20 +93,22 @@ class YemService:
     def update_product(self, id: int, sirket_id: int, data: dict):
         """Bir yem ürününü günceller."""
         try:
-            guncel_veri = {
-                "yem_adi": data.get('yem_adi'),
-                "stok_miktari_kg": str(Decimal(data.get('stok_miktari_kg'))),
-                "birim_fiyat": str(Decimal(data.get('birim_fiyat')))
-            }
+            guncel_veri = self._prepare_product_data(sirket_id, data)
+            # sirket_id'yi güncelleme verisinden çıkaralım, çünkü bu anahtar değiştirilemez.
+            del guncel_veri['sirket_id']
+            
             response = g.supabase.table('yem_urunleri').update(guncel_veri).eq('id', id).eq('sirket_id', sirket_id).select().execute()
             if not response.data:
                 raise ValueError("Ürün bulunamadı veya bu işlem için yetkiniz yok.")
             return response.data[0]
-        except (InvalidOperation, TypeError, ValueError):
-            raise ValueError("Lütfen stok ve fiyat için geçerli sayılar girin.")
+        except (InvalidOperation, TypeError, DivisionByZero):
+            raise ValueError("Lütfen tüm fiyat ve ağırlık alanlarına geçerli sayılar girin.")
+        except ValueError as ve:
+            raise ve
         except Exception as e:
             logger.error(f"Hata (update_product): {e}", exc_info=True)
             raise Exception("Güncelleme sırasında bir sunucu hatası oluştu.")
+
 
     def delete_product(self, id: int, sirket_id: int):
         """Bir yem ürününü siler."""
@@ -205,3 +245,4 @@ class YemService:
 
 # Servis'ten bir örnek (instance) oluşturalım.
 yem_service = YemService()
+

@@ -46,7 +46,8 @@ def create_app():
             '/logout', 
             '/register', 
             '/api/login', 
-            '/api/register'
+            '/api/register',
+            '/'
         ]
         
         for path in exempt_paths:
