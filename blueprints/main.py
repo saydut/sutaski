@@ -8,9 +8,7 @@ from datetime import datetime
 
 main_bp = Blueprint(
     'main',
-    __name__,
-    template_folder='../../templates',
-    static_folder='../../static'
+    __name__
 )
 
 # YENİ EKLENEN FİLTRE FONKSİYONU

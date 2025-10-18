@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dijital Mandıra - Hesap Kitabı Kapatın, Kâra Odaklanın{% endblock %}
+{% block title %}Dijital Mandıra - Hesap Kitabını Kapatın, Kâra Odaklanın{% endblock %}
 
 {% block content %}
 <!-- NAVİGASYON BARI -->
@@ -10,9 +10,15 @@
             <img src="{{ url_for('static', filename='images/icon.png') }}" alt="Logo" width="40" height="40" class="d-inline-block align-text-top me-2">
             Dijital Mandıra
         </a>
-        <div class="d-flex">
+        <!-- Değişiklik burada: Butonları dikeyde ortalamak için "align-items-center" eklendi -->
+        <div class="d-flex align-items-center">
             <a href="{{ url_for('auth.login_page') }}" class="btn btn-outline-primary me-2">Giriş Yap</a>
-            <a href="{{ url_for('auth.register_page') }}" class="btn btn-primary">Ücretsiz Başla</a>
+            <a href="{{ url_for('auth.register_page') }}" class="btn btn-primary me-2">Ücretsiz Başla</a>
+            <!-- YENİ EKLENEN TEMA BUTONU -->
+            <button id="theme-toggle" class="btn">
+                <i id="sun-icon" class="bi bi-sun-fill"></i>
+                <i id="moon-icon" class="bi bi-moon-fill"></i>
+            </button>
         </div>
     </div>
 </nav>
@@ -24,7 +30,7 @@
 <!-- KAHRAMAN BÖLÜMÜ (VİDEOLU) -->
 <div class="hero-gradient">
     <div class="container text-center py-5 my-5">
-        <h1 class="display-4 fw-bold">Hesap Kitabı Kapatın, Kâra Odaklanın.</h1>
+        <h1 class="display-4 fw-bold">Hesap Kitabını Kapatın, Kâra Odaklanın.</h1>
         <p class="lead col-lg-8 mx-auto text-secondary" style="font-size: 1.25rem; font-weight: 300;">
             Süt toplama operasyonunuzdaki kağıt işlerini, hesap hatalarını ve zaman kaybını ortadan kaldırın. Dijital Mandıra ile tüm işletmeniz cebinizde.
         </p>
@@ -151,7 +157,7 @@
     <h2 class="text-center mb-5 fw-bold">İşletmenize En Uygun Planı Seçin</h2>
     <div class="row justify-content-center g-4">
         <div class="col-lg-4 col-md-6"><div class="card p-4 text-center h-100"><h5 class="fw-bold">Aylık Plan</h5><h1 class="my-4">2.000<span class="fs-4"> TL/ay</span></h1><p class="text-secondary">Kısa süreli veya dönemsel ihtiyaçlar için ideal.</p><a href="https://wa.me/905539571515?text=Merhaba,%20Dijital%20Mandıra%20aylık%20planı%20hakkında%20bilgi%20almak%20istiyorum." target="_blank" class="btn btn-outline-primary mt-auto">Bilgi Al</a></div></div>
-        <div class="col-lg-4 col-md-6"><div class="card p-4 text-center h-100 border-primary border-2 position-relative"><span class="position-absolute top-0 start-50 translate-middle badge rounded-pill bg-primary">En Popüler</span><h5 class="fw-bold">Yıllık Plan</h5><h1 class="my-4">20.000<span class="fs-4"> TL/yıl</span></h1><p class="text-secondary"><strong class="text-success">2 Ay Ücretsiz!</strong> Aylık 1.666 TL'ye gelir.</p><a href="https://wa.me/905539571515?text=Merhaba,%20Dijital%20Mandıra%20yıllık%20planı%20hakkında%20bilgi%20almak%20istiyorum." target="_blank" class="btn btn-primary mt-auto">Bilgi al</a></div></div>
+        <div class="col-lg-4 col-md-6"><div class="card p-4 text-center h-100 border-primary border-2 position-relative"><span class="position-absolute top-0 start-50 translate-middle badge rounded-pill bg-primary">En Popüler</span><h5 class="fw-bold">Yıllık Plan</h5><h1 class="my-4">20.000<span class="fs-4"> TL/yıl</span></h1><p class="text-secondary"><strong class="text-success">2 Ay Ücretsiz!</strong> Aylık 1.666 TL'ye gelir.</p><a href="https://wa.me/905539571515?text=Merhaba,%20Dijital%20Mandıra%20yıllık%20planı%20hakkında%20bilgi%20almak%20istiyorum." target="_blank" class="btn btn-primary mt-auto">Satın Al</a></div></div>
         <div class="col-lg-4 col-md-6"><div class="card p-4 text-center h-100"><h5 class="fw-bold">3 Yıllık Plan</h5><h1 class="my-4">50.000<span class="fs-4"> TL/3 yıl</span></h1><p class="text-secondary"><strong class="text-success">En Avantajlı Paket!</strong> Uzun vadede maliyeti düşürün.</p><a href="https://wa.me/905539571515?text=Merhaba,%20Dijital%20Mandıra%203%20yıllık%20planı%20hakkında%20bilgi%20almak%20istiyorum." target="_blank" class="btn btn-outline-primary mt-auto">Bilgi Al</a></div></div>
     </div>
 </div>
@@ -195,30 +201,31 @@ document.addEventListener('DOMContentLoaded', function () {
 <script>
     // Kullanıcıyı ilk ziyaretten sonra giriş sayfasına yönlendirme mantığı
     (function() {
-        // URL'den 'source=login' parametresini kontrol et
-        const urlParams = new URLSearchParams(window.location.search);
-        const source = urlParams.get('source');
+        // PWA modunda da tanıtım sayfasını göstermek için isPwa kontrolü kaldırıldı.
+        // Yönlendirmeden önce 2.5 saniye bekleme eklendi.
+        const beklemeSuresi = 2500; // milisaniye cinsinden
 
-        // Eğer kullanıcı login sayfasındaki butondan geldiyse, yönlendirme yapma.
-        if (source === 'login') {
-            return; // Script'in çalışmasını burada durdur.
-        }
-
-        const beklemeSuresi = 0; // milisaniye cinsinden
-        const hasVisited = localStorage.getItem('sutaski_has_visited');
-
-        // Eğer bu ilk ziyaret değilse (daha önce gelinmişse), yönlendirmeyi planla.
-        if (hasVisited) {
-            setTimeout(function() {
-                // PWA ve tarayıcı artık aynı şekilde davranacak:
-                // İkinci ve sonraki ziyaretlerde her zaman login'e yönlendir.
-                window.location.href = '/login';
-            }, beklemeSuresi);
-        } else {
-            // Eğer bu ilk ziyarettiyse, bir sonraki ziyaret için işaret bırak ve yönlendirme yapma.
+        // Sayfa yüklendiği anda ziyaretçi işaretini bırak, bekleme.
+        if (!localStorage.getItem('sutaski_has_visited')) {
             localStorage.setItem('sutaski_has_visited', 'true');
         }
+
+        // Belirtilen süre sonunda yönlendirme kontrolünü yap.
+        setTimeout(function() {
+            // Sadece daha önce ziyaret edip etmediğini kontrol et
+            const hasVisited = localStorage.getItem('sutaski_has_visited');
+
+            // Eğer daha önce ziyaret etmişse...
+            // (Bu kod ilk ziyaretten sonraki ziyaretlerde çalışacak)
+            if (hasVisited) {
+                const isPwa = window.matchMedia('(display-mode: standalone)').matches;
+                // PWA modunda değilse yönlendir. PWA modundaysa ana sayfada kal.
+                if(!isPwa) {
+                    window.location.href = '/login';
+                }
+            }
+        }, beklemeSuresi);
+
     })();
 </script>
 {% endblock %}
-
