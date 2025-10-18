@@ -199,33 +199,32 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 <script>
-    // Kullanıcıyı ilk ziyaretten sonra giriş sayfasına yönlendirme mantığı
+    // Kullanıcıyı ilk ziyaretten sonra giriş sayfasına yönlendirme mantığı (GÜNCELLENDİ VE DÜZELTİLDİ)
     (function() {
-        // PWA modunda da tanıtım sayfasını göstermek için isPwa kontrolü kaldırıldı.
-        // Yönlendirmeden önce 2.5 saniye bekleme eklendi.
-        const beklemeSuresi = 2500; // milisaniye cinsinden
+        // URL'den 'from_login=true' parametresini kontrol et.
+        const urlParams = new URLSearchParams(window.location.search);
+        const fromLogin = urlParams.get('from_login');
 
-        // Sayfa yüklendiği anda ziyaretçi işaretini bırak, bekleme.
-        if (!localStorage.getItem('sutaski_has_visited')) {
+        // Eğer kullanıcı login sayfasındaki "Ana Sayfa" butonundan geldiyse (URL'de parametre varsa),
+        // yönlendirme yapma ve script'i burada durdur.
+        if (fromLogin === 'true') {
+            return;
+        }
+        
+        const beklemeSuresi = 0;
+        const hasVisited = localStorage.getItem('sutaski_has_visited');
+
+        // Eğer bu ilk ziyaret değilse (daha önce gelinmişse), yönlendirmeyi planla.
+        if (hasVisited) {
+            setTimeout(function() {
+                // İkinci ve sonraki tüm ziyaretlerde (ister PWA, ister tarayıcı) giriş ekranına yönlendir.
+                window.location.href = '/login';
+            }, beklemeSuresi);
+        } else {
+            // Eğer bu ilk ziyarettiyse, bir sonraki ziyaret için kalıcı işaret bırak.
             localStorage.setItem('sutaski_has_visited', 'true');
         }
-
-        // Belirtilen süre sonunda yönlendirme kontrolünü yap.
-        setTimeout(function() {
-            // Sadece daha önce ziyaret edip etmediğini kontrol et
-            const hasVisited = localStorage.getItem('sutaski_has_visited');
-
-            // Eğer daha önce ziyaret etmişse...
-            // (Bu kod ilk ziyaretten sonraki ziyaretlerde çalışacak)
-            if (hasVisited) {
-                const isPwa = window.matchMedia('(display-mode: standalone)').matches;
-                // PWA modunda değilse yönlendir. PWA modundaysa ana sayfada kal.
-                if(!isPwa) {
-                    window.location.href = '/login';
-                }
-            }
-        }, beklemeSuresi);
-
     })();
 </script>
 {% endblock %}
+
