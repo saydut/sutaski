@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import session, flash, redirect, url_for, jsonify
+from flask import session, flash, redirect, url_for, jsonify, request
 from constants import UserRole 
 from extensions import turkey_tz
 from datetime import datetime
@@ -8,6 +8,12 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user' not in session:
+            # YENİ EKLENEN KONTROL
+            # Eğer istek bir API endpoint'ine yapılıyorsa, sayfa yönlendirmek yerine JSON hatası döndür.
+            if request.path.startswith('/api/') or request.path.startswith('/yem/api/') or request.path.startswith('/finans/api/'):
+                return jsonify({"error": "Bu işlem için giriş yapmanız gerekmektedir."}), 401
+
+            # Eğer normal bir sayfa isteğiyse, eskisi gibi giriş sayfasına yönlendir.
             flash("Devam etmek için lütfen giriş yapın.", "info")
             return redirect(url_for('auth.login_page'))
         return f(*args, **kwargs)

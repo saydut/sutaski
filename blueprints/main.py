@@ -1,7 +1,9 @@
+# blueprints/main.py
+
 import os
-from flask import Blueprint, render_template, session, request, flash, redirect, url_for, Response
+from flask import Blueprint, render_template, session, request, flash, redirect, url_for, Response, g
 from decorators import login_required, lisans_kontrolu
-from extensions import supabase, turkey_tz
+from extensions import turkey_tz
 from datetime import datetime
 
 main_bp = Blueprint(
@@ -11,7 +13,17 @@ main_bp = Blueprint(
     static_folder='../../static'
 )
 
-
+# YENİ EKLENEN FİLTRE FONKSİYONU
+@main_bp.app_template_filter('format_tarih_str')
+def format_tarih_filter(value):
+    """String formatındaki 'YYYY-MM-DD' tarihini 'DD.MM.YYYY' formatına çevirir."""
+    if not value:
+        return ''
+    try:
+        dt_obj = datetime.strptime(value, '%Y-%m-%d')
+        return dt_obj.strftime('%d.%m.%Y')
+    except (ValueError, TypeError):
+        return value
 
 # --- ARAYÜZ SAYFALARI ---
 # --- YENİ: Tanıtım Sayfası Rotası ---
@@ -74,7 +86,7 @@ def offline_page():
 @main_bp.route('/service-worker.js')
 def service_worker():
     try:
-        response = supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'cache_version').limit(1).single().execute()
+        response = g.supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'cache_version').limit(1).single().execute()
         version = response.data.get('ayar_degeri', '1') if response.data else '1'
     except Exception:
         version = '1' # Hata olursa varsayılan sürümü kullan

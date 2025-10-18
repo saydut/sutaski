@@ -1,3 +1,5 @@
+# app.py
+
 import os
 from flask import Flask, render_template, request, session, g, jsonify
 from dotenv import load_dotenv
@@ -5,7 +7,9 @@ from datetime import datetime
 from functools import lru_cache
 
 # Eklentileri ve ana Blueprint'leri içe aktar
-from extensions import bcrypt, supabase
+from extensions import bcrypt
+from supabase import create_client
+
 from blueprints.auth import auth_bp
 from blueprints.main import main_bp
 from blueprints.admin import admin_bp
@@ -13,8 +17,6 @@ from blueprints.yem import yem_bp
 from blueprints.finans import finans_bp
 from blueprints.profil import profil_bp
 from blueprints.push import push_bp
-
-# Yeniden yapılandırma sonrası eklenen yeni blueprint'ler
 from blueprints.tedarikci import tedarikci_bp
 from blueprints.sut import sut_bp
 from blueprints.rapor import rapor_bp
@@ -28,8 +30,14 @@ def create_app():
     app.config['JSON_AS_ASCII'] = False
 
     @app.before_request
+    def setup_supabase_client():
+        if 'supabase' not in g:
+            url = os.environ.get("SUPABASE_URL")
+            key = os.environ.get("SUPABASE_KEY")
+            g.supabase = create_client(url, key)
+
+    @app.before_request
     def check_for_maintenance():
-        # Bakım modu kontrolünün uygulanmayacağı yolların listesi
         exempt_paths = [
             '/static', 
             '/admin', 
@@ -41,49 +49,38 @@ def create_app():
             '/api/register'
         ]
         
-        # Eğer istenen yol bu listeki yollardan biriyle başlıyorsa, kontrol yapma
         for path in exempt_paths:
             if request.path.startswith(path):
                 return
 
-        # Oturumda kullanıcı 'admin' ise kontrol dışı bırak
         if session.get('user', {}).get('rol') == 'admin':
             return
             
         try:
-            # g objesi, tek bir istek boyunca veri saklamak için kullanılır.
             if 'maintenance_mode' not in g:
-                response = supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'maintenance_mode').single().execute()
+                response = g.supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'maintenance_mode').single().execute()
                 g.maintenance_mode = response.data.get('ayar_degeri', 'false') == 'true' if response.data else False
             
             if g.maintenance_mode:
-                # API istekleri için JSON, normal sayfa istekleri için HTML döndür
                 if request.path.startswith('/api/'):
                     return jsonify({"error": "Uygulama şu anda bakımda. Lütfen daha sonra tekrar deneyin."}), 503
-                # 503 HTTP status kodu "Service Unavailable" anlamına gelir, bu durum için daha doğrudur.
                 return render_template('maintenance.html'), 503
         except Exception as e:
-            # Veritabanına ulaşılamazsa veya başka bir hata olursa bunu sunucu loglarına yazdır.
             print(f"BAKIM MODU KONTROL HATASI: {e}")
-            # Hata durumunda, en güvenli varsayım bakım modunun aktif olmadığıdır.
-            # 'pass' komutu sayesinde uygulama çökmeyecek ve normal şekilde devam etmeye çalışacaktır.
             pass
 
-    @app.template_filter('format_tarih_str')
-    def format_tarih_filter(value):
-        """String formatındaki 'YYYY-MM-DD' tarihini 'DD.MM.YYYY' formatına çevirir."""
-        if not value:
-            return ''
-        try:
-            dt_obj = datetime.strptime(value, '%Y-%m-%d')
-            return dt_obj.strftime('%d.%m.%Y')
-        except (ValueError, TypeError):
-            return value
+    # ESKİ FİLTRE FONKSİYONU BURADAN SİLİNDİ
+    # @app.template_filter('format_tarih_str')
+    # def format_tarih_filter(value):
+    #     ...
 
-#    @lru_cache(maxsize=None)
+    @lru_cache(maxsize=None)
     def get_version_info():
         try:
-            all_versions_res = supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).order('id', desc=True).execute()
+            url = os.environ.get("SUPABASE_URL")
+            key = os.environ.get("SUPABASE_KEY")
+            temp_supabase_client = create_client(url, key)
+            all_versions_res = temp_supabase_client.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).order('id', desc=True).execute()
             if not all_versions_res.data:
                 return "1.0.0", []
             surum_notlari = all_versions_res.data
@@ -115,7 +112,6 @@ def create_app():
 
     return app
 
-# Uygulamayı yerel makinede (bilgisayarında) çalıştırmak için
 if __name__ == '__main__':
     app = create_app()
     app.run(debug=True)

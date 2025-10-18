@@ -1,6 +1,6 @@
-from flask import Blueprint, jsonify, request, session, send_file, current_app, render_template
+from flask import Blueprint, jsonify, request, session, send_file, current_app, render_template, g
 from decorators import login_required, lisans_kontrolu
-from extensions import supabase, turkey_tz
+from extensions import turkey_tz
 from utils import parse_supabase_timestamp
 from datetime import datetime, timedelta
 import pytz
@@ -28,7 +28,7 @@ def get_gunluk_ozet():
         target_date_str = tarih_str if tarih_str else datetime.now(turkey_tz).date().isoformat()
 
         # Adım 1'de oluşturduğumuz RPC fonksiyonunu çağırıyoruz
-        response = supabase.rpc('get_daily_summary_rpc', {
+        response = g.supabase.rpc('get_daily_summary_rpc', {
             'target_sirket_id': sirket_id,
             'target_date': target_date_str
         }).execute()
@@ -50,7 +50,7 @@ def get_haftalik_ozet():
         sirket_id = session['user']['sirket_id']
         
         # Tek bir RPC çağrısıyla tüm haftalık veriyi hazır olarak alıyoruz
-        response = supabase.rpc('get_weekly_summary', {'p_sirket_id': sirket_id}).execute()
+        response = g.supabase.rpc('get_weekly_summary', {'p_sirket_id': sirket_id}).execute()
         
         # Gelen veri zaten {'labels': [...], 'data': [...]} formatında olduğu için
         # direkt olarak istemciye gönderiyoruz.
@@ -67,7 +67,7 @@ def get_tedarikci_dagilimi():
         sirket_id = session['user']['sirket_id']
         
         # 1. Yeni ve güçlü RPC fonksiyonumuzu çağırıyoruz
-        response = supabase.rpc('get_supplier_distribution', {'p_sirket_id': sirket_id}).execute()
+        response = g.supabase.rpc('get_supplier_distribution', {'p_sirket_id': sirket_id}).execute()
         
         # 2. Veritabanından zaten işlenmiş olarak gelen veriyi alıyoruz
         dagilim_verisi = response.data
@@ -96,7 +96,7 @@ def get_detayli_rapor():
         if start_date > end_date or (end_date - start_date).days > 90:
             return jsonify({"error": "Geçersiz tarih aralığı. En fazla 90 günlük rapor alabilirsiniz."}), 400
 
-        response = supabase.rpc('get_detailed_report_data', {
+        response = g.supabase.rpc('get_detailed_report_data', {
             'p_sirket_id': sirket_id,
             'p_start_date': start_date_str,
             'p_end_date': end_date_str
@@ -150,7 +150,7 @@ def aylik_rapor_pdf():
         bitis_tarihi = datetime(yil, ay, ayin_son_gunu).date()
         start_utc = turkey_tz.localize(datetime.combine(baslangic_tarihi, datetime.min.time())).astimezone(pytz.utc).isoformat()
         end_utc = turkey_tz.localize(datetime.combine(bitis_tarihi, datetime.max.time())).astimezone(pytz.utc).isoformat()
-        response = supabase.table('sut_girdileri').select('litre, taplanma_tarihi, tedarikciler(isim)').eq('sirket_id', sirket_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).execute()
+        response = g.supabase.table('sut_girdileri').select('litre, taplanma_tarihi, tedarikciler(isim)').eq('sirket_id', sirket_id).gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc).execute()
         girdiler = response.data
         gunluk_dokum_dict = {i: {'toplam_litre': Decimal(0), 'girdi_sayisi': 0} for i in range(1, ayin_son_gunu + 1)}
         tedarikci_dokumu_dict = {}
@@ -186,7 +186,7 @@ def export_csv():
     try:
         sirket_id = session['user']['sirket_id']
         secilen_tarih_str = request.args.get('tarih')
-        query = supabase.table('sut_girdileri').select('taplanma_tarihi,tedarikciler(isim),litre,fiyat,kullanicilar(kullanici_adi)').eq('sirket_id', sirket_id)
+        query = g.supabase.table('sut_girdileri').select('taplanma_tarihi,tedarikciler(isim),litre,fiyat,kullanicilar(kullanici_adi)').eq('sirket_id', sirket_id)
         if secilen_tarih_str:
             target_date = datetime.strptime(secilen_tarih_str, '%Y-%m-%d').date()
             start_utc = turkey_tz.localize(datetime.combine(target_date, datetime.min.time())).astimezone(pytz.utc).isoformat()
@@ -219,3 +219,4 @@ def export_csv():
         return send_file(io.BytesIO(output.getvalue().encode('utf-8-sig')), mimetype='text/csv', as_attachment=True, download_name=filename)
     except Exception as e:
         return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+

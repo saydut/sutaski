@@ -3,7 +3,7 @@
 import os
 import json
 from pywebpush import webpush, WebPushException
-from extensions import supabase
+from flask import g
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ class PushService:
             raise ValueError("Geçersiz abonelik verisi.")
         
         try:
-            supabase.table('push_subscriptions').insert({
+            g.supabase.table('push_subscriptions').insert({
                 'user_id': user_id,
                 'subscription_data': subscription_data
             }).execute()
@@ -36,7 +36,7 @@ class PushService:
     def send_notification_to_user(self, user_id, title, body, url="/panel"):
         """Belirli bir kullanıcıya bildirim gönderir."""
         try:
-            subscriptions_res = supabase.table('push_subscriptions').select('subscription_data').eq('user_id', user_id).execute()
+            subscriptions_res = g.supabase.table('push_subscriptions').select('subscription_data').eq('user_id', user_id).execute()
             if not subscriptions_res.data:
                 logger.warning(f"{user_id} ID'li kullanıcının aboneliği bulunamadı.")
                 return 0 # Bildirim gönderilecek kimse yok
@@ -71,7 +71,7 @@ class PushService:
     def _delete_subscription(self, subscription_data):
         """Geçersiz bir aboneliği veritabanından siler."""
         try:
-            supabase.table('push_subscriptions').delete().eq('subscription_data', subscription_data).execute()
+            g.supabase.table('push_subscriptions').delete().eq('subscription_data', subscription_data).execute()
             logger.info("Geçersiz abonelik silindi.")
         except Exception as e:
             logger.error(f"Geçersiz abonelik silinirken hata: {e}")

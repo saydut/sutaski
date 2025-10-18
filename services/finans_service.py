@@ -1,7 +1,7 @@
 # services/finans_service.py
 
 import logging
-from extensions import supabase
+from flask import g
 from decimal import Decimal, InvalidOperation
 from constants import FinansIslemTipi
 
@@ -14,7 +14,7 @@ class FinansService:
         """Finansal işlemleri sayfalayarak listeler."""
         try:
             offset = (sayfa - 1) * limit
-            query = supabase.table('finansal_islemler').select(
+            query = g.supabase.table('finansal_islemler').select(
                 '*, tedarikciler(isim)', count='estimated' # count='exact' yerine 'estimated' daha performanslı olabilir
             ).eq('sirket_id', sirket_id).order('islem_tarihi', desc=True).range(offset, offset + limit - 1)
             response = query.execute()
@@ -54,7 +54,7 @@ class FinansService:
             if not yeni_islem["islem_tarihi"]:
                 del yeni_islem["islem_tarihi"]
 
-            supabase.table('finansal_islemler').insert(yeni_islem).execute()
+            g.supabase.table('finansal_islemler').insert(yeni_islem).execute()
             return f"{islem_tipi} işlemi başarıyla kaydedildi."
         except (InvalidOperation, TypeError):
             raise ValueError("Lütfen tutar için geçerli bir sayı girin.")
@@ -80,7 +80,7 @@ class FinansService:
             if not guncellenecek_veri:
                 raise ValueError("Güncellenecek veri bulunamadı.")
 
-            response = supabase.table('finansal_islemler').update(guncellenecek_veri).eq('id', islem_id).eq('sirket_id', sirket_id).execute()
+            response = g.supabase.table('finansal_islemler').update(guncellenecek_veri).eq('id', islem_id).eq('sirket_id', sirket_id).execute()
             if not response.data:
                 raise ValueError("İşlem bulunamadı veya bu işlem için yetkiniz yok.")
         except (InvalidOperation, TypeError):
@@ -94,7 +94,7 @@ class FinansService:
     def delete_transaction(self, islem_id: int, sirket_id: int):
         """Bir finansal işlemi siler."""
         try:
-            response = supabase.table('finansal_islemler').delete().eq('id', islem_id).eq('sirket_id', sirket_id).execute()
+            response = g.supabase.table('finansal_islemler').delete().eq('id', islem_id).eq('sirket_id', sirket_id).execute()
             if not response.data:
                 raise ValueError("İşlem bulunamadı veya bu işlem için yetkiniz yok.")
         except ValueError as ve:

@@ -2,7 +2,8 @@
 # YENİ FONKSİYON EKLENDİ: Bu dosya, süt girdileriyle ilgili tüm veritabanı işlemlerini merkezileştirir.
 
 import logging
-from extensions import supabase, turkey_tz
+from flask import g
+from extensions import turkey_tz
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 import pytz
@@ -16,7 +17,7 @@ class SutService:
     def get_daily_summary(self, sirket_id: int, tarih_str: str):
         """Belirtilen tarih için RPC kullanarak özet veriyi çeker."""
         try:
-            response = supabase.rpc('get_daily_summary_rpc', {
+            response = g.supabase.rpc('get_daily_summary_rpc', {
                 'target_sirket_id': sirket_id,
                 'target_date': tarih_str
             }).execute()
@@ -29,7 +30,7 @@ class SutService:
         """Süt girdilerini sayfalama ve tarihe göre filtreleme yaparak listeler."""
         try:
             offset = (sayfa - 1) * limit
-            query = supabase.table('sut_girdileri').select(
+            query = g.supabase.table('sut_girdileri').select(
                 'id,litre,fiyat,taplanma_tarihi,duzenlendi_mi,kullanicilar(kullanici_adi),tedarikciler(isim)', 
                 count='exact'
             ).eq('sirket_id', sirket_id)
@@ -54,7 +55,7 @@ class SutService:
             if litre <= 0 or fiyat <= 0:
                 raise ValueError("Litre ve fiyat pozitif bir değer olmalıdır.")
             
-            response = supabase.table('sut_girdileri').insert({
+            response = g.supabase.table('sut_girdileri').insert({
                 'tedarikci_id': yeni_girdi['tedarikci_id'], 
                 'litre': str(litre),
                 'fiyat': str(fiyat),
@@ -85,11 +86,11 @@ class SutService:
                 'fiyat': str(Decimal(yeni_fiyat))
             }
 
-            mevcut_girdi_res = supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
+            mevcut_girdi_res = g.supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
             if not mevcut_girdi_res.data:
                 raise ValueError("Girdi bulunamadı veya bu işlem için yetkiniz yok.")
             
-            supabase.table('girdi_gecmisi').insert({
+            g.supabase.table('girdi_gecmisi').insert({
                 'orijinal_girdi_id': girdi_id,
                 'duzenleyen_kullanici_id': duzenleyen_kullanici_id,
                 'duzenleme_sebebi': duzenleme_sebebi,
@@ -98,7 +99,7 @@ class SutService:
                 'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']
             }).execute()
 
-            guncel_girdi = supabase.table('sut_girdileri').update(guncellenecek_veri).eq('id', girdi_id).execute()
+            guncel_girdi = g.supabase.table('sut_girdileri').update(guncellenecek_veri).eq('id', girdi_id).execute()
             
             girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
             girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
@@ -114,15 +115,15 @@ class SutService:
     def delete_entry(self, girdi_id: int, sirket_id: int):
         """Bir süt girdisini ve ilgili geçmiş kayıtlarını siler."""
         try:
-            mevcut_girdi_res = supabase.table('sut_girdileri').select('sirket_id, taplanma_tarihi').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
+            mevcut_girdi_res = g.supabase.table('sut_girdileri').select('sirket_id, taplanma_tarihi').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
             if not mevcut_girdi_res.data:
                 raise ValueError("Girdi bulunamadı veya silme yetkiniz yok.")
             
             girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
             girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
 
-            supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
-            supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
+            g.supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
+            g.supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
             
             return girdi_tarihi_str
         except Exception as e:
@@ -132,11 +133,11 @@ class SutService:
     def get_entry_history(self, girdi_id: int, sirket_id: int):
         """Bir girdinin düzenleme geçmişini getirir."""
         try:
-            original_girdi_response = supabase.table('sut_girdileri').select('sirket_id').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
+            original_girdi_response = g.supabase.table('sut_girdileri').select('sirket_id').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
             if not original_girdi_response.data:
                 raise ValueError("Yetkisiz erişim veya girdi bulunamadı.")
             
-            gecmis_data = supabase.table('girdi_gecmisi').select('*,duzenleyen_kullanici_id(kullanici_adi)').eq('orijinal_girdi_id', girdi_id).order('created_at', desc=True).execute()
+            gecmis_data = g.supabase.table('girdi_gecmisi').select('*,duzenleyen_kullanici_id(kullanici_adi)').eq('orijinal_girdi_id', girdi_id).order('created_at', desc=True).execute()
             return gecmis_data.data
         except Exception as e:
             logger.error(f"Hata (get_entry_history): {e}", exc_info=True)
@@ -145,7 +146,7 @@ class SutService:
     def get_last_price_for_supplier(self, sirket_id: int, tedarikci_id: int):
         """Bir tedarikçi için girilen en son süt fiyatını getirir."""
         try:
-            response = supabase.table('sut_girdileri').select(
+            response = g.supabase.table('sut_girdileri').select(
                 'fiyat'
             ).eq('sirket_id', sirket_id).eq(
                 'tedarikci_id', tedarikci_id
@@ -160,3 +161,4 @@ class SutService:
 
 # Servis'ten bir örnek (instance) oluşturalım ki blueprint'ler bunu kullanabilsin.
 sut_service = SutService()
+

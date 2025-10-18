@@ -1,6 +1,7 @@
 # services/auth_service.py
 
-from extensions import supabase, bcrypt, turkey_tz
+from flask import g
+from extensions import bcrypt, turkey_tz
 from datetime import datetime
 from postgrest import APIError
 
@@ -15,7 +16,7 @@ class AuthService:
                 raise ValueError("Tüm alanların doldurulması zorunludur.")
 
             # Kullanıcı adının mevcut olup olmadığını kontrol et
-            kullanici_var_mi = supabase.table('kullanicilar').select('id', count='exact').eq('kullanici_adi', kullanici_adi).execute()
+            kullanici_var_mi = g.supabase.table('kullanicilar').select('id', count='exact').eq('kullanici_adi', kullanici_adi).execute()
             if kullanici_var_mi.count > 0:
                 raise ValueError("Bu kullanıcı adı zaten mevcut.")
 
@@ -23,7 +24,7 @@ class AuthService:
 
             hashed_sifre = bcrypt.generate_password_hash(sifre).decode('utf-8')
             
-            supabase.table('kullanicilar').insert({
+            g.supabase.table('kullanicilar').insert({
                 'kullanici_adi': kullanici_adi, 
                 'sifre': hashed_sifre,
                 'sirket_id': sirket_id
@@ -52,21 +53,21 @@ class AuthService:
         formatted_name = sirket_adi.strip().title()
 
         # DEĞİŞİKLİK 1: .single() komutunu buradan kaldırdık.
-        sirket_response = supabase.table('sirketler').select('id').eq('sirket_adi', formatted_name).execute()
+        sirket_response = g.supabase.table('sirketler').select('id').eq('sirket_adi', formatted_name).execute()
         
         # DEĞİŞİKLİK 2: Artık bir liste beklediğimiz için ilk elemanı seçiyoruz.
         if sirket_response.data:
             return sirket_response.data[0]['id']
         
         # Eğer bulunamadıysa, yeni şirketi standart formatta oluştur.
-        yeni_sirket_response = supabase.table('sirketler').insert({'sirket_adi': formatted_name}).execute()
+        yeni_sirket_response = g.supabase.table('sirketler').insert({'sirket_adi': formatted_name}).execute()
         return yeni_sirket_response.data[0]['id']
 
 
     def login_user(self, kullanici_adi, sifre):
         """Kullanıcıyı doğrular, lisansını kontrol eder ve oturum verilerini döndürür."""
         try:
-            user_response = supabase.table('kullanicilar').select('*, sirketler(sirket_adi, lisans_bitis_tarihi)').eq('kullanici_adi', kullanici_adi).execute()
+            user_response = g.supabase.table('kullanicilar').select('*, sirketler(sirket_adi, lisans_bitis_tarihi)').eq('kullanici_adi', kullanici_adi).execute()
         
             if not user_response.data:
                 raise ValueError("Bu kullanıcı adına sahip bir hesap bulunamadı.")

@@ -1,7 +1,8 @@
 # services/profil_service.py
 
 import logging
-from extensions import supabase, bcrypt
+from flask import g
+from extensions import bcrypt
 from postgrest import APIError
 
 logger = logging.getLogger(__name__)
@@ -12,8 +13,8 @@ class ProfilService:
     def get_profil_bilgileri(self, user_id: int, sirket_id: int):
         """Giriş yapmış kullanıcının ve şirketinin bilgilerini döndürür."""
         try:
-            user_res = supabase.table('kullanicilar').select('kullanici_adi, eposta, telefon_no').eq('id', user_id).single().execute()
-            sirket_res = supabase.table('sirketler').select('sirket_adi, vergi_kimlik_no, adres').eq('id', sirket_id).single().execute()
+            user_res = g.supabase.table('kullanicilar').select('kullanici_adi, eposta, telefon_no').eq('id', user_id).single().execute()
+            sirket_res = g.supabase.table('sirketler').select('sirket_adi, vergi_kimlik_no, adres').eq('id', sirket_id).single().execute()
 
             if not user_res.data or not sirket_res.data:
                 raise ValueError("Kullanıcı veya şirket bilgileri bulunamadı.")
@@ -34,12 +35,12 @@ class ProfilService:
             # 1. Kullanıcı verilerini güncelle
             kullanici_data = data.get('kullanici')
             if kullanici_data:
-                supabase.table('kullanicilar').update(kullanici_data).eq('id', user_id).execute()
+                g.supabase.table('kullanicilar').update(kullanici_data).eq('id', user_id).execute()
 
             # 2. Şirket verilerini güncelle
             sirket_data = data.get('sirket')
             if sirket_data:
-                supabase.table('sirketler').update(sirket_data).eq('id', sirket_id).execute()
+                g.supabase.table('sirketler').update(sirket_data).eq('id', sirket_id).execute()
 
             # 3. Şifre verilerini güncelle (eğer varsa)
             sifre_data = data.get('sifreler')
@@ -61,13 +62,13 @@ class ProfilService:
         if not mevcut_sifre:
             raise ValueError("Yeni şifre için mevcut şifrenizi girmelisiniz.")
         
-        user_res = supabase.table('kullanicilar').select('sifre').eq('id', user_id).single().execute()
+        user_res = g.supabase.table('kullanicilar').select('sifre').eq('id', user_id).single().execute()
         
         if not user_res.data or not bcrypt.check_password_hash(user_res.data['sifre'], mevcut_sifre):
             raise ValueError("Mevcut şifreniz yanlış.")
         
         hashed_sifre = bcrypt.generate_password_hash(yeni_sifre).decode('utf-8')
-        supabase.table('kullanicilar').update({'sifre': hashed_sifre}).eq('id', user_id).execute()
+        g.supabase.table('kullanicilar').update({'sifre': hashed_sifre}).eq('id', user_id).execute()
 
 
 # Servis'ten bir örnek (instance) oluşturalım.

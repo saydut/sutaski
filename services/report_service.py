@@ -1,7 +1,7 @@
 # services/report_service.py
 
-from flask import render_template, current_app, send_file
-from extensions import supabase, turkey_tz
+from flask import render_template, current_app, send_file, g
+from extensions import turkey_tz
 from weasyprint import HTML
 from datetime import datetime
 import calendar
@@ -14,7 +14,7 @@ def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
     baslangic_tarihi_str = f"{yil}-{ay:02d}-01"
     bitis_tarihi_str = f"{yil}-{ay:02d}-{ayin_son_gunu}"
 
-    response = supabase.rpc('get_monthly_supplier_report_data', {
+    response = g.supabase.rpc('get_monthly_supplier_report_data', {
         'p_sirket_id': sirket_id,
         'p_tedarikci_id': tedarikci_id,
         'p_start_date': baslangic_tarihi_str,
@@ -41,7 +41,7 @@ def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
 
 def generate_hesap_ozeti_pdf(sirket_id, sirket_adi, tedarikci_id, ay, yil):
     """Tedarikçi için aylık hesap özeti PDF'i oluşturur ve döndürür."""
-    tedarikci_res = supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
+    tedarikci_res = g.supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
     if not tedarikci_res.data:
         raise ValueError("Tedarikçi bulunamadı veya yetkiniz yok.")
         
@@ -65,8 +65,8 @@ def generate_hesap_ozeti_pdf(sirket_id, sirket_adi, tedarikci_id, ay, yil):
 
 def generate_mustahsil_makbuzu_pdf(sirket_id, tedarikci_id, ay, yil):
     """Tedarikçi için müstahsil makbuzu PDF'i oluşturur ve döndürür."""
-    tedarikci_res = supabase.table('tedarikciler').select('isim, tc_no, adres').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
-    sirket_res = supabase.table('sirketler').select('sirket_adi, adres, vergi_kimlik_no').eq('id', sirket_id).single().execute()
+    tedarikci_res = g.supabase.table('tedarikciler').select('isim, tc_no, adres').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
+    sirket_res = g.supabase.table('sirketler').select('sirket_adi, adres, vergi_kimlik_no').eq('id', sirket_id).single().execute()
     if not tedarikci_res.data or not sirket_res.data:
         raise ValueError("Gerekli şirket veya tedarikçi bilgisi bulunamadı.")
         
@@ -83,4 +83,3 @@ def generate_mustahsil_makbuzu_pdf(sirket_id, tedarikci_id, ay, yil):
     filename = f"{yil}_{ay:02d}_{tedarikci_res.data['isim'].replace(' ', '_')}_mustahsil.pdf"
     
     return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
-

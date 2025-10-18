@@ -1,6 +1,6 @@
 # blueprints/auth.py (SERVİS KATMANINI KULLANACAK ŞEKİLDE GÜNCELLENDİ)
 
-from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session, flash
+from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session, flash, g
 from decorators import login_required
 from services.auth_service import auth_service # <-- YENİ: Servisi import et
 
@@ -69,7 +69,7 @@ def login_api():
 @auth_bp.route('/api/user/change_password', methods=['POST'])
 @login_required
 def change_password():
-    from extensions import supabase, bcrypt
+    from extensions import bcrypt
     try:
         data = request.get_json()
         mevcut_sifre = data.get('mevcut_sifre')
@@ -83,17 +83,18 @@ def change_password():
         if yeni_sifre != yeni_sifre_tekrar:
             return jsonify({"error": "Yeni şifreler eşleşmiyor."}), 400
 
-        user_response = supabase.table('kullanicilar').select('sifre').eq('id', user_id).single().execute()
+        user_response = g.supabase.table('kullanicilar').select('sifre').eq('id', user_id).single().execute()
         user_data = user_response.data
         
         if not bcrypt.check_password_hash(user_data['sifre'], mevcut_sifre):
             return jsonify({"error": "Mevcut şifreniz yanlış."}), 401
 
         hashed_yeni_sifre = bcrypt.generate_password_hash(yeni_sifre).decode('utf-8')
-        supabase.table('kullanicilar').update({'sifre': hashed_yeni_sifre}).eq('id', user_id).execute()
+        g.supabase.table('kullanicilar').update({'sifre': hashed_yeni_sifre}).eq('id', user_id).execute()
 
         return jsonify({"message": "Şifreniz başarıyla güncellendi."})
 
     except Exception as e:
         print(f"Kullanıcı şifre değiştirme hatası: {e}")
         return jsonify({"error": "Şifre değiştirilirken bir hata oluştu."}), 500
+

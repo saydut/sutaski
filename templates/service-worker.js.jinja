@@ -42,18 +42,22 @@ const CDN_ASSETS = [
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js',
-    'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/tr.js', // <-- DEĞİŞİKLİK BURADA
+    'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/tr.js', // <-- DEĞİŞİKLİK BURADA: npmcdn.com yerine cdn.jsdelivr.net kullanıyoruz.
     'https://unpkg.com/dexie@3/dist/dexie.js',
     'https://cdn.jsdelivr.net/npm/chart.js',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
-    'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?v=1.11.3'
+    'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?v=1.11.3',
+    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+    'https://fonts.gstatic.com/s/inter/v13/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2'
 ];
 
 
 // Bir kaynağı güvenli bir şekilde önbelleğe alan yardımcı fonksiyon
 const cacheAsset = async (cache, assetUrl) => {
     try {
-        const request = new Request(assetUrl, { redirect: 'follow' });
+        // YENİ DÜZENLEME: İstek yaparken tarayıcının kendi önbelleğini kullanmasını engelliyoruz.
+        // Bu, "Partial response" hatasını çözmeye yardımcı olur.
+        const request = new Request(assetUrl, { cache: 'no-store' });
         const response = await fetch(request);
         if (!response.ok) {
             // Eğer yanıt başarısızsa, bir hata fırlat ki yakalanabilsin.
@@ -215,3 +219,4 @@ self.addEventListener('fetch', event => {
         })
     );
  });
+

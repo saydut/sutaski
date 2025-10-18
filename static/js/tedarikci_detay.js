@@ -5,6 +5,7 @@ const yuklenenSekmeler = { sut: false, yem: false, finans: false };
 const KAYIT_SAYISI = 10;
 
 // --- Sayfa Yüklendiğinde Çalışan Ana Fonksiyon ---
+// --- Sayfa Yüklendiğinde Çalışan Ana Fonksiyon ---
 window.onload = () => {
     mevcutGorunum = localStorage.getItem('tedarikciDetayGorunum') || 'tablo';
     gorunumuAyarla(mevcutGorunum);
@@ -35,22 +36,32 @@ function gorunumuDegistir(yeniGorunum) {
     localStorage.setItem('tedarikciDetayGorunum', yeniGorunum);
     gorunumuAyarla(yeniGorunum);
 
-    // Görünüm değiştiğinde mevcut aktif sekmeyi yeniden yükle
     const aktifSekme = document.querySelector('.nav-tabs .nav-link.active');
-    if (aktifSekme.id === 'sut-tab') sutGirdileriniYukle(1);
-    else if (aktifSekme.id === 'yem-tab') yemIslemleriniYukle(1);
-    else if (aktifSekme.id === 'finans-tab') finansalIslemleriYukle(1);
+    const aktifSekmeId = aktifSekme.id;
+
+    // --- YENİ EKLENEN KOD BAŞLANGICI ---
+    // Görünüm değiştiğinde, aktif olmayan diğer sekmelerin "yüklendi" durumunu sıfırla.
+    // Bu, diğer sekmelere tıklandığında veriyi yeni görünüme göre yeniden yüklemelerini tetikler.
+    if (aktifSekmeId !== 'sut-tab') yuklenenSekmeler.sut = false;
+    if (aktifSekmeId !== 'yem-tab') yuklenenSekmeler.yem = false;
+    if (aktifSekmeId !== 'finans-tab') yuklenenSekmeler.finans = false;
+    // --- YENİ EKLENEN KOD SONU ---
+
+    // Mevcut aktif sekmeyi yeni görünüme göre yeniden yükle
+    if (aktifSekmeId === 'sut-tab') sutGirdileriniYukle(1);
+    else if (aktifSekmeId === 'yem-tab') yemIslemleriniYukle(1);
+    else if (aktifSekmeId === 'finans-tab') finansalIslemleriYukle(1);
 }
 
 function sekmeOlaylariniAyarla() {
     // Sekmeler daha önce yüklenmediyse, gösterildiğinde veri yüklemesini tetikle
     document.getElementById('yem-tab').addEventListener('show.bs.tab', () => {
         if (!yuklenenSekmeler.yem) yemIslemleriniYukle(1);
-    }, { once: true });
+    });
 
     document.getElementById('finans-tab').addEventListener('show.bs.tab', () => {
         if (!yuklenenSekmeler.finans) finansalIslemleriYukle(1);
-    }, { once: true });
+    });
 }
 
 // --- Veri Yükleme Fonksiyonları (REFAKTÖR EDİLDİ) ---

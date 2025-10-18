@@ -1,7 +1,7 @@
 # services/tedarikci_service.py
 # GÜNCELLENDİ: Bu dosya artık yavaş olan "view" yerine hızlı olan RPC fonksiyonunu kullanacak.
 
-from extensions import supabase
+from flask import g
 from postgrest import APIError
 from decimal import Decimal
 from collections import namedtuple
@@ -14,7 +14,7 @@ class TedarikciService:
         try:
             # View kaldırıldığı için, artık direkt tedarikciler tablosundan çekiyoruz.
             # Dropdown'da toplam litre bilgisi kritik değil, performansı artırmak için kaldırıyoruz.
-            response = supabase.table('tedarikciler').select(
+            response = g.supabase.table('tedarikciler').select(
                 'id, isim'
             ).eq('sirket_id', sirket_id).order('isim', desc=False).execute()
             return response.data
@@ -25,7 +25,7 @@ class TedarikciService:
     def get_by_id(self, sirket_id: int, tedarikci_id: int):
         """ID ile tek bir tedarikçinin detaylarını getirir."""
         try:
-            response = supabase.table('tedarikciler').select(
+            response = g.supabase.table('tedarikciler').select(
                 'id, isim, tc_no, telefon_no, adres'
             ).eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
             return response.data
@@ -36,11 +36,11 @@ class TedarikciService:
     def get_summary_by_id(self, sirket_id: int, tedarikci_id: int):
         """Bir tedarikçinin finansal özetini RPC ile hesaplar."""
         try:
-            tedarikci_res = supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
+            tedarikci_res = g.supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
             if not tedarikci_res.data:
                 return None, None # Tedarikçi bulunamadı
 
-            summary_res = supabase.rpc('get_supplier_summary', {
+            summary_res = g.supabase.rpc('get_supplier_summary', {
                 'p_sirket_id': sirket_id,
                 'p_tedarikci_id': tedarikci_id
             }).execute()
@@ -65,7 +65,7 @@ class TedarikciService:
             }
 
             # Yeni ve performanslı RPC'mizi çağırıyoruz
-            response = supabase.rpc('get_paginated_suppliers', params).execute()
+            response = g.supabase.rpc('get_paginated_suppliers', params).execute()
             
             # supabase-py v2 RPC'den tek bir JSON objesi döner
             result = response.data
@@ -94,7 +94,7 @@ class TedarikciService:
             if data.get('telefon_no'): yeni_veri['telefon_no'] = data.get('telefon_no')
             if data.get('adres'): yeni_veri['adres'] = data.get('adres')
             
-            response = supabase.table('tedarikciler').insert(yeni_veri).execute()
+            response = g.supabase.table('tedarikciler').insert(yeni_veri).execute()
             return response.data[0]
         except (APIError, Exception) as e:
             print(f"Hata (create): {e}")
@@ -113,7 +113,7 @@ class TedarikciService:
             if 'telefon_no' in data: guncellenecek_veri['telefon_no'] = data.get('telefon_no')
             if 'adres' in data: guncellenecek_veri['adres'] = data.get('adres')
 
-            response = supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', tedarikci_id).eq('sirket_id', sirket_id).execute()
+            response = g.supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', tedarikci_id).eq('sirket_id', sirket_id).execute()
             
             if not response.data:
                 raise ValueError("Tedarikçi bulunamadı veya bu işlem için yetkiniz yok.")
@@ -126,7 +126,7 @@ class TedarikciService:
     def delete(self, sirket_id: int, tedarikci_id: int):
         """Bir tedarikçiyi siler."""
         try:
-            response = supabase.table('tedarikciler').delete().eq('id', tedarikci_id).eq('sirket_id', sirket_id).execute()
+            response = g.supabase.table('tedarikciler').delete().eq('id', tedarikci_id).eq('sirket_id', sirket_id).execute()
             if not response.data:
                  raise ValueError("Tedarikçi bulunamadı veya bu işlem için yetkiniz yok.")
             return True
@@ -140,7 +140,7 @@ class TedarikciService:
 class PagedDataService:
     def get_sut_girdileri(self, sirket_id: int, tedarikci_id: int, sayfa: int, limit: int = 10):
         offset = (sayfa - 1) * limit
-        query = supabase.table('sut_girdileri').select(
+        query = g.supabase.table('sut_girdileri').select(
             '*, kullanicilar(kullanici_adi)', count='exact'
         ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order(
             'taplanma_tarihi', desc=True
@@ -149,7 +149,7 @@ class PagedDataService:
 
     def get_yem_islemleri(self, sirket_id: int, tedarikci_id: int, sayfa: int, limit: int = 10):
         offset = (sayfa - 1) * limit
-        query = supabase.table('yem_islemleri').select(
+        query = g.supabase.table('yem_islemleri').select(
             '*, kullanicilar(kullanici_adi), yem_urunleri(yem_adi)', count='exact'
         ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order(
             'islem_tarihi', desc=True
@@ -158,7 +158,7 @@ class PagedDataService:
 
     def get_finansal_islemler(self, sirket_id: int, tedarikci_id: int, sayfa: int, limit: int = 10):
         offset = (sayfa - 1) * limit
-        query = supabase.table('finansal_islemler').select(
+        query = g.supabase.table('finansal_islemler').select(
             '*, kullanicilar(kullanici_adi)', count='exact'
         ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order(
             'islem_tarihi', desc=True
