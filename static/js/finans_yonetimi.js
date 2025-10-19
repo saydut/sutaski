@@ -1,9 +1,9 @@
-// static/js/finans_yonetimi.js (MERKEZİ API KULLANAN YENİ VERSİYON)
+// static/js/finans_yonetimi.js (İyimser Arayüz güncellemesi eklendi)
 
 let tedarikciSecici, tarihSecici;
 let duzenleModal, silmeOnayModal;
 let mevcutGorunum = 'tablo';
-const KAYIT_SAYISI = 5;
+const KAYIT_SAYISI = 10; // GÜNCELLEME: Sayfa başına kayıt sayısı tutarlılık için artırıldı.
 
 window.onload = function() {
     tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
@@ -36,7 +36,7 @@ function gorunumuAyarla(aktifGorunum) {
 
 async function finansalIslemleriYukle(sayfa = 1) {
     await genelVeriYukleyici({
-        apiURL: `/finans/api/islemler?sayfa=${sayfa}`,
+        apiURL: `/finans/api/islemler?sayfa=${sayfa}&limit=${KAYIT_SAYISI}`,
         veriAnahtari: 'islemler',
         tabloBodyId: 'finansal-islemler-tablosu',
         kartContainerId: 'finansal-islemler-kart-listesi',
@@ -54,6 +54,7 @@ async function finansalIslemleriYukle(sayfa = 1) {
 function renderFinansAsTable(container, islemler) {
     islemler.forEach(islem => {
         const islemTarihi = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        // GÜNCELLEME: Satıra benzersiz bir ID ekliyoruz.
         container.innerHTML += `
             <tr id="finans-islem-${islem.id}">
                 <td>${islemTarihi}</td>
@@ -72,6 +73,7 @@ function renderFinansAsTable(container, islemler) {
 function renderFinansAsCards(container, islemler) {
     islemler.forEach(islem => {
         const islemTarihi = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        // GÜNCELLEME: Karta benzersiz bir ID ekliyoruz.
         container.innerHTML += `
             <div class="col-md-6 col-12" id="finans-islem-${islem.id}">
                 <div class="finance-card ${islem.islem_tipi === 'Ödeme' ? 'odeme' : 'avans'}">
@@ -141,6 +143,7 @@ function silmeOnayiAc(islemId) {
     silmeOnayModal.show();
 }
 
+// GÜNCELLEME: İyimser arayüz mantığı eklendi
 async function finansalIslemSil() {
     const id = document.getElementById('silinecek-islem-id').value;
     silmeOnayModal.hide();
@@ -150,24 +153,39 @@ async function finansalIslemSil() {
         return;
     }
 
+    // İyimser UI: Öğeyi hemen arayüzden kaldır
     const silinecekElement = document.getElementById(`finans-islem-${id}`);
     if (!silinecekElement) return;
     
+    // Hata durumunda geri ekleyebilmek için bir kopyasını ve yerini sakla
     const parent = silinecekElement.parentNode;
     const nextSibling = silinecekElement.nextSibling;
-    silinecekElement.style.transition = 'opacity 0.4s';
+    const originalHTML = silinecekElement.outerHTML; // Elementin kendisini sakla
+
+    // Animasyonla kaldır
+    silinecekElement.style.transition = 'opacity 0.4s ease, transform 0.4s ease, height 0.4s ease';
     silinecekElement.style.opacity = '0';
-    setTimeout(() => silinecekElement.remove(), 400);
+    silinecekElement.style.transform = 'translateX(-50px)';
+    setTimeout(() => {
+        if (silinecekElement.parentNode) {
+            silinecekElement.parentNode.removeChild(silinecekElement);
+        }
+    }, 400);
 
     try {
         const result = await api.deleteFinansalIslem(id);
         gosterMesaj(result.message, 'success');
+        // Başarılı olursa, sayfalama ve toplam sayıyı güncellemek için listeyi yeniden yükle
+        await finansalIslemleriYukle(1);
     } catch (error) {
         gosterMesaj(error.message || 'Silme işlemi başarısız, işlem geri yüklendi.', 'danger');
-        silinecekElement.style.opacity = '1';
-        if (!silinecekElement.parentNode) {
-            parent.insertBefore(silinecekElement, nextSibling);
-        }
+        // Hata durumunda öğeyi geri ekle
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = originalHTML;
+        const restoredElement = tempDiv.firstChild;
+        restoredElement.style.opacity = '1'; // Stilleri sıfırla
+        restoredElement.style.transform = 'translateX(0)';
+        parent.insertBefore(restoredElement, nextSibling);
     }
 }
 

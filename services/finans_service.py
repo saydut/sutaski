@@ -15,12 +15,12 @@ class FinansService:
         try:
             offset = (sayfa - 1) * limit
             query = g.supabase.table('finansal_islemler').select(
-                '*, tedarikciler(isim)', count='estimated' # count='exact' yerine 'estimated' daha performanslı olabilir
+                '*, tedarikciler(isim)', count='exact'
             ).eq('sirket_id', sirket_id).order('islem_tarihi', desc=True).range(offset, offset + limit - 1)
             response = query.execute()
             return response.data, response.count
         except Exception as e:
-            logger.error(f"Hata (get_paginated_transactions): {e}", exc_info=True)
+            logger.error(f"Finansal işlemler listelenirken hata oluştu: {e}", exc_info=True)
             raise Exception("İşlemler listelenirken bir sunucu hatası oluştu.")
 
     def add_transaction(self, sirket_id: int, kullanici_id: int, data: dict):
@@ -50,7 +50,6 @@ class FinansService:
                 "aciklama": data.get('aciklama') or None,
                 "islem_tarihi": data.get('islem_tarihi') or None
             }
-            # Eğer islem_tarihi None ise Supabase'in varsayılan (now()) değerini kullanmasına izin ver
             if not yeni_islem["islem_tarihi"]:
                 del yeni_islem["islem_tarihi"]
 
@@ -61,7 +60,7 @@ class FinansService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (add_transaction): {e}", exc_info=True)
+            logger.error(f"Finansal işlem eklenirken hata oluştu: {e}", exc_info=True)
             raise Exception("İşlem sırasında bir sunucu hatası oluştu.")
 
     def update_transaction(self, islem_id: int, sirket_id: int, data: dict):
@@ -88,7 +87,7 @@ class FinansService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (update_transaction): {e}", exc_info=True)
+            logger.error(f"Finansal işlem güncellenirken hata oluştu: {e}", exc_info=True)
             raise Exception("Güncelleme sırasında bir sunucu hatası oluştu.")
 
     def delete_transaction(self, islem_id: int, sirket_id: int):
@@ -100,9 +99,7 @@ class FinansService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (delete_transaction): {e}", exc_info=True)
+            logger.error(f"Finansal işlem silinirken hata oluştu: {e}", exc_info=True)
             raise Exception("Silme işlemi sırasında bir hata oluştu.")
 
-
-# Servis'ten bir örnek (instance) oluşturalım.
 finans_service = FinansService()

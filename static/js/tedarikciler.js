@@ -1,6 +1,5 @@
-// static/js/tedarikciler.js (MERKEZİ YÜKLEYİCİYİ KULLANACAK ŞEKİLDE REFAKTÖR EDİLDİ)
+// static/js/tedarikciler.js (İyimser Arayüz ve ID'ler eklendi)
 
-// --- Global Değişkenler ---
 let tedarikciModal, silmeOnayModal;
 let mevcutSayfa = 1;
 const KAYIT_SAYISI = 15;
@@ -9,7 +8,6 @@ let mevcutSiralamaYonu = 'asc';
 let mevcutAramaTerimi = '';
 let mevcutGorunum = 'tablo';
 
-// --- Yardımcı Fonksiyon: Debounce ---
 function debounce(func, delay = 400) {
     let timeout;
     return function(...args) {
@@ -18,7 +16,6 @@ function debounce(func, delay = 400) {
     };
 }
 
-// --- Sayfa Yüklendiğinde Çalışan Ana Fonksiyon ---
 window.onload = async () => {
     tedarikciModal = new bootstrap.Modal(document.getElementById('tedarikciModal'));
     silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
@@ -29,7 +26,7 @@ window.onload = async () => {
     const aramaInput = document.getElementById('arama-input');
     aramaInput.addEventListener('input', debounce((event) => {
         mevcutAramaTerimi = event.target.value;
-        verileriYukle(1); // Arama yapıldığında her zaman ilk sayfadan başla
+        verileriYukle(1);
     }));
 
     document.querySelectorAll('.sortable').forEach(header => {
@@ -42,7 +39,7 @@ window.onload = async () => {
                 mevcutSiralamaYonu = 'asc';
             }
             basliklariGuncelle();
-            verileriYukle(1); // Sıralama değiştiğinde ilk sayfadan başla
+            verileriYukle(1);
         });
     });
 
@@ -50,12 +47,10 @@ window.onload = async () => {
     await verileriYukle();
 };
 
-// --- Ana Veri Yükleme Fonksiyonu (REFAKTÖR EDİLDİ) ---
 async function verileriYukle(sayfa = 1) {
     mevcutSayfa = sayfa;
     const url = `/api/tedarikciler_liste?sayfa=${sayfa}&arama=${mevcutAramaTerimi}&sirala=${mevcutSiralamaSutunu}&yon=${mevcutSiralamaYonu}`;
 
-    // data-loader.js'deki merkezi fonksiyonu çağırıyoruz
     await genelVeriYukleyici({
         apiURL: url,
         veriAnahtari: 'tedarikciler',
@@ -63,23 +58,20 @@ async function verileriYukle(sayfa = 1) {
         kartContainerId: 'tedarikciler-kart-listesi',
         veriYokId: 'veri-yok-mesaji',
         sayfalamaId: 'tedarikci-sayfalama',
-        tabloRenderFn: renderTable,    // Bu sayfaya özel render fonksiyonu
-        kartRenderFn: renderCards,     // Bu sayfaya özel render fonksiyonu
-        yukleFn: verileriYukle,        // Sayfalama için callback
+        tabloRenderFn: renderTable,
+        kartRenderFn: renderCards,
+        yukleFn: verileriYukle,
         sayfa: sayfa,
         kayitSayisi: KAYIT_SAYISI,
         mevcutGorunum: mevcutGorunum
     });
 }
 
-
-// --- Arayüz Çizim Fonksiyonları (YENİ, AYRI FONKSİYONLAR) ---
-
-// Gelen veriyi tablo satırları olarak HTML'e dönüştürür.
+// GÜNCELLEME: Satıra benzersiz ID ekliyoruz.
 function renderTable(container, suppliers) {
     suppliers.forEach(supplier => {
         container.innerHTML += `
-            <tr>
+            <tr id="tedarikci-${supplier.id}">
                 <td><strong>${supplier.isim}</strong></td>
                 <td>${supplier.telefon_no || '-'}</td>
                 <td class="text-end">${parseFloat(supplier.toplam_litre || 0).toFixed(2)} L</td>
@@ -92,11 +84,11 @@ function renderTable(container, suppliers) {
     });
 }
 
-// Gelen veriyi kartlar olarak HTML'e dönüştürür.
+// GÜNCELLEME: Karta benzersiz ID ekliyoruz.
 function renderCards(container, suppliers) {
     suppliers.forEach(supplier => {
         container.innerHTML += `
-            <div class="col-lg-4 col-md-6 col-12">
+            <div class="col-lg-4 col-md-6 col-12" id="tedarikci-${supplier.id}">
                 <div class="supplier-card">
                     <div class="supplier-card-header"><h5>${supplier.isim}</h5></div>
                     <div class="supplier-card-body"><p class="mb-2"><i class="bi bi-telephone-fill me-2"></i>${supplier.telefon_no || 'Belirtilmemiş'}</p></div>
@@ -110,7 +102,6 @@ function renderCards(container, suppliers) {
     });
 }
 
-// Sıralama yapıldıktan sonra tablo başlıklarındaki ok ikonlarını (▲/▼) günceller.
 function basliklariGuncelle() {
     document.querySelectorAll('.sortable').forEach(header => {
         header.classList.remove('asc', 'desc');
@@ -119,8 +110,6 @@ function basliklariGuncelle() {
         }
     });
 }
-
-// --- Veri Manipülasyon Fonksiyonları (DEĞİŞİKLİK YOK) ---
 
 async function tedarikciKaydet() {
     const kaydetButton = document.querySelector('#kaydet-tedarikci-btn');
@@ -140,7 +129,7 @@ async function tedarikciKaydet() {
         const result = id ? await api.updateTedarikci(id, veri) : await api.postTedarikci(veri);
         gosterMesaj(result.message, "success");
         tedarikciModal.hide();
-        await verileriYukle(mevcutSayfa); // İşlem sonrası listeyi yenile
+        await verileriYukle(id ? mevcutSayfa : 1); // Yeni ekleme ise ilk sayfaya git, düzenleme ise mevcut sayfada kal
     } catch (error) {
         gosterMesaj(error.message || "Bir hata oluştu.", "danger");
     } finally {
@@ -149,29 +138,47 @@ async function tedarikciKaydet() {
     }
 }
 
+// GÜNCELLEME: İyimser arayüz mantığı eklendi
 async function tedarikciSil() {
     const id = document.getElementById('silinecek-tedarikci-id').value;
     silmeOnayModal.hide();
 
+    const silinecekElement = document.getElementById(`tedarikci-${id}`);
+    if (!silinecekElement) return;
+
+    const parent = silinecekElement.parentNode;
+    const nextSibling = silinecekElement.nextSibling;
+    const originalHTML = silinecekElement.outerHTML;
+
+    silinecekElement.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+    silinecekElement.style.opacity = '0';
+    silinecekElement.style.transform = 'translateX(-50px)';
+    setTimeout(() => {
+        if(silinecekElement.parentNode) silinecekElement.parentNode.removeChild(silinecekElement)
+    }, 400);
+
     try {
         const result = await api.deleteTedarikci(id);
         gosterMesaj(result.message, 'success');
-        await verileriYukle(1); // Silme sonrası ilk sayfaya dön
+        // Sayfalama durumunu düzeltmek için listeyi baştan yükle
+        await verileriYukle(1);
     } catch (error) {
-        gosterMesaj(error.message || 'Silme işlemi başarısız.', 'danger');
+        gosterMesaj(error.message || 'Silme işlemi başarısız, tedarikçi geri yüklendi.', 'danger');
+        // Hata durumunda öğeyi geri ekle
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = originalHTML;
+        const restoredElement = tempDiv.firstChild;
+        restoredElement.style.opacity = '1';
+        restoredElement.style.transform = 'translateX(0)';
+        parent.insertBefore(restoredElement, nextSibling);
     }
 }
-
-
-// --- Modal ve Arayüz Yardımcı Fonksiyonları (DEĞİŞİKLİK YOK) ---
 
 async function tedarikciDuzenleAc(id, button) {
     button.disabled = true;
     try {
-        const response = await fetch(`/api/tedarikci/${id}`);
-        const supplier = await response.json();
-        if(!response.ok) throw new Error(supplier.error);
-
+        const supplier = await api.request(`/api/tedarikci/${id}`);
+        
         document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
         document.getElementById('edit-tedarikci-id').value = supplier.id;
         document.getElementById('tedarikci-isim-input').value = supplier.isim;

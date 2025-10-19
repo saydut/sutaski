@@ -18,6 +18,10 @@
     <meta name="theme-color" content="#3B82F6"/>
     
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icon.png') }}">
+    <!-- YENİ: iOS için PWA meta etiketleri -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Dijital Mandıra">
     
     <title>{% block title %}Süt Takip Sistemi{% endblock %}</title>
     {% block head_extra %}{% endblock %}
@@ -28,6 +32,16 @@
 >
 
     {% block content %}{% endblock %}
+
+    <!-- YENİ: iOS için Ana Ekrana Ekleme Yönlendirme Balonu -->
+    <div id="ios-install-prompt" class="toast align-items-center text-white bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body">
+                Uygulamayı Ana Ekranınıza eklemek için <i class="bi bi-box-arrow-up"></i> Paylaş butonuna ve ardından "Ana Ekrana Ekle" seçeneğine dokunun.
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
@@ -40,6 +54,8 @@
     <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
     <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
     <script src="{{ url_for('static', filename='js/push-manager.js') }}"></script>
+    <!-- YENİ: iOS Yükleme Yönlendirmesi için script -->
+    <script src="{{ url_for('static', filename='js/ios-install-prompt.js') }}"></script>
 
 <script>
     if ('serviceWorker' in navigator) {
@@ -87,14 +103,6 @@
                                 <li><strong>Stoklarınızı Tanımlayın:</strong> Ardından, "Yem Yönetimi" bölümünden sattığınız yem ürünlerini ve mevcut stok miktarlarını sisteme girin.</li>
                                 <li><strong>Veri Girişine Başlayın:</strong> Artık hazırsınız! Ana panelden günlük süt girdilerinizi ve tedarikçilere yaptığınız yem çıkışlarını kolayca kaydedebilirsiniz.</li>
                             </ol>
-<!--                        <hr class="my-4">
-                            
-                            <h5 class="fw-bold"><i class="bi bi-cloud-slash-fill text-primary me-2"></i>İnternetsiz Çalışma Gücü</h5>
-                            <p>
-                                İnternet bağlantınızın olmadığı anlarda bile veri girişine devam edebilirsiniz. Girdiğiniz tüm veriler güvenli bir şekilde cihazınıza kaydedilir ve internet bağlantısı kurulduğu an otomatik olarak sunucu ile senkronize edilir. Bu sayede işleriniz asla aksamaz.
-                            </p>
-                            <hr class="my-4">
-                        -->
                             <h5 class="fw-bold">Temel Özellikler</h5>
                             <ul>
                                 <li><strong>Kolay Veri Girişi:</strong> Günlük süt girdilerini, yem alımlarını ve finansal işlemleri (ödeme/avans) tek bir yerden hızla takip edin.</li>
@@ -161,3 +169,4 @@
 
 </body>
 </html>
+

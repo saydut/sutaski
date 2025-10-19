@@ -14,6 +14,21 @@ const utils = {
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    },
+
+    /**
+     * YENİ: innerHTML'e eklenecek metinleri güvenli hale getirir.
+     * Bu, XSS saldırılarına karşı bir önlemdir.
+     * @param {string} str - Temizlenecek metin.
+     * @returns {string} - HTML etiketlerinden arındırılmış güvenli metin.
+     */
+    sanitizeHTML(str) {
+        if (str === null || str === undefined) {
+            return '';
+        }
+        const temp = document.createElement('div');
+        temp.textContent = str;
+        return temp.innerHTML;
     }
 };
 
@@ -110,7 +125,6 @@ async function indirVeAc(url, buttonId, messages) {
         const blob = await response.blob();
         const objectUrl = window.URL.createObjectURL(blob);
         
-        // Yeni sekmede aç ve indir
         window.open(objectUrl, '_blank');
         const a = document.createElement('a');
         a.style.display = 'none';
@@ -119,7 +133,6 @@ async function indirVeAc(url, buttonId, messages) {
         document.body.appendChild(a);
         a.click();
         
-        // Temizlik
         a.remove();
         setTimeout(() => window.URL.revokeObjectURL(objectUrl), 100);
         

@@ -1,86 +1,65 @@
+# blueprints/rapor.py
+
 from flask import Blueprint, jsonify, request, session, send_file, current_app, render_template, g
 from decorators import login_required, lisans_kontrolu
 from extensions import turkey_tz
 from utils import parse_supabase_timestamp
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import io
 import csv
 import calendar
 from weasyprint import HTML
-from decimal import Decimal, getcontext, InvalidOperation
-
+from decimal import Decimal, getcontext
+import logging
 
 rapor_bp = Blueprint('rapor', __name__, url_prefix='/api/rapor')
-getcontext().prec = 10 # Decimal hassasiyeti
+logger = logging.getLogger(__name__)
+getcontext().prec = 10 
 
 @rapor_bp.route('/gunluk_ozet')
 @login_required
 def get_gunluk_ozet():
-    """
-    Bu fonksiyon, ana paneldeki özet kartlarını doldurur.
-    Doğrudan ve verimli olan RPC fonksiyonunu çağırır.
-    """
     try:
         sirket_id = session['user']['sirket_id']
         tarih_str = request.args.get('tarih')
-        
         target_date_str = tarih_str if tarih_str else datetime.now(turkey_tz).date().isoformat()
 
-        # Adım 1'de oluşturduğumuz RPC fonksiyonunu çağırıyoruz
         response = g.supabase.rpc('get_daily_summary_rpc', {
             'target_sirket_id': sirket_id,
             'target_date': target_date_str
         }).execute()
         
         summary = response.data[0] if response.data else {'toplam_litre': 0, 'girdi_sayisi': 0}
-        
         return jsonify(summary)
-
     except Exception as e:
-        print(f"!!! GÜNLÜK ÖZET (RPC) KRİTİK HATA: {e}")
+        logger.error(f"Günlük özet (RPC) alınırken hata: {e}", exc_info=True)
         return jsonify({"error": "Özet hesaplanırken sunucuda bir hata oluştu."}), 500
-
-    
     
 @rapor_bp.route('/haftalik_ozet')
 @login_required
 def get_haftalik_ozet():
     try:
         sirket_id = session['user']['sirket_id']
-        
-        # Tek bir RPC çağrısıyla tüm haftalık veriyi hazır olarak alıyoruz
         response = g.supabase.rpc('get_weekly_summary', {'p_sirket_id': sirket_id}).execute()
-        
-        # Gelen veri zaten {'labels': [...], 'data': [...]} formatında olduğu için
-        # direkt olarak istemciye gönderiyoruz.
         return jsonify(response.data)
-
     except Exception as e:
-        print(f"Haftalık özet (RPC) hatası: {e}")
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        logger.error(f"Haftalık özet (RPC) alınırken hata: {e}", exc_info=True)
+        return jsonify({"error": "Haftalık özet alınırken bir sunucu hatası oluştu."}), 500
 
 @rapor_bp.route('/tedarikci_dagilimi')
 @login_required
 def get_tedarikci_dagilimi():
     try:
         sirket_id = session['user']['sirket_id']
-        
-        # 1. Yeni ve güçlü RPC fonksiyonumuzu çağırıyoruz
         response = g.supabase.rpc('get_supplier_distribution', {'p_sirket_id': sirket_id}).execute()
-        
-        # 2. Veritabanından zaten işlenmiş olarak gelen veriyi alıyoruz
         dagilim_verisi = response.data
-        
-        # 3. Veriyi Chart.js'in beklediği formata dönüştürüyoruz
         labels = [item['name'] for item in dagilim_verisi]
         data = [float(item['litre']) for item in dagilim_verisi]
-        
         return jsonify({'labels': labels, 'data': data})
-        
     except Exception as e:
-        print(f"Tedarikçi dağılımı (RPC) hatası: {e}") # Hata takibi için loglama ekledik
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        logger.error(f"Tedarikçi dağılımı (RPC) alınırken hata: {e}", exc_info=True)
+        return jsonify({"error": "Tedarikçi dağılımı alınırken bir sunucu hatası oluştu."}), 500
 
 @rapor_bp.route('/detayli_rapor', methods=['GET'])
 @login_required
@@ -97,9 +76,7 @@ def get_detayli_rapor():
             return jsonify({"error": "Geçersiz tarih aralığı. En fazla 90 günlük rapor alabilirsiniz."}), 400
 
         response = g.supabase.rpc('get_detailed_report_data', {
-            'p_sirket_id': sirket_id,
-            'p_start_date': start_date_str,
-            'p_end_date': end_date_str
+            'p_sirket_id': sirket_id, 'p_start_date': start_date_str, 'p_end_date': end_date_str
         }).execute()
         
         veri = response.data
@@ -107,9 +84,6 @@ def get_detayli_rapor():
              return jsonify({'chartData': {'labels': [], 'data': []}, 'summaryData': {}, 'supplierBreakdown': []})
 
         daily_totals = veri.get('daily_totals', [])
-        supplier_breakdown = veri.get('supplier_breakdown', [])
-        total_entry_count = veri.get('total_entry_count', 0)
-
         turkce_aylar = {"01":"Oca","02":"Şub","03":"Mar","04":"Nis","05":"May","06":"Haz","07":"Tem","08":"Ağu","09":"Eyl","10":"Eki","11":"Kas","12":"Ara"}
         labels = [f"{gun['gun'][8:]} {turkce_aylar.get(gun['gun'][5:7], '')}" for gun in daily_totals]
         data = [float(gun['toplam']) for gun in daily_totals]
@@ -121,26 +95,26 @@ def get_detayli_rapor():
             'totalLitre': float(total_litre), 
             'averageDailyLitre': float(total_litre / day_count if day_count > 0 else 0), 
             'dayCount': day_count, 
-            'entryCount': total_entry_count
+            'entryCount': veri.get('total_entry_count', 0)
         }
         
         return jsonify({
             'chartData': {'labels': labels, 'data': data}, 
             'summaryData': summary, 
-            'supplierBreakdown': supplier_breakdown
+            'supplierBreakdown': veri.get('supplier_breakdown', [])
         })
         
     except Exception as e:
-        import traceback
-        print(f"Detaylı rapor hatası: {e}")
-        traceback.print_exc()
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        logger.error(f"Detaylı rapor alınırken hata: {e}", exc_info=True)
+        return jsonify({"error": "Detaylı rapor oluşturulurken bir sunucu hatası oluştu."}), 500
 
 @rapor_bp.route('/aylik_pdf')
 @login_required
 @lisans_kontrolu
 def aylik_rapor_pdf():
     try:
+        # Bu fonksiyonun içindeki mantık zaten PDF oluşturmaya özel olduğu için
+        # servis katmanına taşımak yerine burada kalabilir. Hata yönetimi iyileştirildi.
         sirket_id = session['user']['sirket_id']
         sirket_adi = session['user'].get('sirket_adi', 'Bilinmeyen Şirket')
         ay = int(request.args.get('ay'))
@@ -178,7 +152,8 @@ def aylik_rapor_pdf():
         filename = f"{yil}_{ay:02d}_{sirket_adi.replace(' ', '_')}_raporu.pdf"
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf', as_attachment=True, download_name=filename)
     except Exception as e:
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        logger.error(f"Aylık PDF raporu oluşturulurken hata: {e}", exc_info=True)
+        return jsonify({"error": "PDF raporu oluşturulurken bir sunucu hatası oluştu."}), 500
 
 @rapor_bp.route('/export_csv')
 @login_required
@@ -205,18 +180,10 @@ def export_csv():
             litre = Decimal(str(row.get('litre','0')))
             fiyat = Decimal(str(row.get('fiyat','0')))
             tutar = litre * fiyat
-            writer.writerow([
-                formatli_tarih, 
-                formatli_saat,
-                tedarikci_adi, 
-                str(litre).replace('.',','), 
-                str(fiyat).replace('.',','),
-                str(tutar).replace('.',','),
-                toplayan_kisi
-            ])
+            writer.writerow([ formatli_tarih, formatli_saat, tedarikci_adi, str(litre).replace('.',','), str(fiyat).replace('.',','), str(tutar).replace('.',','), toplayan_kisi ])
         output.seek(0)
         filename = f"{secilen_tarih_str}_sut_raporu.csv" if secilen_tarih_str else "toplu_sut_raporu.csv"
         return send_file(io.BytesIO(output.getvalue().encode('utf-8-sig')), mimetype='text/csv', as_attachment=True, download_name=filename)
     except Exception as e:
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
-
+        logger.error(f"CSV dışa aktarılırken hata: {e}", exc_info=True)
+        return jsonify({"error": "CSV dosyası oluşturulurken bir sunucu hatası oluştu."}), 500

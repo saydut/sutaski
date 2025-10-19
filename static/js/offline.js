@@ -1,21 +1,35 @@
-// static/js/offline.js (SENKRONİZASYON GÜÇLENDİRİLDİ)
+// static/js/offline.js (ARKA PLAN SENKRONİZASYONU VE ÇATIŞMA ÖNLEME EKLENDİ)
 
 const db = new Dexie('sutaski_offline_db');
 
 // Veritabanı şemasını son versiyona güncelliyoruz.
-db.version(5).stores({
+db.version(6).stores({
     sut_girdileri: '++id, tedarikci_id, litre, fiyat, eklendigi_zaman',
     pending_tedarikciler: '++id, isim, tc_no, telefon_no, adres',
-    pending_finans_islemleri: '++id, islem_tipi, tedarikci_id, tutar, islem_tarihi, aciklama', // -> Finans işlemlerini tutacak yeni tablo
+    pending_finans_islemleri: '++id, islem_tipi, tedarikci_id, tutar, islem_tarihi, aciklama',
+    pending_yem_urunleri: '++id, yem_adi, stok_miktari_kg, birim_fiyat', // YENİ
+    pending_yem_islemleri: '++id, tedarikci_id, yem_urun_id, miktar_kg, aciklama', // YENİ
     tedarikciler: 'id, isim',
     yem_urunleri: 'id, yem_adi, stok_miktari_kg, birim_fiyat',
     pending_deletions: '++id, [kayit_tipi+kayit_id]' // Silme işlemlerinin tekrarını önlemek için bileşik anahtar
-}).upgrade(tx => {
-    console.log("Veritabanı 5. versiyona yükseltildi ve finans tablosu eklendi.");
 });
 
 
-// === ÇEVRİMDIŞI KAYIT FONKSİYONLARI ===
+// === YENİ: Arka Plan Senkronizasyonunu Kaydet ===
+async function registerBackgroundSync() {
+    // Service Worker ve SyncManager desteği varsa arka plan senkronizasyonu için kayıt ol.
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            await registration.sync.register('sync-new-data');
+            console.log('Arka plan senkronizasyonu için kayıt yapıldı.');
+        } catch (error) {
+            console.error('Arka plan senkronizasyonu kaydedilemedi:', error);
+        }
+    }
+}
+
+// === ÇEVRİMDIŞI KAYIT FONKSİYONLARI (GÜNCELLENDİ) ===
 
 async function kaydetCevrimdisi(girdi) {
     try {
@@ -23,6 +37,7 @@ async function kaydetCevrimdisi(girdi) {
         await db.sut_girdileri.add(girdi);
         gosterMesaj('İnternet yok. Girdi yerel olarak kaydedildi.', 'info');
         cevrimiciDurumuGuncelle();
+        registerBackgroundSync(); // Arka plan senkronizasyonunu tetikle
         return true;
     } catch (error) {
         console.error('Çevrimdışı süt girdisi kaydetme hatası:', error);
@@ -36,6 +51,7 @@ async function kaydetTedarikciCevrimdisi(tedarikci) {
         await db.pending_tedarikciler.add(tedarikci);
         gosterMesaj('İnternet yok. Yeni tedarikçi yerel olarak kaydedildi.', 'info');
         cevrimiciDurumuGuncelle();
+        registerBackgroundSync();
         return true;
     } catch (error) {
         console.error('Çevrimdışı tedarikçi kaydetme hatası:', error);
@@ -49,6 +65,7 @@ async function kaydetFinansIslemiCevrimdisi(islem) {
         await db.pending_finans_islemleri.add(islem);
         gosterMesaj('İnternet yok. Finansal işlem yerel olarak kaydedildi.', 'info');
         cevrimiciDurumuGuncelle();
+        registerBackgroundSync();
         return true;
     } catch (error) {
         console.error('Çevrimdışı finans işlemi kaydetme hatası:', error);
@@ -57,133 +74,104 @@ async function kaydetFinansIslemiCevrimdisi(islem) {
     }
 }
 
+async function kaydetYeniYemUrunuCevrimdisi(urun) {
+    try {
+        await db.pending_yem_urunleri.add(urun);
+        gosterMesaj('İnternet yok. Yeni yem ürünü yerel olarak kaydedildi.', 'info');
+        cevrimiciDurumuGuncelle();
+        registerBackgroundSync();
+        return true;
+    } catch (e) {
+        gosterMesaj('Yem ürünü yerel olarak kaydedilemedi.', 'danger');
+        return false;
+    }
+}
+
+async function kaydetYemIslemiCevrimdisi(islem) {
+    try {
+        await db.pending_yem_islemleri.add(islem);
+        gosterMesaj('İnternet yok. Yem çıkışı yerel olarak kaydedildi.', 'info');
+        cevrimiciDurumuGuncelle();
+        registerBackgroundSync();
+        return true;
+    } catch(e) {
+        gosterMesaj('Yem çıkışı yerel olarak kaydedilemedi.', 'danger');
+        return false;
+    }
+}
+
+
 async function kaydetSilmeIslemiCevrimdisi(kayitTipi, kayitId) {
     try {
         const existing = await db.pending_deletions.where({kayit_tipi: kayitTipi, kayit_id: kayitId}).first();
         if (!existing) {
              await db.pending_deletions.add({ kayit_tipi: kayitTipi, kayit_id: kayitId });
              cevrimiciDurumuGuncelle();
+             registerBackgroundSync();
         }
     } catch (error) { console.error('Çevrimdışı silme kaydı hatası:', error); }
 }
 
 // === VERİ GETİRME FONKSİYONLARI ===
-
 async function bekleyenGirdileriGetir() { return await db.sut_girdileri.toArray(); }
 async function bekleyenTedarikcileriGetir() { return await db.pending_tedarikciler.toArray(); }
 async function bekleyenFinansIslemleriniGetir() { return await db.pending_finans_islemleri.toArray(); }
+async function bekleyenYemUrunleriniGetir() { return await db.pending_yem_urunleri.toArray(); }
+async function bekleyenYemIslemleriniGetir() { return await db.pending_yem_islemleri.toArray(); }
 async function bekleyenSilmeleriGetir() { return await db.pending_deletions.toArray(); }
 
 
-// === SENKRONİZASYON (YENİ VE GÜVENİLİR YAPI) ===
-
-/**
- * Bekleyen tüm çevrimdışı işlemleri sunucu ile senkronize etmeye çalışır.
- * Hatalı olanları atlar ve bir sonraki deneme için yerel veritabanında bırakır.
- */
+// === SENKRONİZASYON (REFAKTÖR EDİLDİ) ===
 async function senkronizeEt() {
-    if (!navigator.onLine) return;
-
-    // Temel verileri (tedarikçi, yem listesi vb.) arka planda güncelle
-    Promise.all([ syncTedarikciler(), syncYemUrunleri() ]);
+    if (!navigator.onLine) return 0;
 
     let toplamSenkronizeEdilen = 0;
 
-    // Senkronizasyon işlemlerini yürüten yardımcı fonksiyon
-    const processQueue = async (dbTable, items, apiEndpoint, method = 'POST') => {
+    const processQueue = async (dbTable, items, apiEndpoint) => {
         if (items.length === 0) return 0;
-
         const results = await Promise.allSettled(items.map(item => {
             const { id, ...payload } = item;
-            return fetch(apiEndpoint, {
-                method: method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            }).then(res => {
-                if (!res.ok) return res.json().then(err => { throw new Error(err.error || 'Sunucu hatası') });
-                return id; // Başarılı olursa, silinecek olan yerel ID'yi döndür
-            });
+            return api.request(apiEndpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                .then(() => id);
         }));
-
-        const successfulIds = [];
+        const successfulIds = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+        if (successfulIds.length > 0) await dbTable.bulkDelete(successfulIds);
         results.forEach((result, index) => {
-            if (result.status === 'fulfilled') {
-                successfulIds.push(result.value);
-            } else {
-                console.error(`Senkronizasyon hatası (${dbTable.name}):`, items[index], result.reason.message);
+            if (result.status !== 'fulfilled') {
+                 console.error(`Senkronizasyon hatası (${dbTable.name}):`, items[index], result.reason.message);
             }
         });
-
-        if (successfulIds.length > 0) {
-            await dbTable.bulkDelete(successfulIds);
-        }
         return successfulIds.length;
     };
     
-    // Silme işlemlerini yürüten yardımcı fonksiyon
     const processDeletions = async (items) => {
         if (items.length === 0) return 0;
         const endpointMap = { 'yem_urunu': '/yem/api/urunler/', 'sut_girdisi': '/api/sut_girdisi_sil/' };
-        
         const results = await Promise.allSettled(items.map(item => {
             const endpoint = endpointMap[item.kayit_tipi];
-            if (!endpoint) return Promise.reject(new Error(`Bilinmeyen silme tipi: ${item.kayit_tipi}`));
-            
-            return fetch(endpoint + item.kayit_id, { method: 'DELETE' })
-                .then(res => {
-                    // Eğer kayıt zaten sunucuda yoksa (404), bunu bir başarı olarak kabul et
-                    if (!res.ok && res.status !== 404) return res.json().then(err => { throw new Error(err.error || 'Sunucu hatası') });
-                    return item.id; // Başarılı olursa, silinecek olan yerel ID'yi döndür
-                });
+            if (!endpoint) return Promise.reject(`Bilinmeyen silme tipi: ${item.kayit_tipi}`);
+            return api.request(endpoint + item.kayit_id, { method: 'DELETE' }).then(() => item.id);
         }));
-
-        const successfulIds = [];
-        results.forEach((result, index) => {
-            if (result.status === 'fulfilled') {
-                successfulIds.push(result.value);
-            } else {
+        const successfulIds = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+        if (successfulIds.length > 0) await db.pending_deletions.bulkDelete(successfulIds);
+         results.forEach((result, index) => {
+            if (result.status !== 'fulfilled') {
                 console.error(`Silme senkronizasyon hatası:`, items[index], result.reason.message);
             }
         });
-        
-        if (successfulIds.length > 0) {
-            await db.pending_deletions.bulkDelete(successfulIds);
-        }
         return successfulIds.length;
     };
 
-    // 1. Bekleyen YENİ TEDARİKÇİLERİ gönder
-    const bekleyenTedarikciler = await bekleyenTedarikcileriGetir();
-    toplamSenkronizeEdilen += await processQueue(db.pending_tedarikciler, bekleyenTedarikciler, '/api/tedarikci_ekle');
+    toplamSenkronizeEdilen += await processQueue(db.pending_tedarikciler, await bekleyenTedarikcileriGetir(), '/api/tedarikci_ekle');
+    toplamSenkronizeEdilen += await processQueue(db.pending_finans_islemleri, await bekleyenFinansIslemleriniGetir(), '/finans/api/islemler');
+    toplamSenkronizeEdilen += await processQueue(db.pending_yem_urunleri, await bekleyenYemUrunleriniGetir(), '/yem/api/urunler');
+    toplamSenkronizeEdilen += await processQueue(db.pending_yem_islemleri, await bekleyenYemIslemleriniGetir(), '/yem/api/islemler');
+    toplamSenkronizeEdilen += await processQueue(db.sut_girdileri, await bekleyenGirdileriGetir(), '/api/sut_girdisi_ekle');
+    toplamSenkronizeEdilen += await processDeletions(await bekleyenSilmeleriGetir());
 
-    // 2. Bekleyen FİNANS İŞLEMLERİNİ gönder
-    const bekleyenFinansIslemleri = await bekleyenFinansIslemleriniGetir();
-    toplamSenkronizeEdilen += await processQueue(db.pending_finans_islemleri, bekleyenFinansIslemleri, '/finans/api/islemler');
-
-    // 3. Bekleyen SÜT GİRDİLERİNİ gönder
-    const bekleyenGirdiler = await bekleyenGirdileriGetir();
-    toplamSenkronizeEdilen += await processQueue(db.sut_girdileri, bekleyenGirdiler, '/api/sut_girdisi_ekle');
-
-    // 4. Bekleyen SİLMELERİ gönder
-    const bekleyenSilmeler = await bekleyenSilmeleriGetir();
-    toplamSenkronizeEdilen += await processDeletions(bekleyenSilmeler);
-
-
-    await cevrimiciDurumuGuncelle();
-    
-    // Sayfaları ve menüleri yenile
-    if (toplamSenkronizeEdilen > 0) {
-        gosterMesaj(`${toplamSenkronizeEdilen} bekleyen işlem başarıyla senkronize edildi.`, 'success');
-        
-        // Verilerin yenilenmesi gereken sayfalardaki fonksiyonları kontrol et ve çağır
-        if (typeof girdileriGoster === 'function' && window.location.pathname === '/') { girdileriGoster(1); }
-        if (typeof yemUrunleriniYukle === 'function' && window.location.pathname.includes('/yem/yonetim')) { yemUrunleriniYukle(1); yemIslemleriniYukle(1); }
-        if (typeof verileriYukle === 'function' && window.location.pathname.includes('/tedarikciler')) { verileriYukle(); }
-        if (typeof finansalIslemleriYukle === 'function' && window.location.pathname.includes('/finans')) { finansalIslemleriYukle(1); }
-        if (typeof tedarikcileriDoldur === 'function') { tedarikcileriDoldur(); }
-    }
+    console.log(`${toplamSenkronizeEdilen} işlem senkronize edildi.`);
+    return toplamSenkronizeEdilen;
 }
-
 
 // === ARAYÜZ GÜNCELLEME ===
 async function cevrimiciDurumuGuncelle() {
@@ -196,7 +184,9 @@ async function cevrimiciDurumuGuncelle() {
             db.sut_girdileri.count(),
             db.pending_deletions.count(),
             db.pending_tedarikciler.count(),
-            db.pending_finans_islemleri.count()
+            db.pending_finans_islemleri.count(),
+            db.pending_yem_urunleri.count(),
+            db.pending_yem_islemleri.count()
         ]);
         const toplamBekleyen = sayilar.reduce((a, b) => a + b, 0);
 
@@ -207,7 +197,6 @@ async function cevrimiciDurumuGuncelle() {
         container.classList.toggle('d-none', navigator.onLine && toplamBekleyen === 0);
     } catch (error) {
         console.error("Çevrimdışı durum güncellenirken Dexie hatası:", error);
-        // Veritabanı açılamazsa veya hata verirse, çevrimdışı ikonlarını gizle.
         if(container) container.classList.add('d-none');
     }
 }
@@ -230,7 +219,7 @@ async function syncTedarikciler() {
 
 async function syncYemUrunleri() {
     try {
-        const yemUrunleri = await api.fetchYemUrunleri();
+        const yemUrunleri = await api.fetchYemUrunleriListe(); // Düzeltme: fetchYemUrunleri -> fetchYemUrunleriListe
         await db.transaction('rw', db.yem_urunleri, async () => {
             await db.yem_urunleri.clear();
             await db.yem_urunleri.bulkAdd(yemUrunleri);
@@ -243,28 +232,36 @@ async function syncYemUrunleri() {
 }
 
 async function getOfflineTedarikciler() { 
-    try {
-        return await db.tedarikciler.toArray(); 
-    } catch (e) {
-        return [];
-    }
+    try { return await db.tedarikciler.toArray(); } catch (e) { return []; }
 }
 async function getOfflineYemUrunleri() {
-    try {
-        return await db.yem_urunleri.toArray();
-    } catch (e) {
-        return [];
-    }
+    try { return await db.yem_urunleri.toArray(); } catch (e) { return []; }
 }
 
-// Tarayıcı olaylarını dinleyerek durumu otomatik yönet.
-window.addEventListener('online', senkronizeEt);
+// === OLAY DİNLEYİCİLERİ (GÜNCELLENDİ) ===
+window.addEventListener('online', async () => {
+    console.log('İnternet bağlantısı geri geldi. Senkronizasyon başlatılıyor...');
+    const totalSynced = await senkronizeEt();
+    await cevrimiciDurumuGuncelle();
+    
+    if (totalSynced > 0) {
+        gosterMesaj(`${totalSynced} bekleyen işlem başarıyla senkronize edildi. Sayfa yenileniyor...`, 'success');
+        setTimeout(() => window.location.reload(), 2000);
+    }
+});
+
 window.addEventListener('offline', cevrimiciDurumuGuncelle);
+
 window.addEventListener('load', () => {
     cevrimiciDurumuGuncelle();
     const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/register';
     if (!isAuthPage && navigator.onLine) {
-        // Sayfa yüklendiğinde hemen senkronize etmeye başla
-        senkronizeEt();
+        senkronizeEt().then(totalSynced => {
+            cevrimiciDurumuGuncelle();
+            if (totalSynced > 0) {
+                 gosterMesaj(`${totalSynced} bekleyen işlem senkronize edildi.`, 'info');
+            }
+        });
     }
 });
+

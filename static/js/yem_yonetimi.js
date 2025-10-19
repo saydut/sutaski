@@ -1,4 +1,4 @@
-// static/js/yem_yonetimi.js (MERKEZİ API KULLANAN VE ÇUVAL DESTEĞİ EKLENEN NİHAİ VERSİYON)
+// static/js/yem_yonetimi.js (İyimser Arayüz güncellemesi eklendi)
 
 let yemIslemSilmeOnayModal, yemIslemDuzenleModal;
 let tedarikciSecici, yemUrunSecici;
@@ -8,8 +8,8 @@ let mevcutGorunum = 'tablo';
 let mevcutIslemGorunumu = 'tablo';
 let mevcutYemSayfasi = 1;
 let mevcutIslemSayfasi = 1;
-let seciliYemUrunu = null; // Yem çıkışı için seçilen ürünün bilgilerini tutar
-let isInputUpdating = false; // Miktar alanları arasında sonsuz döngüyü önlemek için
+let seciliYemUrunu = null; 
+let isInputUpdating = false;
 
 const YEMLER_SAYFA_BASI = 10;
 const ISLEMLER_SAYFA_BASI = 5;
@@ -43,6 +43,102 @@ window.onload = function() {
     yemUrunleriniYukle(1);
     yemIslemleriniYukle(1);
 };
+
+// ... (diğer fonksiyonlar aynı kalır) ...
+
+async function yemUrunuSil() {
+    const id = document.getElementById('silinecek-yem-id').value;
+    yemSilmeOnayModal.hide();
+
+    // Çevrimdışı durumu yönet
+    if (!navigator.onLine) {
+        gosterMesaj('İnternet yok. Silme işlemi kaydedildi, bağlantı kurulunca uygulanacak.', 'info');
+        await kaydetSilmeIslemiCevrimdisi('yem_urunu', id);
+        store.removeYemUrun(id);
+        yemUrunleriniYukle(mevcutYemSayfasi);
+        yemSeciciyiDoldur(); // Menüyü de güncelle
+        return;
+    }
+
+    // İyimser UI Mantığı
+    const silinecekElement = document.getElementById(`yem-urun-${id}`);
+    if (!silinecekElement) return;
+
+    const parent = silinecekElement.parentNode;
+    const nextSibling = silinecekElement.nextSibling;
+    const originalHTML = silinecekElement.outerHTML;
+
+    silinecekElement.style.transition = 'opacity 0.4s';
+    silinecekElement.style.opacity = '0';
+    setTimeout(() => {
+        if(silinecekElement.parentNode) silinecekElement.parentNode.removeChild(silinecekElement);
+    }, 400);
+
+    try {
+        const result = await api.deleteYemUrunu(id);
+        gosterMesaj(result.message, 'success');
+        store.removeYemUrun(id); // store'dan da kaldır
+        // Sayfalama için listeyi baştan yükle
+        await Promise.all([yemUrunleriniYukle(1), yemSeciciyiDoldur()]);
+    } catch (error) {
+        gosterMesaj(error.message, 'danger');
+        // Hata durumunda öğeyi geri yükle
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = originalHTML;
+        const restoredElement = tempDiv.firstChild;
+        restoredElement.style.opacity = '1';
+        parent.insertBefore(restoredElement, nextSibling);
+    }
+}
+
+async function yemIslemiSil() {
+    const id = document.getElementById('silinecek-islem-id').value;
+    yemIslemSilmeOnayModal.hide();
+    
+    if (!navigator.onLine) {
+        gosterMesaj("Bu işlemi iptal etmek için internet bağlantısı gereklidir.", "warning");
+        return;
+    }
+
+    // İyimser UI Mantığı
+    const silinecekElement = document.getElementById(`yem-islem-${id}`);
+    if (!silinecekElement) return;
+
+    const parent = silinecekElement.parentNode;
+    const nextSibling = silinecekElement.nextSibling;
+    const originalHTML = silinecekElement.outerHTML;
+
+    silinecekElement.style.transition = 'opacity 0.4s';
+    silinecekElement.style.opacity = '0';
+    setTimeout(() => {
+        if(silinecekElement.parentNode) silinecekElement.parentNode.removeChild(silinecekElement);
+    }, 400);
+
+    try {
+        const result = await api.deleteYemIslemi(id);
+        gosterMesaj(result.message, 'success');
+        // Stoklar ve listeler değiştiği için her şeyi yenile
+        await Promise.all([yemUrunleriniYukle(1), yemSeciciyiDoldur(), yemIslemleriniYukle(1)]);
+    } catch (error) {
+        gosterMesaj(error.message, 'danger');
+        // Hata durumunda öğeyi geri yükle
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = originalHTML;
+        const restoredElement = tempDiv.firstChild;
+        restoredElement.style.opacity = '1';
+        parent.insertBefore(restoredElement, nextSibling);
+    }
+}
+
+// Geri kalan tüm fonksiyonlar (kaydet, düzenle, modal açma vb.) aynı kalır.
+// Aşağıya sadece değişmeyen fonksiyonların bir listesini ekliyorum.
+// ... (fiyatlandirmaAlanlariniYonet, handleYemSecimi, kgGuncelle, cuvalGuncelle, ...)
+// ... (gorunumuDegistir, gorunumuAyarla, gorunumuDegistirIslemler, gorunumuAyarlaIslemler, ...)
+// ... (yemUrunleriniYukle, renderYemUrunuAsTable, renderYemUrunuAsCards, ...)
+// ... (yemIslemleriniYukle, renderYemIslemiAsTable, renderYemIslemiAsCards, ...)
+// ... (tedarikcileriDoldur, yemSeciciyiDoldur, yemCikisiYap, yemUrunuKaydet, ...)
+// ... (yemIslemiGuncelle, yeniYemModaliniAc, yemDuzenleAc, yemSilmeOnayiAc, ...)
+// ... (yemIslemiSilmeOnayiAc, yemIslemiDuzenleAc)
 
 function fiyatlandirmaAlanlariniYonet() {
     const tip = document.getElementById('fiyatlandirma-tipi-sec').value;
@@ -293,12 +389,10 @@ async function yemUrunuKaydet() {
     const kaydetButton = document.querySelector('#yemUrunuModal .btn-primary');
     const originalButtonText = kaydetButton.innerHTML;
     const id = document.getElementById('edit-yem-id').value;
-
     const veri = {
         yem_adi: document.getElementById('yem-adi-input').value.trim(),
         fiyatlandirma_tipi: document.getElementById('fiyatlandirma-tipi-sec').value
     };
-    
     const stokDegeri = document.getElementById('yem-stok-input').value;
     if (veri.fiyatlandirma_tipi === 'cuval') {
         veri.cuval_agirligi_kg = document.getElementById('cuval-agirlik-input').value;
@@ -308,74 +402,24 @@ async function yemUrunuKaydet() {
         veri.birim_fiyat = document.getElementById('yem-fiyat-input').value;
         veri.stok_miktari_kg = stokDegeri;
     }
-
     if (!veri.yem_adi || !stokDegeri) {
         gosterMesaj('Lütfen yem adı ve stok miktarını doldurun.', 'warning'); 
         return;
     }
-    
     kaydetButton.disabled = true;
     kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
     try {
         const result = id ? await api.updateYemUrunu(id, veri) : await api.postYemUrunu(veri);
         gosterMesaj(result.message, 'success');
         yemUrunuModal.hide();
-        
-        if (id) { 
-            store.updateYemUrun(result.urun); 
-        } else { 
-            store.addYemUrun(result.urun); 
-        }
-
+        if (id) { store.updateYemUrun(result.urun); } else { store.addYemUrun(result.urun); }
         yemUrunleriniYukle(mevcutYemSayfasi);
         yemSeciciyiDoldur();
-        
     } catch (error) {
         gosterMesaj(error.message, 'danger');
     } finally {
         kaydetButton.disabled = false;
         kaydetButton.innerHTML = originalButtonText;
-    }
-}
-
-async function yemUrunuSil() {
-    const id = document.getElementById('silinecek-yem-id').value;
-    yemSilmeOnayModal.hide();
-    if (!navigator.onLine) {
-        gosterMesaj('İnternet yok. Silme işlemi kaydedildi, bağlantı kurulunca uygulanacak.', 'info');
-        await kaydetSilmeIslemiCevrimdisi('yem_urunu', id);
-        store.removeYemUrun(id);
-        yemUrunleriniYukle(mevcutYemSayfasi);
-        return;
-    }
-    try {
-        const result = await api.deleteYemUrunu(id);
-        gosterMesaj(result.message, 'success');
-        store.removeYemUrun(id);
-        yemUrunleriniYukle(mevcutYemSayfasi);
-        yemSeciciyiDoldur();
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-        await yemUrunleriniYukle(mevcutYemSayfasi);
-    }
-}
-
-async function yemIslemiSil() {
-    const id = document.getElementById('silinecek-islem-id').value;
-    yemIslemSilmeOnayModal.hide();
-    if (!navigator.onLine) {
-        gosterMesaj("Bu işlemi iptal etmek için internet bağlantısı gereklidir.", "warning");
-        return;
-    }
-    const silinecekElement = document.getElementById(`yem-islem-${id}`);
-    if (silinecekElement) silinecekElement.style.opacity = '0.5';
-    try {
-        const result = await api.deleteYemIslemi(id);
-        gosterMesaj(result.message, 'success');
-        await Promise.all([yemUrunleriniYukle(mevcutYemSayfasi), yemSeciciyiDoldur(), yemIslemleriniYukle(mevcutIslemSayfasi)]);
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-        if (silinecekElement) silinecekElement.style.opacity = '1';
     }
 }
 
@@ -412,11 +456,9 @@ function yemDuzenleAc(urun) {
     document.getElementById('yemUrunuModalLabel').innerText = 'Yem Ürününü Düzenle';
     document.getElementById('edit-yem-id').value = urun.id;
     document.getElementById('yem-adi-input').value = urun.yem_adi;
-
     const stokInput = document.getElementById('yem-stok-input');
     const cuvalFiyati = parseFloat(urun.cuval_fiyati);
     const cuvalAgirligi = parseFloat(urun.cuval_agirligi_kg);
-
     if (cuvalFiyati > 0 && cuvalAgirligi > 0) {
         document.getElementById('fiyatlandirma-tipi-sec').value = 'cuval';
         document.getElementById('cuval-agirlik-input').value = cuvalAgirligi;
@@ -428,7 +470,6 @@ function yemDuzenleAc(urun) {
         document.getElementById('yem-fiyat-input').value = parseFloat(urun.birim_fiyat);
         stokInput.value = parseFloat(urun.stok_miktari_kg);
     }
-
     fiyatlandirmaAlanlariniYonet();
     yemUrunuModal.show();
 }
@@ -450,4 +491,3 @@ function yemIslemiDuzenleAc(id, miktar, aciklama) {
     document.getElementById('edit-aciklama-input').value = aciklama;
     yemIslemDuzenleModal.show();
 }
-

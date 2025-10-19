@@ -10,9 +10,7 @@ logger = logging.getLogger(__name__)
 
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY")
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY")
-VAPID_CLAIMS = {
-    "sub": "mailto:destek@sutaski.com" # Buraya kendi iletişim e-postanı yazabilirsin
-}
+VAPID_CLAIMS = { "sub": "mailto:destek@sutaski.com" }
 
 class PushService:
     def save_subscription(self, user_id, subscription_data):
@@ -27,7 +25,6 @@ class PushService:
             }).execute()
             return {"message": "Bildirim aboneliği başarıyla kaydedildi."}
         except Exception as e:
-            # unique constraint hatası gelirse, zaten kayıtlı demektir.
             if 'unique constraint' in str(e).lower():
                 return {"message": "Bu cihaz zaten bildirimler için kayıtlı."}
             logger.error(f"Abonelik kaydı hatası: {e}", exc_info=True)
@@ -39,17 +36,12 @@ class PushService:
             subscriptions_res = g.supabase.table('push_subscriptions').select('subscription_data').eq('user_id', user_id).execute()
             if not subscriptions_res.data:
                 logger.warning(f"{user_id} ID'li kullanıcının aboneliği bulunamadı.")
-                return 0 # Bildirim gönderilecek kimse yok
+                return 0
 
             sent_count = 0
             for sub in subscriptions_res.data:
                 try:
-                    payload = {
-                        "title": title,
-                        "body": body,
-                        "icon": "/static/images/icon.png",
-                        "data": {"url": url}
-                    }
+                    payload = { "title": title, "body": body, "icon": "/static/images/icon.png", "data": {"url": url} }
                     webpush(
                         subscription_info=sub['subscription_data'],
                         data=json.dumps(payload),
@@ -59,7 +51,6 @@ class PushService:
                     sent_count += 1
                 except WebPushException as ex:
                     logger.error(f"Bildirim gönderim hatası: {ex}")
-                    # Eğer abonelik geçersiz ise (örn: kullanıcı izni iptal etti), veritabanından silebilirsin.
                     if ex.response and ex.response.status_code in [404, 410]:
                         self._delete_subscription(sub['subscription_data'])
 
@@ -74,6 +65,6 @@ class PushService:
             g.supabase.table('push_subscriptions').delete().eq('subscription_data', subscription_data).execute()
             logger.info("Geçersiz abonelik silindi.")
         except Exception as e:
-            logger.error(f"Geçersiz abonelik silinirken hata: {e}")
+            logger.error(f"Geçersiz abonelik silinirken hata: {e}", exc_info=True)
 
 push_service = PushService()

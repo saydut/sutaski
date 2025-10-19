@@ -1,12 +1,14 @@
-# blueprints/auth.py (SERVİS KATMANINI KULLANACAK ŞEKİLDE GÜNCELLENDİ)
+# blueprints/auth.py
 
 from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session, flash, g
 from decorators import login_required
-from services.auth_service import auth_service # <-- YENİ: Servisi import et
+from services.auth_service import auth_service
+from extensions import bcrypt
+import logging
+
+logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
-
-# --- ARAYÜZ SAYFALARI ---
 
 @auth_bp.route('/register')
 def register_page():
@@ -23,8 +25,6 @@ def logout():
     flash("Başarıyla çıkış yaptınız.", "success")
     return redirect(url_for('auth.login_page'))
 
-# --- API ADRESLERİ ---
-
 @auth_bp.route('/api/register', methods=['POST'])
 def register_user_api():
     try:
@@ -36,11 +36,9 @@ def register_user_api():
         )
         return jsonify(result), 201
     except ValueError as ve:
-        # Servisten gelen beklenen hatalar (örn: kullanıcı adı mevcut)
         return jsonify({"error": str(ve)}), 400
-    except Exception as e:
-        # Servisten gelen beklenmedik hatalar
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        return jsonify({"error": "Kayıt sırasında beklenmedik bir sunucu hatası oluştu."}), 500
 
 @auth_bp.route('/api/login', methods=['POST'])
 def login_api():
@@ -52,24 +50,15 @@ def login_api():
         )
         session['user'] = session_data
         
-        return jsonify({
-            "message": "Giriş başarılı!",
-            "user": session_data 
-        }), 200
+        return jsonify({ "message": "Giriş başarılı!", "user": session_data }), 200
     except ValueError as ve:
-        # Servisten gelen beklenen hatalar (örn: yanlış şifre, lisans sorunu)
-        return jsonify({"error": str(ve)}), 401 # 401 Unauthorized daha uygun
-    except Exception as e:
-        # Servisten gelen beklenmedik hatalar
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(ve)}), 401
+    except Exception:
+        return jsonify({"error": "Giriş yapılırken bir sunucu hatası oluştu."}), 500
 
-# Şifre değiştirme fonksiyonu zaten kullanıcıya özel olduğu için
-# bunu bir servis katmanına taşımak çok büyük bir avantaj sağlamaz.
-# Şimdilik burada kalabilir. İleride gerekirse "user_service" gibi bir yapıya taşınabilir.
 @auth_bp.route('/api/user/change_password', methods=['POST'])
 @login_required
 def change_password():
-    from extensions import bcrypt
     try:
         data = request.get_json()
         mevcut_sifre = data.get('mevcut_sifre')
@@ -95,6 +84,5 @@ def change_password():
         return jsonify({"message": "Şifreniz başarıyla güncellendi."})
 
     except Exception as e:
-        print(f"Kullanıcı şifre değiştirme hatası: {e}")
+        logger.error(f"Kullanıcı şifre değiştirme hatası: {e}", exc_info=True)
         return jsonify({"error": "Şifre değiştirilirken bir hata oluştu."}), 500
-

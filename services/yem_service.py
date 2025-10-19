@@ -9,48 +9,35 @@ logger = logging.getLogger(__name__)
 class YemService:
     """Yem ürünleri ve işlemleri için servis katmanı."""
 
-    # --- YEM ÜRÜNLERİ CRUD İŞLEMLERİ ---
-
     def get_paginated_products(self, sirket_id: int, sayfa: int, limit: int = 10):
         """Yem ürünlerini sayfalayarak listeler."""
         try:
             offset = (sayfa - 1) * limit
-            # GÜNCELLEME: Yeni eklenen cuval alanlarını da seçiyoruz.
-            query = g.supabase.table('yem_urunleri').select(
-                '*, cuval_agirligi_kg, cuval_fiyati', count='exact'
-            ).eq('sirket_id', sirket_id).order('yem_adi').range(offset, offset + limit - 1)
+            query = g.supabase.table('yem_urunleri').select('*, cuval_agirligi_kg, cuval_fiyati', count='exact').eq('sirket_id', sirket_id).order('yem_adi').range(offset, offset + limit - 1)
             response = query.execute()
             return response.data, response.count
         except Exception as e:
-            logger.error(f"Hata (get_paginated_products): {e}", exc_info=True)
+            logger.error(f"Yem ürünleri listelenirken hata oluştu: {e}", exc_info=True)
             raise Exception("Ürünler listelenirken bir hata oluştu.")
 
     def get_all_products_for_dropdown(self, sirket_id: int):
         """Dropdown menüler için tüm yem ürünlerini listeler."""
         try:
-            # GÜNCELLEME: Yeni eklenen cuval alanlarını da seçiyoruz.
-            response = g.supabase.table('yem_urunleri').select(
-                'id, yem_adi, stok_miktari_kg, birim_fiyat, cuval_agirligi_kg, cuval_fiyati'
-            ).eq('sirket_id', sirket_id).order('yem_adi').execute()
+            response = g.supabase.table('yem_urunleri').select('id, yem_adi, stok_miktari_kg, birim_fiyat, cuval_agirligi_kg, cuval_fiyati').eq('sirket_id', sirket_id).order('yem_adi').execute()
             return response.data
         except Exception as e:
-            logger.error(f"Hata (get_all_products_for_dropdown): {e}", exc_info=True)
+            logger.error(f"Dropdown için yem ürünleri listesi alınırken hata: {e}", exc_info=True)
             raise Exception("Ürün listesi alınamadı.")
 
     def _prepare_product_data(self, sirket_id: int, data: dict):
-        """Gelen veriye göre yem ürünü verisini hazırlar ve KG fiyatını/stoğunu hesaplar."""
+        """Gelen veriye göre yem ürünü verisini hazırlar."""
         fiyatlandirma_tipi = data.get('fiyatlandirma_tipi')
         yem_adi = data.get('yem_adi')
         
         if not yem_adi:
             raise ValueError("Yem adı zorunludur.")
 
-        urun_verisi = {
-            "sirket_id": sirket_id,
-            "yem_adi": yem_adi,
-            "cuval_agirligi_kg": None,
-            "cuval_fiyati": None
-        }
+        urun_verisi = { "sirket_id": sirket_id, "yem_adi": yem_adi, "cuval_agirligi_kg": None, "cuval_fiyati": None }
 
         if fiyatlandirma_tipi == 'cuval':
             cuval_fiyati = Decimal(data.get('cuval_fiyati', '0'))
@@ -60,12 +47,11 @@ class YemService:
             if cuval_fiyati <= 0 or cuval_agirligi_kg <= 0 or stok_adedi < 0:
                 raise ValueError("Çuval fiyatı, ağırlığı ve stok adedi pozitif değerler olmalıdır.")
             
-            # Arka planda KG birim fiyatını ve toplam KG stoğunu hesapla
             urun_verisi["birim_fiyat"] = str(cuval_fiyati / cuval_agirligi_kg)
             urun_verisi["stok_miktari_kg"] = str(stok_adedi * cuval_agirligi_kg)
             urun_verisi["cuval_fiyati"] = str(cuval_fiyati)
             urun_verisi["cuval_agirligi_kg"] = str(cuval_agirligi_kg)
-        else: # Varsayılan KG
+        else:
             birim_fiyat = Decimal(data.get('birim_fiyat', '0'))
             stok_miktari_kg = Decimal(data.get('stok_miktari_kg', '0'))
 
@@ -87,14 +73,13 @@ class YemService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (add_product): {e}", exc_info=True)
+            logger.error(f"Yem ürünü eklenirken hata: {e}", exc_info=True)
             raise Exception("Ürün eklenirken bir sunucu hatası oluştu.")
 
     def update_product(self, id: int, sirket_id: int, data: dict):
         """Bir yem ürününü günceller."""
         try:
             guncel_veri = self._prepare_product_data(sirket_id, data)
-            # sirket_id'yi güncelleme verisinden çıkaralım, çünkü bu anahtar değiştirilemez.
             del guncel_veri['sirket_id']
             
             response = g.supabase.table('yem_urunleri').update(guncel_veri).eq('id', id).eq('sirket_id', sirket_id).select().execute()
@@ -106,9 +91,8 @@ class YemService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (update_product): {e}", exc_info=True)
+            logger.error(f"Yem ürünü güncellenirken hata: {e}", exc_info=True)
             raise Exception("Güncelleme sırasında bir sunucu hatası oluştu.")
-
 
     def delete_product(self, id: int, sirket_id: int):
         """Bir yem ürününü siler."""
@@ -119,22 +103,18 @@ class YemService:
         except Exception as e:
             if 'violates foreign key constraint' in str(e).lower():
                 raise ValueError("Bu yeme ait çıkış işlemleri olduğu için silinemiyor.")
-            logger.error(f"Hata (delete_product): {e}", exc_info=True)
+            logger.error(f"Yem ürünü silinirken hata: {e}", exc_info=True)
             raise Exception("Silme işlemi sırasında bir hata oluştu.")
-
-    # --- YEM ÇIKIŞ İŞLEMLERİ ---
 
     def get_paginated_transactions(self, sirket_id: int, sayfa: int, limit: int = 5):
         """Yem çıkış işlemlerini sayfalayarak listeler."""
         try:
             offset = (sayfa - 1) * limit
-            query = g.supabase.table('yem_islemleri').select(
-                '*, tedarikciler(isim), yem_urunleri(yem_adi)', count='exact'
-            ).eq('sirket_id', sirket_id).order('islem_tarihi', desc=True).range(offset, offset + limit - 1)
+            query = g.supabase.table('yem_islemleri').select('*, tedarikciler(isim), yem_urunleri(yem_adi)', count='exact').eq('sirket_id', sirket_id).order('islem_tarihi', desc=True).range(offset, offset + limit - 1)
             response = query.execute()
             return response.data, response.count
         except Exception as e:
-            logger.error(f"Hata (get_paginated_transactions): {e}", exc_info=True)
+            logger.error(f"Yem işlemleri listelenirken hata: {e}", exc_info=True)
             raise Exception("Yem işlemleri listelenemedi.")
 
     def add_transaction(self, sirket_id: int, kullanici_id: int, data: dict):
@@ -155,14 +135,7 @@ class YemService:
             birim_fiyat = Decimal(urun_res.data['birim_fiyat'])
             toplam_tutar = miktar_kg * birim_fiyat
 
-            yeni_islem = {
-                "sirket_id": sirket_id, "tedarikci_id": data.get('tedarikci_id'),
-                "yem_urun_id": data.get('yem_urun_id'), "kullanici_id": kullanici_id,
-                "miktar_kg": str(miktar_kg),
-                "islem_anindaki_birim_fiyat": str(birim_fiyat),
-                "toplam_tutar": str(toplam_tutar),
-                "aciklama": data.get('aciklama')
-            }
+            yeni_islem = { "sirket_id": sirket_id, "tedarikci_id": data.get('tedarikci_id'), "yem_urun_id": data.get('yem_urun_id'), "kullanici_id": kullanici_id, "miktar_kg": str(miktar_kg), "islem_anindaki_birim_fiyat": str(birim_fiyat), "toplam_tutar": str(toplam_tutar), "aciklama": data.get('aciklama') }
             g.supabase.table('yem_islemleri').insert(yeni_islem).execute()
 
             yeni_stok = mevcut_stok - miktar_kg
@@ -172,7 +145,7 @@ class YemService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (add_transaction): {e}", exc_info=True)
+            logger.error(f"Yem işlemi eklenirken hata: {e}", exc_info=True)
             raise Exception("İşlem sırasında bir hata oluştu.")
             
     def delete_transaction(self, id: int, sirket_id: int):
@@ -197,7 +170,7 @@ class YemService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (delete_transaction): {e}", exc_info=True)
+            logger.error(f"Yem işlemi silinirken hata: {e}", exc_info=True)
             raise Exception("İşlem iptal edilirken bir sunucu hatası oluştu.")
             
     def update_transaction(self, id: int, sirket_id: int, data: dict):
@@ -214,7 +187,6 @@ class YemService:
             eski_miktar = Decimal(mevcut_islem_res.data['miktar_kg'])
             urun_id = mevcut_islem_res.data['yem_urun_id']
             birim_fiyat = Decimal(mevcut_islem_res.data['islem_anindaki_birim_fiyat'])
-            
             fark = yeni_miktar - eski_miktar
 
             urun_res = g.supabase.table('yem_urunleri').select('stok_miktari_kg').eq('id', urun_id).single().execute()
@@ -239,10 +211,7 @@ class YemService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (update_transaction): {e}", exc_info=True)
+            logger.error(f"Yem işlemi güncellenirken hata: {e}", exc_info=True)
             raise Exception("Güncelleme sırasında bir sunucu hatası oluştu.")
 
-
-# Servis'ten bir örnek (instance) oluşturalım.
 yem_service = YemService()
-

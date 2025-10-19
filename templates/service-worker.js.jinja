@@ -1,222 +1,122 @@
-// templates/service-worker.js.jinja (EN SAĞLAM VE NİHAİ SÜRÜM - CDN Düzeltmesi)
+// templates/service-worker.js.jinja (ARKA PLAN SENKRONİZASYONU EKLENDİ)
 
 const CACHE_NAME = 'sut-takip-cache-v{{ cache_version }}';
 
-// Önbelleğe alınacak ana uygulama sayfaları ve temel varlıklar
 const CORE_ASSETS = [
-    '/',
-    '/login',
-    '/offline',
-    '/tedarikciler',
-    '/raporlar',
-    '/yem/yonetim',
-    '/finans/',
-    '/profil',
-    '/static/style.css',
-    '/static/theme.js',
-    '/static/js/utils.js',
-    '/static/js/api.js',
-    '/static/js/store.js',
-    '/static/js/ui.js',
-    '/static/js/main.js',
-    '/static/js/login.js',
-    '/static/js/offline.js',
-    '/static/js/tedarikciler.js',
-    '/static/js/tedarikci_detay.js',
-    '/static/js/yem_yonetimi.js',
-    '/static/js/finans_yonetimi.js',
-    '/static/js/reports.js',
-    '/static/js/charts.js',
-    '/static/js/chart-manager.js',
-    '/static/js/data-loader.js',
-    '/static/js/profil.js',
-    '/static/images/icon.png',
-    '/static/images/favicon.ico'
+    '/', '/login', '/offline', '/tedarikciler', '/raporlar', '/yem/yonetim',
+    '/finans/', '/profil', '/static/style.css', '/static/theme.js',
+    '/static/js/utils.js', '/static/js/api.js', '/static/js/store.js',
+    '/static/js/ui.js', '/static/js/main.js', '/static/js/login.js',
+    '/static/js/offline.js', '/static/js/tedarikciler.js', '/static/js/tedarikci_detay.js',
+    '/static/js/yem_yonetimi.js', '/static/js/finans_yonetimi.js',
+    '/static/js/reports.js', '/static/js/charts.js', '/static/js/chart-manager.js',
+    '/static/js/data-loader.js', '/static/js/profil.js', '/static/js/push-manager.js',
+    '/static/images/icon.png', '/static/images/favicon.ico'
 ];
-
-// Uygulama çalışırken dinamik olarak önbelleğe alınacak dış kaynaklar
 const CDN_ASSETS = [
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
     'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css',
     'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js',
     'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
-    'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js',
-    'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/tr.js', // <-- DEĞİŞİKLİK BURADA: npmcdn.com yerine cdn.jsdelivr.net kullanıyoruz.
+    'https://cdn.jsdelivr.net/npm/flatpickr',
+    'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/tr.js',
     'https://unpkg.com/dexie@3/dist/dexie.js',
     'https://cdn.jsdelivr.net/npm/chart.js',
     'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
-    'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?v=1.11.3',
-    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
-    'https://fonts.gstatic.com/s/inter/v13/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2'
+    'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?v=1.11.3'
 ];
 
-
-// Bir kaynağı güvenli bir şekilde önbelleğe alan yardımcı fonksiyon
 const cacheAsset = async (cache, assetUrl) => {
     try {
-        // YENİ DÜZENLEME: İstek yaparken tarayıcının kendi önbelleğini kullanmasını engelliyoruz.
-        // Bu, "Partial response" hatasını çözmeye yardımcı olur.
         const request = new Request(assetUrl, { cache: 'no-store' });
         const response = await fetch(request);
-        if (!response.ok) {
-            // Eğer yanıt başarısızsa, bir hata fırlat ki yakalanabilsin.
-            throw new Error(`Ağ yanıtı başarısız: ${response.status} - ${assetUrl}`);
-        }
+        if (!response.ok) throw new Error(`Ağ yanıtı başarısız: ${response.status} - ${assetUrl}`);
         await cache.put(assetUrl, response);
     } catch (error) {
         console.warn(`'${assetUrl}' önbelleğe alınamadı:`, error);
     }
 };
 
-
 self.addEventListener('install', event => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
-      console.log('Cache açıldı ve temel varlıklar önbelleğe alınıyor.');
-      
-      // Önce uygulamanın çekirdek dosyalarını önbelleğe al
-      const corePromises = CORE_ASSETS.map(asset => cacheAsset(cache, asset));
-      await Promise.all(corePromises);
-
-      console.log('Çekirdek varlıklar tamamlandı. CDN varlıkları alınıyor.');
-
-      // Sonra dış kaynakları (CDN) önbelleğe al
-      const cdnPromises = CDN_ASSETS.map(asset => cacheAsset(cache, asset));
-      await Promise.all(cdnPromises);
-
-      console.log('Tüm varlıkların önbelleğe alma işlemi tamamlandı.');
+      const allAssets = [...CORE_ASSETS, ...CDN_ASSETS];
+      await Promise.all(allAssets.map(asset => cacheAsset(cache, asset)));
     })()
   );
   self.skipWaiting();
 });
 
-
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Eski cache siliniyor:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.keys().then(cacheNames => Promise.all(
+        cacheNames.filter(name => name !== CACHE_NAME).map(name => caches.delete(name))
+    ))
   );
   self.clients.claim();
 });
-
 
 self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // API istekleri için her zaman internete git (Network Only)
-    if (url.pathname.startsWith('/api/')) {
+    if (url.pathname.startsWith('/api/') || url.pathname === '/') {
         event.respondWith(
             fetch(request).catch(() => {
-                return new Response(JSON.stringify({ error: 'İnternet bağlantısı yok veya sunucuya ulaşılamıyor.' }), {
-                    status: 503,
-                    headers: { 'Content-Type': 'application/json' }
-                });
+                if (url.pathname.startsWith('/api/')) {
+                    return new Response(JSON.stringify({ error: 'İnternet bağlantısı yok.' }), {
+                        status: 503, headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+                return caches.match('/offline');
             })
         );
         return;
     }
 
-    // Diğer tüm istekler için (sayfalar, css, js) - Önce Ağ, sonra Önbellek (Network First)
     event.respondWith(
-        (async () => {
+        fetch(request).catch(async () => {
             const cache = await caches.open(CACHE_NAME);
-
-            try {
-                // 1. Önce internetten en güncel halini çekmeyi dene
-                const networkResponse = await fetch(request);
-                
-                // Başarılı olursa, gelecekte kullanmak üzere önbelleği güncelle
-                if (request.method === 'GET') {
-                    cache.put(request, networkResponse.clone());
-                }
-                
-                return networkResponse;
-
-            } catch (error) {
-                // 2. İnternetten çekemezsen (çevrimdışıysan), önbelleğe bak
-                console.log(`Ağ hatası, '${request.url}' için önbellekten sunuluyor.`);
-                const cachedResponse = await cache.match(request);
-                
-                if (cachedResponse) {
-                    return cachedResponse;
-                }
-
-                // 3. Önbellekte de yoksa, navigasyon istekleri için genel offline sayfasını göster
-                if (request.mode === 'navigate') {
-                    return await cache.match('/offline');
-                }
-                
-                // Diğer varlıklar için (js, css) hata döndür
-                return new Response("Kaynak çevrimdışı ve önbellekte bulunamadı.", {
-                    status: 404,
-                    statusText: "Not Found"
-                });
-            }
-        })()
+            const cachedResponse = await cache.match(request);
+            if (cachedResponse) return cachedResponse;
+            if (request.mode === 'navigate') return await cache.match('/offline');
+            return new Response("Kaynak çevrimdışı ve önbellekte bulunamadı.", { status: 404 });
+        })
     );
 });
 
- // YENİ: Push bildirimlerini dinleyen olay
  self.addEventListener('push', event => {
-   console.log('[Service Worker] Push Alındı.');
-   
-   let payload = {};
-   try {
-       payload = event.data.json();
-   } catch (e) {
-       payload = {
-           title: 'Süt Takip Sistemi',
-           body: event.data.text()
-       };
-   }
-
-   const title = payload.title || 'Yeni Bildirim';
-   const options = {
-       body: payload.body || 'Yeni bir bildiriminiz var.',
-       icon: payload.icon || '/static/images/icon.png',       
-       badge: '/static/images/favicon.ico', // Android'de bildirim çubuğunda görünen küçük ikon
-       data: {
-           url: payload.data ? payload.data.url : '/' // Bildirime tıklanınca açılacak sayfa
-       }
-   };
-
-   event.waitUntil(self.registration.showNotification(title, options));
+   let payload = { title: 'Süt Takip Sistemi', body: 'Yeni bir bildiriminiz var.' };
+   try { payload = event.data.json(); } catch (e) { payload.body = event.data.text(); }
+   event.waitUntil(self.registration.showNotification(payload.title, {
+       body: payload.body, icon: payload.icon || '/static/images/icon.png',
+       badge: '/static/images/favicon.ico', data: { url: payload.data ? payload.data.url : '/' }
+   }));
  });
 
- // YENİ: Bildirime tıklanma olayını yönet
  self.addEventListener('notificationclick', event => {
-    event.notification.close(); // Bildirimi kapat
-
-    const urlToOpen = event.notification.data.url || '/';
-
-    event.waitUntil(
-        clients.matchAll({
-            type: 'window',
-            includeUncontrolled: true
-        }).then(clientList => {
-            // Eğer uygulama zaten bir sekmede açıksa, o sekmeye odaklan
-            for (let i = 0; i < clientList.length; i++) {
-                let client = clientList[i];
-                if (client.url === urlToOpen && 'focus' in client) {
-                    return client.focus();
-                }
-            }
-            // Eğer açık değilse, yeni bir sekmede aç
-            if (clients.openWindow) {
-                return clients.openWindow(urlToOpen);
-            }
-        })
-    );
+    event.notification.close();
+    event.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+        const urlToOpen = event.notification.data.url || '/';
+        const client = clientList.find(c => new URL(c.url).pathname === urlToOpen);
+        if (client) return client.focus();
+        if (clients.openWindow) return clients.openWindow(urlToOpen);
+    }));
  });
+
+self.addEventListener('sync', event => {
+  if (event.tag === 'sync-new-data') {
+    event.waitUntil(
+      importScripts(
+          '/static/js/api.js',
+          'https://unpkg.com/dexie@3/dist/dexie.js',
+          '/static/js/offline.js'
+      ).then(() => {
+          return senkronizeEt();
+      }).catch(err => console.error("Senkronizasyon için script yüklenemedi:", err))
+    );
+  }
+});
 

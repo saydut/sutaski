@@ -5,6 +5,7 @@ from flask import Flask, render_template, request, session, g, jsonify
 from dotenv import load_dotenv
 from datetime import datetime
 from functools import lru_cache
+import logging # <-- YENİ: Loglama kütüphanesini içe aktarıyoruz
 
 # Eklentileri ve ana Blueprint'leri içe aktar
 from extensions import bcrypt
@@ -20,6 +21,10 @@ from blueprints.push import push_bp
 from blueprints.tedarikci import tedarikci_bp
 from blueprints.sut import sut_bp
 from blueprints.rapor import rapor_bp
+
+# YENİ: Proje genelinde kullanılacak temel loglama yapılandırması.
+# Hatalar artık terminalde/log dosyasında daha düzenli görünecek.
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
 def create_app():
     """Flask uygulama fabrikası."""
@@ -67,13 +72,9 @@ def create_app():
                     return jsonify({"error": "Uygulama şu anda bakımda. Lütfen daha sonra tekrar deneyin."}), 503
                 return render_template('maintenance.html'), 503
         except Exception as e:
-            print(f"BAKIM MODU KONTROL HATASI: {e}")
+            # DÜZENLEME: print() yerine logging kullanarak hatayı daha standart bir şekilde kaydediyoruz.
+            logging.warning(f"Bakım modu kontrolü sırasında bir hata oluştu: {e}")
             pass
-
-    # ESKİ FİLTRE FONKSİYONU BURADAN SİLİNDİ
-    # @app.template_filter('format_tarih_str')
-    # def format_tarih_filter(value):
-    #     ...
 
     @lru_cache(maxsize=None)
     def get_version_info():
@@ -88,7 +89,8 @@ def create_app():
             app_version = surum_notlari[0]['surum_no']
             return app_version, surum_notlari
         except Exception as e:
-            print(f"Sürüm bilgileri çekilirken hata oluştu: {e}")
+            # DÜZENLEME: print() yerine logging kullanarak hatayı kaydediyoruz.
+            logging.error(f"Sürüm bilgileri çekilirken hata oluştu: {e}")
             return "N/A", []
 
     @app.context_processor
@@ -116,6 +118,7 @@ def create_app():
 if __name__ == '__main__':
     app = create_app()
     app.run(debug=True)
+
 ####3###
 #
 ## Bu dosya PythonAnywhere'in web sunucusu tarafından kullanılır.

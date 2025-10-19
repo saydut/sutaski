@@ -1,5 +1,4 @@
 # services/sut_service.py
-# YENİ FONKSİYON EKLENDİ: Bu dosya, süt girdileriyle ilgili tüm veritabanı işlemlerini merkezileştirir.
 
 import logging
 from flask import g
@@ -23,7 +22,7 @@ class SutService:
             }).execute()
             return response.data[0] if response.data else {'toplam_litre': 0, 'girdi_sayisi': 0}
         except Exception as e:
-            logger.error(f"Hata (get_daily_summary): {e}", exc_info=True)
+            logger.error(f"Günlük özet alınırken hata: {e}", exc_info=True)
             raise
 
     def get_paginated_list(self, sirket_id: int, tarih_str: str, sayfa: int, limit: int = 6):
@@ -44,7 +43,7 @@ class SutService:
             response = query.order('id', desc=True).range(offset, offset + limit - 1).execute()
             return response.data, response.count
         except Exception as e:
-            logger.error(f"Hata (get_paginated_list): {e}", exc_info=True)
+            logger.error(f"Süt girdileri listelenirken hata: {e}", exc_info=True)
             raise
 
     def add_entry(self, sirket_id: int, kullanici_id: int, yeni_girdi: dict):
@@ -64,10 +63,9 @@ class SutService:
             }).execute()
             return response.data
         except (InvalidOperation, TypeError, ValueError) as e:
-            logger.warning(f"Geçersiz girdi verisi: {e}")
-            raise ValueError("Lütfen geçerli bir litre ve fiyat değeri girin.")
+            raise ValueError(f"Geçersiz girdi verisi: {e}")
         except Exception as e:
-            logger.error(f"Hata (add_entry): {e}", exc_info=True)
+            logger.error(f"Süt girdisi eklenirken hata: {e}", exc_info=True)
             raise
 
     def update_entry(self, girdi_id: int, sirket_id: int, duzenleyen_kullanici_id: int, data: dict):
@@ -80,23 +78,16 @@ class SutService:
             if not yeni_litre or not yeni_fiyat:
                 raise ValueError("Yeni litre ve fiyat değerleri zorunludur.")
             
-            guncellenecek_veri = {
-                'duzenlendi_mi': True,
-                'litre': str(Decimal(yeni_litre)),
-                'fiyat': str(Decimal(yeni_fiyat))
-            }
+            guncellenecek_veri = { 'duzenlendi_mi': True, 'litre': str(Decimal(yeni_litre)), 'fiyat': str(Decimal(yeni_fiyat)) }
 
             mevcut_girdi_res = g.supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
             if not mevcut_girdi_res.data:
                 raise ValueError("Girdi bulunamadı veya bu işlem için yetkiniz yok.")
             
             g.supabase.table('girdi_gecmisi').insert({
-                'orijinal_girdi_id': girdi_id,
-                'duzenleyen_kullanici_id': duzenleyen_kullanici_id,
-                'duzenleme_sebebi': duzenleme_sebebi,
-                'eski_litre_degeri': mevcut_girdi_res.data['litre'],
-                'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'),
-                'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']
+                'orijinal_girdi_id': girdi_id, 'duzenleyen_kullanici_id': duzenleyen_kullanici_id,
+                'duzenleme_sebebi': duzenleme_sebebi, 'eski_litre_degeri': mevcut_girdi_res.data['litre'],
+                'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'), 'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']
             }).execute()
 
             guncel_girdi = g.supabase.table('sut_girdileri').update(guncellenecek_veri).eq('id', girdi_id).execute()
@@ -106,10 +97,9 @@ class SutService:
             
             return guncel_girdi.data, girdi_tarihi_str
         except (InvalidOperation, TypeError, ValueError) as e:
-            logger.warning(f"Geçersiz güncelleme verisi: {e}")
-            raise ValueError("Lütfen geçerli sayısal değerler girin.")
+            raise ValueError(f"Geçersiz güncelleme verisi: {e}")
         except Exception as e:
-            logger.error(f"Hata (update_entry): {e}", exc_info=True)
+            logger.error(f"Süt girdisi güncellenirken hata: {e}", exc_info=True)
             raise
 
     def delete_entry(self, girdi_id: int, sirket_id: int):
@@ -127,7 +117,7 @@ class SutService:
             
             return girdi_tarihi_str
         except Exception as e:
-            logger.error(f"Hata (delete_entry): {e}", exc_info=True)
+            logger.error(f"Süt girdisi silinirken hata: {e}", exc_info=True)
             raise
 
     def get_entry_history(self, girdi_id: int, sirket_id: int):
@@ -140,25 +130,16 @@ class SutService:
             gecmis_data = g.supabase.table('girdi_gecmisi').select('*,duzenleyen_kullanici_id(kullanici_adi)').eq('orijinal_girdi_id', girdi_id).order('created_at', desc=True).execute()
             return gecmis_data.data
         except Exception as e:
-            logger.error(f"Hata (get_entry_history): {e}", exc_info=True)
+            logger.error(f"Girdi geçmişi alınırken hata: {e}", exc_info=True)
             raise
 
     def get_last_price_for_supplier(self, sirket_id: int, tedarikci_id: int):
         """Bir tedarikçi için girilen en son süt fiyatını getirir."""
         try:
-            response = g.supabase.table('sut_girdileri').select(
-                'fiyat'
-            ).eq('sirket_id', sirket_id).eq(
-                'tedarikci_id', tedarikci_id
-            ).order(
-                'taplanma_tarihi', desc=True
-            ).limit(1).single().execute()
-            
+            response = g.supabase.table('sut_girdileri').select('fiyat').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order('taplanma_tarihi', desc=True).limit(1).single().execute()
             return response.data if response.data else {}
         except Exception as e:
-            logger.error(f"Hata (get_last_price_for_supplier): {e}", exc_info=True)
+            logger.error(f"Son fiyat alınırken hata: {e}", exc_info=True)
             raise Exception("Son fiyat bilgisi alınamadı.")
 
-# Servis'ten bir örnek (instance) oluşturalım ki blueprint'ler bunu kullanabilsin.
 sut_service = SutService()
-

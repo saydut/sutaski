@@ -7,37 +7,45 @@ from datetime import datetime
 import calendar
 import io
 from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 
 def _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil):
     """Belirtilen ay içindeki tüm verileri PDF için tek bir RPC çağrısıyla çeker."""
-    _, ayin_son_gunu = calendar.monthrange(yil, ay)
-    baslangic_tarihi_str = f"{yil}-{ay:02d}-01"
-    bitis_tarihi_str = f"{yil}-{ay:02d}-{ayin_son_gunu}"
+    try:
+        _, ayin_son_gunu = calendar.monthrange(yil, ay)
+        baslangic_tarihi_str = f"{yil}-{ay:02d}-01"
+        bitis_tarihi_str = f"{yil}-{ay:02d}-{ayin_son_gunu}"
 
-    response = g.supabase.rpc('get_monthly_supplier_report_data', {
-        'p_sirket_id': sirket_id,
-        'p_tedarikci_id': tedarikci_id,
-        'p_start_date': baslangic_tarihi_str,
-        'p_end_date': bitis_tarihi_str
-    }).execute()
-    
-    if not response.data:
-        return {
-            "sut_girdileri": [], "yem_islemleri": [], "finansal_islemler": [],
-            "ozet": { "toplam_sut_tutari": 0, "toplam_yem_borcu": 0, "toplam_odeme": 0 }
-        }
+        response = g.supabase.rpc('get_monthly_supplier_report_data', {
+            'p_sirket_id': sirket_id,
+            'p_tedarikci_id': tedarikci_id,
+            'p_start_date': baslangic_tarihi_str,
+            'p_end_date': bitis_tarihi_str
+        }).execute()
+        
+        if not response.data:
+            return {
+                "sut_girdileri": [], "yem_islemleri": [], "finansal_islemler": [],
+                "ozet": { "toplam_sut_tutari": 0, "toplam_yem_borcu": 0, "toplam_odeme": 0 }
+            }
 
-    data = response.data
-    ozet = data.get('ozet', {})
-    ozet['toplam_sut_tutari'] = Decimal(str(ozet.get('toplam_sut_tutari', '0')))
-    ozet['toplam_yem_borcu'] = Decimal(str(ozet.get('toplam_yem_borcu', '0')))
-    ozet['toplam_odeme'] = Decimal(str(ozet.get('toplam_odeme', '0')))
-    data['ozet'] = ozet
-    
-    for girdi in data.get('sut_girdileri', []):
-        girdi['tutar'] = girdi['toplam_tutar']
+        data = response.data
+        ozet = data.get('ozet', {})
+        ozet['toplam_sut_tutari'] = Decimal(str(ozet.get('toplam_sut_tutari', '0')))
+        ozet['toplam_yem_borcu'] = Decimal(str(ozet.get('toplam_yem_borcu', '0')))
+        ozet['toplam_odeme'] = Decimal(str(ozet.get('toplam_odeme', '0')))
+        data['ozet'] = ozet
+        
+        for girdi in data.get('sut_girdileri', []):
+            girdi['tutar'] = girdi['toplam_tutar']
 
-    return data
+        return data
+    except Exception as e:
+        logger.error(f"Aylık tedarikçi verileri alınırken hata: {e}", exc_info=True)
+        raise Exception("Rapor verileri alınırken bir hata oluştu.")
+
 
 def generate_hesap_ozeti_pdf(sirket_id, sirket_adi, tedarikci_id, ay, yil):
     """Tedarikçi için aylık hesap özeti PDF'i oluşturur ve döndürür."""

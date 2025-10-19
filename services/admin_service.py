@@ -18,17 +18,16 @@ class AdminService:
             kullanicilar = g.supabase.table('kullanicilar').select('*, sirketler(sirket_adi)').execute().data
             return {"sirketler": sirketler, "kullanicilar": kullanicilar}
         except Exception as e:
-            logger.error(f"Hata (get_all_data): {e}", exc_info=True)
+            logger.error(f"Admin verileri alınırken hata oluştu: {e}", exc_info=True)
             raise Exception("Admin verileri alınırken bir hata oluştu.")
 
     def update_license(self, sirket_id: int, yeni_tarih: str):
         """Bir şirketin lisans bitiş tarihini günceller."""
         try:
-            # Gelen tarih boşsa veya None ise veritabanında NULL olarak ayarla
             tarih_degeri = yeni_tarih if yeni_tarih else None
             g.supabase.table('sirketler').update({'lisans_bitis_tarihi': tarih_degeri}).eq('id', sirket_id).execute()
         except Exception as e:
-            logger.error(f"Hata (update_license): {e}", exc_info=True)
+            logger.error(f"Lisans tarihi güncellenirken hata oluştu: {e}", exc_info=True)
             raise Exception("Lisans tarihi güncellenemedi.")
 
     def update_user_role(self, kullanici_id: int, yeni_rol: str):
@@ -41,7 +40,7 @@ class AdminService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (update_user_role): {e}", exc_info=True)
+            logger.error(f"Kullanıcı rolü güncellenirken hata oluştu: {e}", exc_info=True)
             raise Exception("Kullanıcı rolü güncellenemedi.")
 
     def delete_company(self, sirket_id: int):
@@ -53,7 +52,7 @@ class AdminService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (delete_company): {e}", exc_info=True)
+            logger.error(f"Şirket silinirken hata oluştu: {e}", exc_info=True)
             raise Exception("Şirket silinirken bir hata oluştu.")
 
     def reset_password(self, kullanici_id: int, yeni_sifre: str):
@@ -66,11 +65,10 @@ class AdminService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            logger.error(f"Hata (reset_password): {e}", exc_info=True)
+            logger.error(f"Şifre sıfırlanırken hata oluştu: {e}", exc_info=True)
             raise Exception("Şifre sıfırlanırken bir hata oluştu.")
 
-    # --- Ayarlar (Bakım Modu, Cache Versiyonu) ---
-
+    # ... (Diğer fonksiyonlar aynı kalır, sadece print'ler logger'a çevrilir)
     def _get_setting(self, ayar_adi: str, varsayilan: str) -> str:
         """Veritabanından tek bir ayar değerini çeker."""
         response = g.supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', ayar_adi).limit(1).single().execute()
@@ -98,8 +96,6 @@ class AdminService:
     def set_maintenance_status(self, durum: bool):
         self._set_setting('maintenance_mode', 'true' if durum else 'false')
 
-    # --- Sürüm Notları CRUD ---
-
     def get_all_version_notes(self):
         """Tüm sürüm notlarını tarihe göre sıralı getirir."""
         return g.supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).order('id', desc=True).execute().data
@@ -122,6 +118,4 @@ class AdminService:
             raise ValueError("Silinecek sürüm notu bulunamadı.")
 
 
-# Servis'ten bir örnek (instance) oluşturalım.
 admin_service = AdminService()
-

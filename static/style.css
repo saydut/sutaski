@@ -451,36 +451,21 @@ h5 { font-size: 0.95rem; }
 /* static/style.css dosyasının sonuna eklenecek kod */
 
 /* Tom-Select Koyu Tema Entegrasyonu */
-
-/* Açıklama: Bu kural, karanlık tema aktifken (:root[data-theme='dark'])
-  Tom-Select açılır menüsündeki (.ts-dropdown) bir seçeneğin (.option)
-  üzerine gelindiğinde veya klavye ile seçildiğinde (.active) devreye girer.
-*/
 :root[data-theme='dark'] .ts-dropdown .option.active {
-    background-color: var(--primary); /* Arka plan rengi olarak ana tema rengimizi kullanır. */
-    color: #FFFFFF; /* YAZI RENGİNİ BEYAZ YAPAR. Sorunu çözen ana kural budur. */
+    background-color: var(--primary);
+    color: #FFFFFF;
 }
 
-/* Açıklama: Bu kural, bir seçim yapıldıktan sonra kutucuk içinde görünen
-  etiketin (item) stilini belirler.
-*/
 :root[data-theme='dark'] .ts-control .item {
     background-color: var(--primary);
     color: #FFFFFF;
 }
 
-/* static/style.css dosyasının sonuna eklenecek kod */
-
 /* Bootstrap Açılır Menü Hover Düzeltmesi (Karanlık Tema) */
-
-/* Açıklama: Bu kural, karanlık tema aktifken bir Bootstrap açılır menü
-  öğesinin (.dropdown-item) üzerine gelindiğinde (:hover) veya
-  klavye ile odaklanıldığında (:focus) çalışır.
-*/
 :root[data-theme='dark'] .dropdown-item:hover,
 :root[data-theme='dark'] .dropdown-item:focus {
-    background-color: var(--primary); /* Arka planı ana tema rengimiz yapar. */
-    color: #FFFFFF; /* Yazı rengini okunabilirlik için beyaz yapar. */
+    background-color: var(--primary);
+    color: #FFFFFF;
 }
 
 @keyframes highlight {
@@ -521,7 +506,6 @@ h5 { font-size: 0.95rem; }
 /* === YENİ İKON ANİMASYONLARI (GÜNCELLENDİ) === */
 
 /* --- Genel Ayarlar --- */
-/* Animasyonların yumuşak olması için tüm ikonlara geçiş efekti ekliyoruz */
 .bi-check-lg,
 .bi-eye,
 .bi-pencil,
@@ -531,107 +515,46 @@ h5 { font-size: 0.95rem; }
 .bi-receipt,
 .bi-x-circle,
 .bi-key,
-.bi-clock-history { /* Girdi geçmişi ikonu eklendi */
+.bi-clock-history {
     display: inline-block;
     transition: transform 0.25s ease-in-out;
 }
 
-/* --- Hover (Fare Üzerine Gelince) Tetikleyicileri (Daha Basit ve Etkili) --- */
-
-/* Yem çıkışı iptal etme */
-.btn:hover .bi-x-circle {
-    transform: scale(1.4) rotate(90deg);
-}
-
-/* Detayları Gör */
-.btn:hover .bi-eye {
-    transform: scale(1.4) rotate(15deg);
-}
-
-/* Düzenle */
-.btn:hover .bi-pencil {
-    transform: rotate(-35deg) scale(1.3);
-}
-
-/* Kaydet (Yeşil Butonlar) */
-.btn-success:hover .bi-check-lg {
-    transform: scale(1.5);
-}
-
-/* Hızlı İşlemler */
-.dropdown-toggle:hover .bi-lightning-charge-fill {
-    transform: rotate(25deg) scale(1.3);
-}
-
-/* Yeni Ekle */
-.btn:hover .bi-plus-circle {
-    transform: rotate(90deg) scale(1.4);
-}
-
-/* Rapor İndirme */
+/* --- Hover (Fare Üzerine Gelince) Tetikleyicileri --- */
+.btn:hover .bi-x-circle { transform: scale(1.4) rotate(90deg); }
+.btn:hover .bi-eye { transform: scale(1.4) rotate(15deg); }
+.btn:hover .bi-pencil { transform: rotate(-35deg) scale(1.3); }
+.btn-success:hover .bi-check-lg { transform: scale(1.5); }
+.dropdown-toggle:hover .bi-lightning-charge-fill { transform: rotate(25deg) scale(1.3); }
+.btn:hover .bi-plus-circle { transform: rotate(90deg) scale(1.4); }
 .btn-success:hover .bi-file-earmark-pdf,
-.btn-info:hover .bi-receipt {
-    transform: translateY(-5px) scale(1.2);
-}
-
-/* Şifre Sıfırla (Anahtar) */
-.btn:hover .bi-key {
-    transform: rotate(-45deg) scale(1.3);
-}
-
-/* Girdi Geçmişi (Saat) */
-.btn:hover .bi-clock-history {
-    transform: rotate(360deg) scale(1.3);
-}
-
+.btn-info:hover .bi-receipt { transform: translateY(-5px) scale(1.2); }
+.btn:hover .bi-key { transform: rotate(-45deg) scale(1.3); }
+.btn:hover .bi-clock-history { transform: rotate(360deg) scale(1.3); }
 
 /* --- Sürekli Animasyonlar --- */
-
-/* Kritik Stok Uyarısı için sürekli parlama animasyonu (SON DÜZENLEME) */
 @keyframes pulse-warning {
-    0% {
-        transform: scale(1);
-        text-shadow: 0 0 5px red;
-    }
-    50% {
-        transform: scale(1.3);
-        text-shadow: 0 0 25px red;
-    }
-    100% {
-        transform: scale(1);
-        text-shadow: 0 0 5px red;
-    }
+    50% { transform: scale(1.3); text-shadow: 0 0 25px red; }
 }
 
-/* Kritik Stok Uyarısı (Sürekli Parlar) */
 .bi-exclamation-triangle-fill.text-danger {
     animation: pulse-warning 1.8s infinite ease-in-out;
 }
 
-
-/* === İSTEĞE GÖRE DÜZENLEMELER === */
-
-/* Kritik stok uyarısı olan satırın sarı arka planını kaldırır */
 #yem-urunleri-tablosu tr.table-warning {
     --bs-table-bg: transparent;
-    --bs-table-striped-bg: color-mix(in srgb, var(--surface) 50%, var(--background)); /* Zebra deseni için çizgili rengi koru */
-    --bs-table-hover-bg: color-mix(in srgb, var(--input-bg) 80%, transparent); /* Hover rengini koru */
+    --bs-table-striped-bg: color-mix(in srgb, var(--surface) 50%, var(--background));
+    --bs-table-hover-bg: color-mix(in srgb, var(--input-bg) 80%, transparent);
 }
 
 /* --- YENİ EKLENEN LANDING PAGE STİLLERİ --- */
-
-/* Geçişli Arka Plan (Hero Section için) */
 .hero-gradient {
     background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 8%, var(--background)), var(--background) 70%);
 }
 
-/* Cihaz Maketleri (Ekran Görüntüleri için) */
 .laptop-mockup {
     position: relative;
-    padding-top: 2.5%;
-    padding-bottom: 4.5%;
-    padding-left: 5%;
-    padding-right: 5%;
+    padding: 2.5% 5% 4.5%;
     background-color: #111;
     border-radius: 1.5rem;
     box-shadow: 0 25px 50px -12px var(--shadow);
@@ -647,7 +570,6 @@ h5 { font-size: 0.95rem; }
     border-radius: 0 0 5px 5px;
 }
 
-/* İnteraktif Sekmeler (Özellikler Bölümü için) */
 .feature-tabs-nav .nav-link {
     cursor: pointer;
     border: none;
@@ -662,35 +584,37 @@ h5 { font-size: 0.95rem; }
     border-left-color: var(--primary);
     font-weight: 600;
 }
-.feature-tabs-content .tab-pane {
-    display: none;
-}
-.feature-tabs-content .tab-pane.active {
-    display: block;
-    animation: fadeIn 0.5s;
-}
+.feature-tabs-content .tab-pane { display: none; }
+.feature-tabs-content .tab-pane.active { display: block; animation: fadeIn 0.5s; }
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* --- YENİ: MOBİL SLIDESHOW STİLLERİ (DÜZELTİLDİ) --- */
 .phone-slideshow {
     position: relative;
-    width: 260px;  /* Genişlik verdik (Bu değeri istersen değiştirebilirsin) */
-    height: 520px; /* Yükseklik verdik (Bu değeri istersen değiştirebilirsin) */
-    /* display:flex ve diğerleri kaldırıldı çünkü gereksizler. */
+    width: 260px;
+    height: 520px;
 }
 .phone-slideshow img {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;  /* Resmin, konteynere tam olarak yayılmasını sağlar */
-    height: 100%; /* Resmin, konteynere tam olarak yayılmasını sağlar */
-    object-fit: cover; /* Resmin en-boy oranını bozmadan kutuyu doldurmasını sağlar */
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
     opacity: 0;
     transition: opacity 0.8s ease-in-out;
 }
-.phone-slideshow img.active {
-    opacity: 1; 
+.phone-slideshow img.active { opacity: 1; }
+
+/* YENİ EKLENEN iOS YÜKLEME YÖNLENDİRMESİ STİLİ */
+#ios-install-prompt {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1055;
+    max-width: 90%;
 }
+
