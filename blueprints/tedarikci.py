@@ -1,6 +1,6 @@
 # blueprints/tedarikci.py
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request, session, g
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from decimal import Decimal
 from services.report_service import generate_hesap_ozeti_pdf, generate_mustahsil_makbuzu_pdf
@@ -171,17 +171,42 @@ def delete_tedarikci(id):
 @tedarikci_bp.route('/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
-    """Tedarikçileri sayfalama, arama ve sıralama yaparak getirir."""
+    """Tedarikçileri sayfalama, arama ve sıralama yaparak getirir (RPC kullanarak)."""
     try:
         sirket_id = session['user']['sirket_id']
         sayfa = int(request.args.get('sayfa', 1))
         limit = int(request.args.get('limit', 15))
+        offset = (sayfa - 1) * limit
         arama = request.args.get('arama', '')
         sirala_sutun = request.args.get('sirala', 'isim')
         sirala_yon = request.args.get('yon', 'asc')
 
-        response = tedarikci_service.get_paginated_list(sirket_id, sayfa, limit, arama, sirala_sutun, sirala_yon)
-        return jsonify({"tedarikciler": response.data, "toplam_kayit": response.count})
+        # RPC fonksiyonunu çağırmak için parametreleri bir dict içinde hazırla
+        params = {
+            'p_sirket_id': sirket_id,
+            'p_limit': limit,
+            'p_offset': offset,
+            'p_search_term': arama,
+            'p_sort_column': sirala_sutun,
+            'p_sort_direction': sirala_yon
+        }
+
+        # RPC fonksiyonunu çağır
+        response = g.supabase.rpc('get_paginated_suppliers', params).execute()
+
+        # RPC'den dönen JSON içindeki 'data' ve 'count' anahtarlarını al
+        result_data = response.data
+
+        # Eğer RPC fonksiyonu doğrudan [{data: [...], count: X}] gibi bir yapıda dönüyorsa:
+        # (Supabase RPC davranışına göre bu kısım değişebilir, loglara bakmak gerekebilir)
+        # if isinstance(result_data, list) and len(result_data) == 1:
+        #      result_data = result_data[0] # İçindeki objeyi al
+
+        tedarikciler = result_data.get('data', [])
+        toplam_kayit = result_data.get('count', 0)
+
+        return jsonify({"tedarikciler": tedarikciler, "toplam_kayit": toplam_kayit})
+
     except Exception as e:
         logger.error(f"/tedarikciler_liste hatası: {e}", exc_info=True)
         return jsonify({"error": "Tedarikçi listesi alınırken bir sunucu hatası oluştu."}), 500

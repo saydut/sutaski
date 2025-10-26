@@ -38,6 +38,22 @@ def _generate_unique_farmer_username(base_name: str, sirket_id: int) -> str:
 class TedarikciService:
     # ... (get_all_for_dropdown, get_by_id, get_summary_by_id, get_paginated_list fonksiyonları aynı kalır) ...
 
+    def get_all_for_dropdown(self, sirket_id: int):
+        """Dropdown menüler için tedarikçileri getirir (sadece ID ve isim)."""
+        try:
+        # Kullanıcının rolüne göre filtreleme (opsiyonel, gerekirse eklenebilir)
+        # user_rol = session.get('user', {}).get('rol')
+        # query = g.supabase.table('tedarikciler').select('id, isim').eq('sirket_id', sirket_id)
+        # if user_rol == UserRole.TOPLAYICI.value:
+        #     # Gerekli filtrelemeyi burada yap...
+
+        # Şimdilik tüm tedarikçileri çekelim:
+            response = g.supabase.table('tedarikciler').select('id, isim').eq('sirket_id', sirket_id).order('isim', desc=False).execute()
+            return response.data
+        except Exception as e:
+            logger.error(f"Dropdown için tedarikçi listesi alınırken hata: {e}", exc_info=True)
+            raise Exception("Tedarikçi listesi alınamadı.")
+
     def create(self, sirket_id: int, data: dict):
         """Yeni bir tedarikçi oluşturur ve otomatik olarak bir çiftçi hesabı açar."""
         isim = data.get('isim', '').strip()
