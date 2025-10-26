@@ -36,6 +36,46 @@ def _generate_unique_farmer_username(base_name: str, sirket_id: int) -> str:
              raise Exception("Benzersiz çiftçi kullanıcı adı üretilemedi.")
 
 class TedarikciService:
+
+    # services/tedarikci_service.py DOSYASINA EKLE:
+
+    def get_by_id(self, sirket_id: int, tedarikci_id: int):
+        """ID ile tek bir tedarikçinin tüm detaylarını getirir."""
+        try:
+            response = g.supabase.table('tedarikciler') \
+                .select('*') \
+                .eq('id', tedarikci_id) \
+                .eq('sirket_id', sirket_id) \
+                .maybe_single() \
+                .execute()
+            return response.data
+        except Exception as e:
+            logger.error(f"get_by_id hatası (ID: {tedarikci_id}): {e}", exc_info=True)
+            raise Exception(f"Tedarikçi detayı (ID: {tedarikci_id}) alınırken bir hata oluştu.")
+
+    def get_summary_by_id(self, sirket_id: int, tedarikci_id: int):
+        """Bir tedarikçinin finansal özetini RPC ile hesaplar ve tedarikçi bilgilerini de döndürür."""
+        try:
+            # Önce tedarikçi temel bilgilerini al (isim vb. için)
+            tedarikci_res = self.get_by_id(sirket_id, tedarikci_id) # Yukarıda eklediğimiz fonksiyonu kullan
+            if not tedarikci_res:
+                 # get_by_id zaten None döndürecek veya hata fırlatacak
+                 return None, None # Hem tedarikçi verisi yok, hem özet verisi yok
+
+            # Sonra RPC ile finansal özeti hesapla
+            summary_res = g.supabase.rpc('get_supplier_summary', {
+                'p_sirket_id': sirket_id,
+                'p_tedarikci_id': tedarikci_id
+            }).execute()
+
+            # RPC'den veri dönmezse boş bir dict döndür
+            ozet_verisi = summary_res.data if summary_res.data else {}
+
+            return tedarikci_res, ozet_verisi # Tedarikçi verisi ve özet verisi döndürülüyor
+
+        except Exception as e:
+            logger.error(f"get_summary_by_id hatası (ID: {tedarikci_id}): {e}", exc_info=True)
+            raise Exception(f"Tedarikçi özeti (ID: {tedarikci_id}) hesaplanırken bir hata oluştu.")
     # ... (get_all_for_dropdown, get_by_id, get_summary_by_id, get_paginated_list fonksiyonları aynı kalır) ...
 
     def get_all_for_dropdown(self, sirket_id: int):
@@ -53,6 +93,8 @@ class TedarikciService:
         except Exception as e:
             logger.error(f"Dropdown için tedarikçi listesi alınırken hata: {e}", exc_info=True)
             raise Exception("Tedarikçi listesi alınamadı.")
+        
+        
 
     def create(self, sirket_id: int, data: dict):
         """Yeni bir tedarikçi oluşturur ve otomatik olarak bir çiftçi hesabı açar."""
