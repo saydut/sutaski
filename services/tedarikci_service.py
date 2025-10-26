@@ -79,20 +79,44 @@ class TedarikciService:
     # ... (get_all_for_dropdown, get_by_id, get_summary_by_id, get_paginated_list fonksiyonları aynı kalır) ...
 
     def get_all_for_dropdown(self, sirket_id: int):
-        """Dropdown menüler için tedarikçileri getirir (sadece ID ve isim)."""
+        """Dropdown menüler için tedarikçileri getirir.
+           YENİ: Toplayıcı rolü için filtreleme yapar."""
         try:
-        # Kullanıcının rolüne göre filtreleme (opsiyonel, gerekirse eklenebilir)
-        # user_rol = session.get('user', {}).get('rol')
-        # query = g.supabase.table('tedarikciler').select('id, isim').eq('sirket_id', sirket_id)
-        # if user_rol == UserRole.TOPLAYICI.value:
-        #     # Gerekli filtrelemeyi burada yap...
+            # Session'dan kullanıcı rolünü ve ID'sini al
+            user_rol = session.get('user', {}).get('rol')
+            kullanici_id = session.get('user', {}).get('id')
 
-        # Şimdilik tüm tedarikçileri çekelim:
-            response = g.supabase.table('tedarikciler').select('id, isim').eq('sirket_id', sirket_id).order('isim', desc=False).execute()
+            # Temel sorgu: Şirketteki tüm tedarikçiler
+            query = g.supabase.table('tedarikciler').select('id, isim').eq('sirket_id', sirket_id)
+
+            # Eğer kullanıcı Toplayıcı ise, sadece atanmışları getir
+            if user_rol == UserRole.TOPLAYICI.value:
+                # Toplayıcıya atanmış tedarikçi ID'lerini çek
+                atama_res = g.supabase.table('toplayici_tedarikci_atananlari') \
+                    .select('tedarikci_id') \
+                    .eq('toplayici_id', kullanici_id) \
+                    .execute()
+
+                # Atanmış ID listesini oluştur
+                atanan_idler = [item['tedarikci_id'] for item in atama_res.data if item.get('tedarikci_id')]
+
+                # Eğer hiç atanmış tedarikçi yoksa, boş liste döndür
+                if not atanan_idler:
+                    logger.info(f"Toplayıcı {kullanici_id} için atanmış tedarikçi bulunamadı.")
+                    return []
+
+                # Sorguya ID filtresini ekle
+                logger.info(f"Toplayıcı {kullanici_id} için tedarikçi listesi filtreleniyor: {atanan_idler}")
+                query = query.in_('id', atanan_idler)
+
+            # Sorguyu çalıştır ve isme göre sırala
+            response = query.order('isim', desc=False).execute()
+            logger.info(f"Dropdown için {len(response.data)} tedarikçi bulundu.")
             return response.data
         except Exception as e:
             logger.error(f"Dropdown için tedarikçi listesi alınırken hata: {e}", exc_info=True)
             raise Exception("Tedarikçi listesi alınamadı.")
+
         
         
 

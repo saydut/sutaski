@@ -1,13 +1,15 @@
 # services/sut_service.py
 
 import logging
-from flask import g
+# YENİ: Gerekli importlar eklendi
+from flask import g, session
+from postgrest import APIError
+# --- Bitiş ---
 from extensions import turkey_tz
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 import pytz
 from utils import parse_supabase_timestamp
-# YENİ: Rolleri kontrol edebilmek için UserRole'u import ediyoruz.
 from constants import UserRole
 
 logger = logging.getLogger(__name__)
@@ -58,78 +60,186 @@ class SutService:
             raise
 
     def add_entry(self, sirket_id: int, kullanici_id: int, yeni_girdi: dict):
-        """Yeni bir süt girdisi ekler."""
+        """Yeni bir süt girdisi ekler. Toplayıcı rolü için yetki kontrolü yapar."""
         try:
-            litre = Decimal(yeni_girdi.get('litre'))
-            fiyat = Decimal(yeni_girdi.get('fiyat'))
-            if litre <= 0 or fiyat <= 0:
-                raise ValueError("Litre ve fiyat pozitif bir değer olmalıdır.")
-            
-            response = g.supabase.table('sut_girdileri').insert({
-                'tedarikci_id': yeni_girdi['tedarikci_id'], 
+            litre_str = yeni_girdi.get('litre')
+            fiyat_str = yeni_girdi.get('fiyat')
+            tedarikci_id_to_add = yeni_girdi.get('tedarikci_id')
+
+            if not tedarikci_id_to_add:
+                 raise ValueError("Tedarikçi seçimi zorunludur.")
+            if not litre_str or not fiyat_str:
+                 raise ValueError("Litre ve Fiyat alanları zorunludur.")
+
+            # Sayısal değerleri Decimal'e çevir ve kontrol et
+            try:
+                litre = Decimal(litre_str)
+                fiyat = Decimal(fiyat_str)
+            except (InvalidOperation, TypeError):
+                 raise ValueError("Litre ve Fiyat geçerli bir sayı olmalıdır.")
+
+            if litre <= 0 or fiyat < 0:
+                raise ValueError("Litre pozitif, fiyat negatif olmayan bir değer olmalıdır.")
+
+            # --- GÜNCELLENMİŞ YETKİ KONTROLÜ ---
+            user_role = session.get('user', {}).get('rol') # session artık import edildi
+
+            # Sadece Toplayıcı rolü için özel kontrol yap
+            if user_role == UserRole.TOPLAYICI.value:
+                # Bu toplayıcının bu tedarikçiye atanıp atanmadığını kontrol et
+                atama_res = g.supabase.table('toplayici_tedarikci_atananlari') \
+                    .select('tedarikci_id', count='exact') \
+                    .eq('toplayici_id', kullanici_id) \
+                    .eq('tedarikci_id', tedarikci_id_to_add) \
+                    .execute()
+                if atama_res.count == 0:
+                    logger.warning(f"Yetkisiz ekleme denemesi: Toplayıcı {kullanici_id}, Tedarikçi {tedarikci_id_to_add}")
+                    raise ValueError("Bu tedarikçiye veri ekleme yetkiniz yok.")
+            # --- YETKİ KONTROLÜ SONU ---
+
+            # Veritabanına ekleme işlemi
+            insert_data = {
+                'tedarikci_id': tedarikci_id_to_add,
                 'litre': str(litre),
                 'fiyat': str(fiyat),
-                'kullanici_id': kullanici_id, 
+                'kullanici_id': kullanici_id,
                 'sirket_id': sirket_id
-            }).execute()
-            return response.data
-        except (InvalidOperation, TypeError, ValueError) as e:
-            raise ValueError(f"Geçersiz girdi verisi: {e}")
-        except Exception as e:
-            logger.error(f"Süt girdisi eklenirken hata: {e}", exc_info=True)
-            raise
+            }
+            logger.info(f"Süt girdisi ekleniyor: {insert_data}")
+            response = g.supabase.table('sut_girdileri').insert(insert_data).execute()
 
+            if not response.data:
+                 logger.error(f"Supabase insert işlemi veri döndürmedi. İstek: {insert_data}")
+                 raise Exception("Veritabanına kayıt sırasında bir sorun oluştu, lütfen tekrar deneyin.")
+
+            logger.info(f"Süt girdisi başarıyla eklendi: ID {response.data[0].get('id')}")
+            return response.data[0]
+
+        except ValueError as ve:
+            logger.warning(f"Süt girdisi ekleme validation hatası: {ve}")
+            raise ve
+        # APIError artık import edildi
+        except APIError as api_err:
+            logger.error(f"Supabase API hatası (süt ekleme): {api_err.message}", exc_info=True)
+            raise Exception(f"Veritabanı hatası: {api_err.message}")
+        except Exception as e:
+            logger.error(f"Süt girdisi eklenirken BİLİNMEYEN hata: {e}", exc_info=True)
+            raise Exception("Girdi eklenirken bir sunucu hatası oluştu.")
+
+
+    # --- YENİ: Düzenleme Yetki Kontrollü update_entry ---
     def update_entry(self, girdi_id: int, sirket_id: int, duzenleyen_kullanici_id: int, data: dict):
-        """Mevcut bir süt girdisini günceller ve geçmiş kaydı oluşturur."""
+        """Mevcut bir süt girdisini günceller, yetki kontrolü yapar ve geçmiş kaydı oluşturur."""
         try:
-            yeni_litre = data.get('yeni_litre')
-            yeni_fiyat = data.get('yeni_fiyat')
+            yeni_litre_str = data.get('yeni_litre')
+            yeni_fiyat_str = data.get('yeni_fiyat')
             duzenleme_sebebi = data.get('duzenleme_sebebi', '').strip() or '-'
 
-            if not yeni_litre or not yeni_fiyat:
+            if not yeni_litre_str or not yeni_fiyat_str:
                 raise ValueError("Yeni litre ve fiyat değerleri zorunludur.")
-            
-            guncellenecek_veri = { 'duzenlendi_mi': True, 'litre': str(Decimal(yeni_litre)), 'fiyat': str(Decimal(yeni_fiyat)) }
 
-            mevcut_girdi_res = g.supabase.table('sut_girdileri').select('*').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
+            try:
+                yeni_litre = Decimal(yeni_litre_str)
+                yeni_fiyat = Decimal(yeni_fiyat_str)
+                if yeni_litre <= 0 or yeni_fiyat < 0:
+                     raise ValueError("Litre pozitif, fiyat negatif olmayan bir değer olmalıdır.")
+            except (InvalidOperation, TypeError):
+                 raise ValueError("Litre ve Fiyat geçerli bir sayı olmalıdır.")
+
+            # Girdiyi ve sahibini getir
+            mevcut_girdi_res = g.supabase.table('sut_girdileri') \
+                .select('*, kullanici_id') \
+                .eq('id', girdi_id) \
+                .eq('sirket_id', sirket_id) \
+                .maybe_single() \
+                .execute()
+
             if not mevcut_girdi_res.data:
-                raise ValueError("Girdi bulunamadı veya bu işlem için yetkiniz yok.")
-            
+                raise ValueError("Girdi bulunamadı veya bu şirkete ait değil.")
+
+            mevcut_girdi = mevcut_girdi_res.data
+            girdi_sahibi_id = mevcut_girdi['kullanici_id']
+            duzenleyen_rol = session.get('user', {}).get('rol')
+
+            # Yetki Kontrolü: Firma Yetkilisi değilse VE girdinin sahibi değilse engelle
+            if duzenleyen_rol != UserRole.FIRMA_YETKILISI.value and duzenleyen_kullanici_id != girdi_sahibi_id:
+                logger.warning(f"Yetkisiz düzenleme denemesi: Kullanıcı {duzenleyen_kullanici_id}, Girdi ID {girdi_id}, Sahip ID {girdi_sahibi_id}")
+                raise ValueError("Bu girdiyi düzenleme yetkiniz yok.")
+
+            # Geçmiş kaydı oluştur
             g.supabase.table('girdi_gecmisi').insert({
                 'orijinal_girdi_id': girdi_id, 'duzenleyen_kullanici_id': duzenleyen_kullanici_id,
-                'duzenleme_sebebi': duzenleme_sebebi, 'eski_litre_degeri': mevcut_girdi_res.data['litre'],
-                'eski_fiyat_degeri': mevcut_girdi_res.data.get('fiyat'), 'eski_tedarikci_id': mevcut_girdi_res.data['tedarikci_id']
+                'duzenleme_sebebi': duzenleme_sebebi, 'eski_litre_degeri': mevcut_girdi['litre'],
+                'eski_fiyat_degeri': mevcut_girdi.get('fiyat'), 'eski_tedarikci_id': mevcut_girdi['tedarikci_id']
             }).execute()
 
-            guncel_girdi = g.supabase.table('sut_girdileri').update(guncellenecek_veri).eq('id', girdi_id).execute()
-            
-            girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
-            girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
-            
-            return guncel_girdi.data, girdi_tarihi_str
-        except (InvalidOperation, TypeError, ValueError) as e:
-            raise ValueError(f"Geçersiz güncelleme verisi: {e}")
-        except Exception as e:
-            logger.error(f"Süt girdisi güncellenirken hata: {e}", exc_info=True)
-            raise
+            # Girdiyi güncelle
+            guncellenecek_veri = { 'duzenlendi_mi': True, 'litre': str(yeni_litre), 'fiyat': str(yeni_fiyat) }
+            guncel_girdi_res = g.supabase.table('sut_girdileri').update(guncellenecek_veri).eq('id', girdi_id).select().execute()
 
+            # Güncellenen girdinin tarihini al (özet güncellemesi için)
+            girdi_tarihi = parse_supabase_timestamp(mevcut_girdi['taplanma_tarihi'])
+            girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
+
+            return guncel_girdi_res.data[0], girdi_tarihi_str # Güncellenen veriyi ve tarihi döndür
+
+        except ValueError as ve:
+             logger.warning(f"Süt girdisi güncelleme validation hatası: {ve}")
+             raise ve
+        except APIError as api_err:
+            logger.error(f"Supabase API hatası (süt güncelleme): {api_err.message}", exc_info=True)
+            raise Exception(f"Veritabanı hatası: {api_err.message}")
+        except Exception as e:
+            logger.error(f"Süt girdisi güncellenirken BİLİNMEYEN hata: {e}", exc_info=True)
+            raise Exception("Güncelleme sırasında bir sunucu hatası oluştu.")
+
+    # --- YENİ: Silme Yetki Kontrollü delete_entry ---
     def delete_entry(self, girdi_id: int, sirket_id: int):
-        """Bir süt girdisini ve ilgili geçmiş kayıtlarını siler."""
+        """Bir süt girdisini siler, yetki kontrolü yapar ve ilgili geçmiş kayıtlarını siler."""
         try:
-            mevcut_girdi_res = g.supabase.table('sut_girdileri').select('sirket_id, taplanma_tarihi').eq('id', girdi_id).eq('sirket_id', sirket_id).single().execute()
+            silen_kullanici_id = session.get('user', {}).get('id')
+            silen_rol = session.get('user', {}).get('rol')
+
+            # Silinecek girdiyi ve sahibini getir
+            mevcut_girdi_res = g.supabase.table('sut_girdileri') \
+                .select('sirket_id, taplanma_tarihi, kullanici_id') \
+                .eq('id', girdi_id) \
+                .eq('sirket_id', sirket_id) \
+                .maybe_single() \
+                .execute()
+
             if not mevcut_girdi_res.data:
                 raise ValueError("Girdi bulunamadı veya silme yetkiniz yok.")
-            
-            girdi_tarihi = parse_supabase_timestamp(mevcut_girdi_res.data['taplanma_tarihi'])
+
+            mevcut_girdi = mevcut_girdi_res.data
+            girdi_sahibi_id = mevcut_girdi['kullanici_id']
+
+            # Yetki Kontrolü: Firma Yetkilisi değilse VE girdinin sahibi değilse engelle
+            if silen_rol != UserRole.FIRMA_YETKILISI.value and silen_kullanici_id != girdi_sahibi_id:
+                logger.warning(f"Yetkisiz silme denemesi: Kullanıcı {silen_kullanici_id}, Girdi ID {girdi_id}, Sahip ID {girdi_sahibi_id}")
+                raise ValueError("Bu girdiyi silme yetkiniz yok.")
+
+            # Girdinin tarihini al (özet güncellemesi için)
+            girdi_tarihi = parse_supabase_timestamp(mevcut_girdi['taplanma_tarihi'])
             girdi_tarihi_str = girdi_tarihi.astimezone(turkey_tz).date().isoformat() if girdi_tarihi else datetime.now(turkey_tz).date().isoformat()
 
+            # Önce geçmiş kayıtlarını sil (varsa)
             g.supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
+            # Sonra girdinin kendisini sil
             g.supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
-            
-            return girdi_tarihi_str
+
+            logger.info(f"Süt girdisi ID {girdi_id}, kullanıcı {silen_kullanici_id} tarafından silindi.")
+            return girdi_tarihi_str # Silinen girdinin tarihini döndür
+
+        except ValueError as ve:
+            logger.warning(f"Süt girdisi silme validation hatası: {ve}")
+            raise ve
+        except APIError as api_err:
+            logger.error(f"Supabase API hatası (süt silme): {api_err.message}", exc_info=True)
+            raise Exception(f"Veritabanı hatası: {api_err.message}")
         except Exception as e:
-            logger.error(f"Süt girdisi silinirken hata: {e}", exc_info=True)
-            raise
+            logger.error(f"Süt girdisi silinirken BİLİNMEYEN hata: {e}", exc_info=True)
+            raise Exception("Silme işlemi sırasında bir hata oluştu.")
 
     def get_entry_history(self, girdi_id: int, sirket_id: int):
         """Bir girdinin düzenleme geçmişini getirir."""

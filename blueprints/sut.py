@@ -131,20 +131,22 @@ def get_son_fiyat(tedarikci_id):
 def get_tedarikci_stats(tedarikci_id):
     """Bir tedarikçinin süt girdisi istatistiklerini getirir."""
     try:
-        from extensions import supabase
+        # YANLIŞ IMPORT SATIRI KALDIRILDI: from extensions import supabase
         sirket_id = session['user']['sirket_id']
-        
-        # HATA DÜZELTMESİ: Parametreler doğru formatta gönderiliyor.
+
         params = {
             'p_sirket_id': sirket_id,
             'p_tedarikci_id': tedarikci_id
         }
-        response = supabase.rpc('get_supplier_stats', params).execute()
-        
+        # DOĞRU KULLANIM: g.supabase kullanılıyor
+        response = g.supabase.rpc('get_supplier_stats', params).execute()
+
         if not response.data:
-            # Eğer hiç girdi yoksa, boş bir istatistik döndür
+            # RPC fonksiyonu artık veri olmasa bile [{ "ortalama_litre": 0, "standart_sapma": 0 }] döndürmeli.
+            # Ama yine de kontrol ekleyelim.
+            logger.warning(f"get_supplier_stats RPC'den veri dönmedi. Parametreler: {params}")
             return jsonify([{"ortalama_litre": 0, "standart_sapma": 0}])
-            
+
         return jsonify(response.data)
     except Exception as e:
         logger.error(f"İstatistik API hatası: {e}", exc_info=True)

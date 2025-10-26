@@ -1,12 +1,12 @@
-// static/js/tedarikciler.js (İyimser Arayüz ve ID'ler eklendi, Çiftçi Bilgisi Gösterme Eklendi)
+// static/js/tedarikciler.js
 
-let tedarikciModal, silmeOnayModal;
+let tedarikcilerMevcutGorunum = 'tablo'; // YENİ İSİM
 let mevcutSayfa = 1;
 const KAYIT_SAYISI = 15;
 let mevcutSiralamaSutunu = 'isim';
 let mevcutSiralamaYonu = 'asc';
 let mevcutAramaTerimi = '';
-let mevcutGorunum = 'tablo';
+let tedarikciModal, silmeOnayModal;
 
 // Arama için debounce fonksiyonu
 function debounce(func, delay = 400) {
@@ -21,16 +21,19 @@ window.onload = async () => {
     tedarikciModal = new bootstrap.Modal(document.getElementById('tedarikciModal'));
     silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
 
-    mevcutGorunum = localStorage.getItem('tedarikciGorunum') || 'tablo';
-    gorunumuAyarla(mevcutGorunum);
+    // tedarikcilerMevcutGorunum kullanılıyor
+    tedarikcilerMevcutGorunum = localStorage.getItem('tedarikciGorunum') || 'tablo';
+    gorunumuAyarla(tedarikcilerMevcutGorunum); // Fonksiyona değişkeni ver
 
     const aramaInput = document.getElementById('arama-input');
-    aramaInput.addEventListener('input', debounce((event) => {
-        mevcutAramaTerimi = event.target.value;
-        verileriYukle(1); // Arama yapıldığında ilk sayfaya dön
-    }));
+    if (aramaInput) { // Elementin varlığını kontrol et
+        aramaInput.addEventListener('input', debounce((event) => {
+            mevcutAramaTerimi = event.target.value;
+            verileriYukle(1); // Arama yapıldığında ilk sayfaya dön
+        }));
+    }
 
-    // Sıralama başlıklarına tıklama olaylarını ekle
+
     document.querySelectorAll('.sortable').forEach(header => {
         header.addEventListener('click', () => {
             const sutun = header.dataset.sort;
@@ -38,15 +41,15 @@ window.onload = async () => {
                 mevcutSiralamaYonu = mevcutSiralamaYonu === 'asc' ? 'desc' : 'asc';
             } else {
                 mevcutSiralamaSutunu = sutun;
-                mevcutSiralamaYonu = 'asc'; // Yeni sütuna tıklanınca varsayılan artan sıralama
+                mevcutSiralamaYonu = 'asc';
             }
             basliklariGuncelle();
-            verileriYukle(1); // Sıralama değiştiğinde ilk sayfaya dön
+            verileriYukle(1);
         });
     });
 
-    basliklariGuncelle(); // Sayfa ilk yüklendiğinde sıralama ikonlarını ayarla
-    await verileriYukle(); // Verileri yükle
+    basliklariGuncelle();
+    await verileriYukle();
 };
 
 /**
@@ -55,30 +58,27 @@ window.onload = async () => {
  */
 async function verileriYukle(sayfa = 1) {
     mevcutSayfa = sayfa;
-    // API URL'sine arama, sıralama ve sayfa parametrelerini ekle
-    const url = `/api/tedarikciler_liste?sayfa=${sayfa}&arama=${encodeURIComponent(mevcutAramaTerimi)}&sirala=${mevcutSiralamaSutunu}&yon=${mevcutSiralamaYonu}&limit=${KAYIT_SAYISI}`; // Limit eklendi
+    const url = `/api/tedarikciler_liste?sayfa=${sayfa}&arama=${encodeURIComponent(mevcutAramaTerimi)}&sirala=${mevcutSiralamaSutunu}&yon=${mevcutSiralamaYonu}&limit=${KAYIT_SAYISI}`;
 
-    // Genel veri yükleyiciyi kullan (data-loader.js içinde)
-    await genelVeriYukleyici({
+    await genelVeriYukleyici({ // data-loader.js'den
         apiURL: url,
-        veriAnahtari: 'tedarikciler', // API'dan gelen JSON'daki tedarikçi listesinin adı
+        veriAnahtari: 'tedarikciler',
         tabloBodyId: 'tedarikciler-tablosu',
         kartContainerId: 'tedarikciler-kart-listesi',
         veriYokId: 'veri-yok-mesaji',
         sayfalamaId: 'tedarikci-sayfalama',
-        tabloRenderFn: renderTable, // Tablo satırlarını oluşturan fonksiyon
-        kartRenderFn: renderCards,   // Kartları oluşturan fonksiyon
-        yukleFn: verileriYukle,      // Sayfa değiştirildiğinde çağrılacak fonksiyon
+        tabloRenderFn: renderTable,
+        kartRenderFn: renderCards,
+        yukleFn: verileriYukle,
         sayfa: sayfa,
         kayitSayisi: KAYIT_SAYISI,
-        mevcutGorunum: mevcutGorunum
+        // tedarikcilerMevcutGorunum kullanılıyor
+        mevcutGorunum: tedarikcilerMevcutGorunum
     });
 }
 
 /**
  * Tedarikçi verilerini tablo satırları olarak render eder.
- * @param {HTMLElement} container - Tablonun tbody elementi.
- * @param {Array} suppliers - Tedarikçi objeleri dizisi.
  */
 function renderTable(container, suppliers) {
     suppliers.forEach(supplier => {
@@ -98,8 +98,6 @@ function renderTable(container, suppliers) {
 
 /**
  * Tedarikçi verilerini kartlar olarak render eder.
- * @param {HTMLElement} container - Kartların ekleneceği row elementi.
- * @param {Array} suppliers - Tedarikçi objeleri dizisi.
  */
 function renderCards(container, suppliers) {
     suppliers.forEach(supplier => {
@@ -117,7 +115,6 @@ function renderCards(container, suppliers) {
             </div>`;
     });
 }
-
 
 /**
  * Tablo başlıklarındaki sıralama ikonlarını günceller.
@@ -144,32 +141,28 @@ async function tedarikciKaydet() {
         telefon_no: document.getElementById('tedarikci-tel-input').value.trim(),
         adres: document.getElementById('tedarikci-adres-input').value.trim()
     };
-    if (!veri.isim) { gosterMesaj("Tedarikçi ismi zorunludur.", "warning"); return; }
+    if (!veri.isim) { gosterMesaj("Tedarikçi ismi zorunludur.", "warning"); return; } // ui.js'den
 
     kaydetButton.disabled = true;
     kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
     try {
         const result = id
-            ? await api.updateTedarikci(id, veri) // Güncelleme API çağrısı
-            : await api.postTedarikci(veri);    // Ekleme API çağrısı
+            ? await api.updateTedarikci(id, veri) // api.js'den
+            : await api.postTedarikci(veri);    // api.js'den
 
-        // --- YENİ: Çiftçi Giriş Bilgilerini Gösterme ---
         let mesaj = result.message;
         if (!id && result.ciftci_kullanici_adi && result.ciftci_sifre) {
-            // Eğer yeni ekleme yapıldıysa ve çiftçi bilgileri döndüyse mesaja ekle
             mesaj += `<br><small class="mt-2">Otomatik oluşturulan çiftçi giriş bilgileri:<br>Kullanıcı Adı: <strong>${utils.sanitizeHTML(result.ciftci_kullanici_adi)}</strong><br>Şifre: <strong>${utils.sanitizeHTML(result.ciftci_sifre)}</strong></small>`;
-             // Mesajın daha uzun süre görünmesini sağla
-             gosterMesaj(mesaj, "success", 10000); // 10 saniye
+             gosterMesaj(mesaj, "success", 10000); // ui.js'den, 10 saniye
         } else {
-             gosterMesaj(mesaj, "success"); // Normal mesaj süresi
+             gosterMesaj(mesaj, "success"); // ui.js'den
         }
-        // --- GÖSTERME SONU ---
 
         tedarikciModal.hide();
         await verileriYukle(id ? mevcutSayfa : 1); // Listeyi güncelle
 
     } catch (error) {
-        gosterMesaj(error.message || "Bir hata oluştu.", "danger");
+        gosterMesaj(error.message || "Bir hata oluştu.", "danger"); // ui.js'den
     } finally {
         kaydetButton.disabled = false;
         kaydetButton.innerHTML = originalButtonText;
@@ -183,58 +176,52 @@ async function tedarikciSil() {
     const id = document.getElementById('silinecek-tedarikci-id').value;
     silmeOnayModal.hide();
 
-    // İyimser UI Mantığı (API cevabını beklemeden arayüzden kaldır)
     const silinecekElement = document.getElementById(`tedarikci-${id}`);
     if (!silinecekElement) return;
 
     const parent = silinecekElement.parentNode;
     const nextSibling = silinecekElement.nextSibling;
-    const originalHTML = silinecekElement.outerHTML; // Geri yükleme için sakla
+    const originalHTML = silinecekElement.outerHTML;
 
-    // Animasyonla kaldır
     silinecekElement.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
     silinecekElement.style.opacity = '0';
     silinecekElement.style.transform = 'translateX(-50px)';
     setTimeout(() => {
         if(silinecekElement.parentNode) silinecekElement.remove();
-        // Eğer silindikten sonra hiç öğe kalmadıysa "veri yok" mesajını göster
-        if (parent && parent.children.length === 0 && (mevcutGorunum === 'kart' || document.getElementById('tedarikciler-tablosu').children.length === 0)) {
+        // tedarikcilerMevcutGorunum kullanılıyor
+        if (parent && parent.children.length === 0 && (tedarikcilerMevcutGorunum === 'kart' || document.getElementById('tedarikciler-tablosu').children.length === 0)) {
            document.getElementById('veri-yok-mesaji').style.display = 'block';
         }
     }, 400);
 
     try {
-        const result = await api.deleteTedarikci(id); // Backend hem tedarikçiyi hem kullanıcıyı siler
-        gosterMesaj(result.message, 'success');
-        // Sayfalama durumunu düzeltmek ve toplam sayıyı güncellemek için listeyi baştan yükle
-        await verileriYukle(1);
+        const result = await api.deleteTedarikci(id); // api.js'den
+        gosterMesaj(result.message, 'success'); // ui.js'den
+        await verileriYukle(1); // Sayfalamayı düzeltmek için ilk sayfayı yükle
     } catch (error) {
-        gosterMesaj(error.message || 'Silme işlemi başarısız, tedarikçi geri yüklendi.', 'danger');
-        // Hata durumunda öğeyi geri ekle
+        gosterMesaj(error.message || 'Silme işlemi başarısız, tedarikçi geri yüklendi.', 'danger'); // ui.js'den
         if (originalHTML && parent) {
-             const tempDiv = document.createElement(mevcutGorunum === 'kart' ? 'div' : 'tbody'); // Uygun geçici element
+             // tedarikcilerMevcutGorunum kullanılıyor
+             const tempDiv = document.createElement(tedarikcilerMevcutGorunum === 'kart' ? 'div' : 'tbody');
              tempDiv.innerHTML = originalHTML;
              const restoredElement = tempDiv.firstChild;
-             restoredElement.style.opacity = '1'; // Görünür yap
+             restoredElement.style.opacity = '1';
              restoredElement.style.transform = 'translateX(0)';
-             parent.insertBefore(restoredElement, nextSibling); // Eski yerine ekle
-             document.getElementById('veri-yok-mesaji').style.display = 'none'; // Veri yok mesajını gizle
+             parent.insertBefore(restoredElement, nextSibling);
+             document.getElementById('veri-yok-mesaji').style.display = 'none';
         }
-        // Listeyi tam olarak senkronize etmek için yeniden yükle (opsiyonel)
-        // await verileriYukle(mevcutSayfa);
     }
 }
 
 
 /**
  * Tedarikçi düzenleme modalını açar ve verileri doldurur.
- * @param {number} id - Düzenlenecek tedarikçinin ID'si.
- * @param {HTMLElement} button - Tıklanan buton elementi (geçici olarak disable yapmak için).
  */
 async function tedarikciDuzenleAc(id, button) {
-    button.disabled = true; // Butonu geçici olarak devre dışı bırak
+    if(button) button.disabled = true; // Butonu geçici olarak devre dışı bırak
     try {
-        const supplier = await api.request(`/api/tedarikci/${id}`); // Tedarikçi detayını API'dan çek
+        // api.js'den direkt tedarikçi detayını çek, /api/tedarikci/<id> endpoint'i olmalı
+        const supplier = await api.request(`/api/tedarikci/${id}`);
 
         document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
         document.getElementById('edit-tedarikci-id').value = supplier.id;
@@ -244,9 +231,9 @@ async function tedarikciDuzenleAc(id, button) {
         document.getElementById('tedarikci-adres-input').value = supplier.adres || '';
         tedarikciModal.show();
     } catch (error) {
-        gosterMesaj(error.message || "Tedarikçi detayı bulunamadı.", "danger");
+        gosterMesaj(error.message || "Tedarikçi detayı bulunamadı.", "danger"); // ui.js'den
     } finally {
-        button.disabled = false; // Butonu tekrar aktif et
+        if(button) button.disabled = false; // Butonu tekrar aktif et
     }
 }
 
@@ -255,15 +242,13 @@ async function tedarikciDuzenleAc(id, button) {
  */
 function yeniTedarikciAc() {
     document.getElementById('tedarikciModalLabel').innerText = 'Yeni Tedarikçi Ekle';
-    document.getElementById('edit-tedarikci-id').value = ''; // ID'yi temizle
-    document.getElementById('tedarikci-form').reset(); // Formu temizle
+    document.getElementById('edit-tedarikci-id').value = '';
+    document.getElementById('tedarikci-form').reset();
     tedarikciModal.show();
 }
 
 /**
  * Silme onay modalını açar.
- * @param {number} id - Silinecek tedarikçinin ID'si.
- * @param {string} isim - Silinecek tedarikçinin adı.
  */
 function silmeOnayiAc(id, isim) {
     document.getElementById('silinecek-tedarikci-id').value = id;
@@ -273,29 +258,28 @@ function silmeOnayiAc(id, isim) {
 
 /**
  * Liste ve Kart görünümleri arasında geçiş yapar.
- * @param {string} yeniGorunum - 'tablo' veya 'kart'.
  */
 function gorunumuDegistir(yeniGorunum) {
-    if (mevcutGorunum === yeniGorunum) return;
-    mevcutGorunum = yeniGorunum;
-    localStorage.setItem('tedarikciGorunum', yeniGorunum);
-    gorunumuAyarla(yeniGorunum);
-    // Veriyi tekrar yüklemeye gerek yok, sadece görünümü değiştiriyoruz.
-    // Ancak farklı render fonksiyonları farklı veri bekliyorsa yüklemek gerekebilir.
-    // Şimdilik sadece görünümü değiştiriyoruz.
+    // tedarikcilerMevcutGorunum kullanılıyor
+    if (tedarikcilerMevcutGorunum === yeniGorunum) return;
+    tedarikcilerMevcutGorunum = yeniGorunum;
+    localStorage.setItem('tedarikciGorunum', tedarikcilerMevcutGorunum);
+    gorunumuAyarla(tedarikcilerMevcutGorunum); // Fonksiyona değişkeni ver
+    // Görünüm değişince veriyi tekrar yükle (opsiyonel)
     // await verileriYukle(mevcutSayfa);
 }
 
 /**
  * Aktif görünüme göre ilgili div'i gösterir/gizler ve butonları ayarlar.
- * @param {string} aktifGorunum - 'tablo' veya 'kart'.
  */
-function gorunumuAyarla(aktifGorunum) {
+function gorunumuAyarla(aktifGorunum) { // Parametre eklendi
     document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
     const aktifElement = document.getElementById(`${aktifGorunum}-gorunumu`);
     if(aktifElement) {
-       aktifElement.style.display = aktifGorunum === 'kart' ? 'block' : 'block'; // Kartlar için row zaten var, tablo için block
+       aktifElement.style.display = 'block'; // Hem tablo hem kart için block yeterli
     }
-    document.getElementById('btn-view-table').classList.toggle('active', aktifGorunum === 'tablo');
-    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
+    const tableBtn = document.getElementById('btn-view-table');
+    const cardBtn = document.getElementById('btn-view-card');
+    if(tableBtn) tableBtn.classList.toggle('active', aktifGorunum === 'tablo');
+    if(cardBtn) cardBtn.classList.toggle('active', aktifGorunum === 'kart');
 }

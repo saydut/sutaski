@@ -171,9 +171,14 @@ def delete_tedarikci(id):
 @tedarikci_bp.route('/tedarikciler_liste')
 @login_required
 def get_tedarikciler_liste():
-    """Tedarikçileri sayfalama, arama ve sıralama yaparak getirir (RPC kullanarak)."""
+    """Tedarikçileri sayfalama, arama ve sıralama yaparak getirir (RPC kullanarak).
+       YENİ: Kullanıcı rolüne göre filtreleme yapar."""
     try:
+        # Session'dan gerekli bilgileri al
         sirket_id = session['user']['sirket_id']
+        user_id = session['user']['id']
+        user_role = session['user']['rol']
+
         sayfa = int(request.args.get('sayfa', 1))
         limit = int(request.args.get('limit', 15))
         offset = (sayfa - 1) * limit
@@ -181,9 +186,11 @@ def get_tedarikciler_liste():
         sirala_sutun = request.args.get('sirala', 'isim')
         sirala_yon = request.args.get('yon', 'asc')
 
-        # RPC fonksiyonunu çağırmak için parametreleri bir dict içinde hazırla
+        # RPC fonksiyonunu çağırmak için parametreleri hazırla (YENİ parametreler eklendi)
         params = {
             'p_sirket_id': sirket_id,
+            'p_user_id': user_id,       # YENİ
+            'p_user_role': user_role,   # YENİ
             'p_limit': limit,
             'p_offset': offset,
             'p_search_term': arama,
@@ -194,17 +201,11 @@ def get_tedarikciler_liste():
         # RPC fonksiyonunu çağır
         response = g.supabase.rpc('get_paginated_suppliers', params).execute()
 
-        # RPC'den dönen JSON içindeki 'data' ve 'count' anahtarlarını al
         result_data = response.data
-
-        # Eğer RPC fonksiyonu doğrudan [{data: [...], count: X}] gibi bir yapıda dönüyorsa:
-        # (Supabase RPC davranışına göre bu kısım değişebilir, loglara bakmak gerekebilir)
-        # if isinstance(result_data, list) and len(result_data) == 1:
-        #      result_data = result_data[0] # İçindeki objeyi al
-
         tedarikciler = result_data.get('data', [])
         toplam_kayit = result_data.get('count', 0)
 
+        # Frontend'e JSON olarak döndür
         return jsonify({"tedarikciler": tedarikciler, "toplam_kayit": toplam_kayit})
 
     except Exception as e:

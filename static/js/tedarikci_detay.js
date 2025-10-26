@@ -1,51 +1,55 @@
-// static/js/tedarikci_detay.js (MERKEZİ YÜKLEYİCİYİ KULLANACAK ŞEKİLDE REFAKTÖR EDİLDİ)
+// static/js/tedarikci_detay.js
 
-let mevcutGorunum = 'tablo';
+let tedarikciDetayMevcutGorunum = 'tablo'; // YENİ İSİM
 const yuklenenSekmeler = { sut: false, yem: false, finans: false };
 const KAYIT_SAYISI = 10;
 
-// --- Sayfa Yüklendiğinde Çalışan Ana Fonksiyon ---
-// --- Sayfa Yüklendiğinde Çalışan Ana Fonksiyon ---
+// Sayfa yüklendiğinde çalışır
 window.onload = () => {
-    mevcutGorunum = localStorage.getItem('tedarikciDetayGorunum') || 'tablo';
-    gorunumuAyarla(mevcutGorunum);
+    // tedarikciDetayMevcutGorunum kullanılıyor
+    tedarikciDetayMevcutGorunum = localStorage.getItem('tedarikciDetayGorunum') || 'tablo';
+    gorunumuAyarla(tedarikciDetayMevcutGorunum); // Fonksiyona değişkeni ver
 
-    ayYilSecicileriniDoldur('rapor-ay', 'rapor-yil');
-    ozetVerileriniYukle();
-    sutGirdileriniYukle(1); // İlk sekmeyi direkt yükle
-    sekmeOlaylariniAyarla();
+    ayYilSecicileriniDoldur('rapor-ay', 'rapor-yil'); // utils.js'den
+    ozetVerileriniYukle(); // Bu dosyadaki fonksiyon
+    sutGirdileriniYukle(1); // İlk sekmeyi yükle (Bu dosyadaki fonksiyon)
+    sekmeOlaylariniAyarla(); // Bu dosyadaki fonksiyon
 };
 
-// --- Arayüz ve Olay Yönetimi Fonksiyonları ---
-
-function gorunumuAyarla(aktifGorunum) {
+// Arayüzü ayarlar (div'leri göster/gizle, butonları aktif/pasif yap)
+function gorunumuAyarla(aktifGorunum) { // Parametre eklendi
     document.querySelectorAll('.gorunum-konteyneri-detay').forEach(el => {
+        // ID'nin içinde aktif görünüm adının geçip geçmediğini kontrol et
         if (el.id.includes(aktifGorunum)) {
+            // Kart görünümü için display: flex kullan (row içinde oldukları için)
             el.style.display = el.classList.contains('row') ? 'flex' : 'block';
         } else {
             el.style.display = 'none';
         }
     });
-    document.getElementById('btn-view-table').classList.toggle('active', aktifGorunum === 'tablo');
-    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
+    const tableBtn = document.getElementById('btn-view-table');
+    const cardBtn = document.getElementById('btn-view-card');
+    if(tableBtn) tableBtn.classList.toggle('active', aktifGorunum === 'tablo');
+    if(cardBtn) cardBtn.classList.toggle('active', aktifGorunum === 'kart');
 }
 
+
+// Liste/Kart görünümünü değiştir
 function gorunumuDegistir(yeniGorunum) {
-    if (mevcutGorunum === yeniGorunum) return;
-    mevcutGorunum = yeniGorunum;
-    localStorage.setItem('tedarikciDetayGorunum', yeniGorunum);
-    gorunumuAyarla(yeniGorunum);
+    // tedarikciDetayMevcutGorunum kullanılıyor
+    if (tedarikciDetayMevcutGorunum === yeniGorunum) return;
+    tedarikciDetayMevcutGorunum = yeniGorunum;
+    localStorage.setItem('tedarikciDetayGorunum', tedarikciDetayMevcutGorunum);
+    gorunumuAyarla(tedarikciDetayMevcutGorunum); // Fonksiyona değişkeni ver
 
     const aktifSekme = document.querySelector('.nav-tabs .nav-link.active');
+    if (!aktifSekme) return; // Aktif sekme yoksa çık
     const aktifSekmeId = aktifSekme.id;
 
-    // --- YENİ EKLENEN KOD BAŞLANGICI ---
-    // Görünüm değiştiğinde, aktif olmayan diğer sekmelerin "yüklendi" durumunu sıfırla.
-    // Bu, diğer sekmelere tıklandığında veriyi yeni görünüme göre yeniden yüklemelerini tetikler.
+    // Görünüm değiştiğinde, diğer sekmelerin "yüklendi" durumunu sıfırla ki tekrar yüklensinler
     if (aktifSekmeId !== 'sut-tab') yuklenenSekmeler.sut = false;
     if (aktifSekmeId !== 'yem-tab') yuklenenSekmeler.yem = false;
     if (aktifSekmeId !== 'finans-tab') yuklenenSekmeler.finans = false;
-    // --- YENİ EKLENEN KOD SONU ---
 
     // Mevcut aktif sekmeyi yeni görünüme göre yeniden yükle
     if (aktifSekmeId === 'sut-tab') sutGirdileriniYukle(1);
@@ -53,42 +57,50 @@ function gorunumuDegistir(yeniGorunum) {
     else if (aktifSekmeId === 'finans-tab') finansalIslemleriYukle(1);
 }
 
+// Sekme olaylarını ayarlar (diğer sekmeler açıldığında veri yükler)
 function sekmeOlaylariniAyarla() {
-    // Sekmeler daha önce yüklenmediyse, gösterildiğinde veri yüklemesini tetikle
-    document.getElementById('yem-tab').addEventListener('show.bs.tab', () => {
-        if (!yuklenenSekmeler.yem) yemIslemleriniYukle(1);
-    });
+    const yemTab = document.getElementById('yem-tab');
+    const finansTab = document.getElementById('finans-tab');
 
-    document.getElementById('finans-tab').addEventListener('show.bs.tab', () => {
-        if (!yuklenenSekmeler.finans) finansalIslemleriYukle(1);
-    });
-}
-
-// --- Veri Yükleme Fonksiyonları (REFAKTÖR EDİLDİ) ---
-
-async function ozetVerileriniYukle() {
-    const ozetKartlariContainer = document.getElementById('ozet-kartlari');
-    const baslikElementi = document.getElementById('tedarikci-adi-baslik');
-    baslikElementi.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
-    ozetKartlariContainer.innerHTML = '<div class="col-12 text-center p-5"><div class="spinner-border"></div></div>';
-
-    try {
-        const data = await api.request(`/api/tedarikci/${TEDARIKCI_ID}/ozet`);
-        baslikElementi.innerText = data.isim;
-        ozetKartlariniDoldur(data);
-    } catch (error) {
-        baslikElementi.innerText = "Hata";
-        ozetKartlariContainer.innerHTML = `<div class="col-12 text-center p-4 text-danger">${error.message}</div>`;
+    if(yemTab) {
+        yemTab.addEventListener('show.bs.tab', () => {
+            if (!yuklenenSekmeler.yem) yemIslemleriniYukle(1);
+        });
+    }
+    if(finansTab) {
+        finansTab.addEventListener('show.bs.tab', () => {
+            if (!yuklenenSekmeler.finans) finansalIslemleriYukle(1);
+        });
     }
 }
 
+// Tedarikçi özet verilerini yükler
+async function ozetVerileriniYukle() {
+    const ozetKartlariContainer = document.getElementById('ozet-kartlari');
+    const baslikElementi = document.getElementById('tedarikci-adi-baslik');
+    if(baslikElementi) baslikElementi.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
+    if(ozetKartlariContainer) ozetKartlariContainer.innerHTML = '<div class="col-12 text-center p-5"><div class="spinner-border"></div></div>';
+
+    try {
+        // TEDARIKCI_ID değişkeninin HTML içinde tanımlı olduğunu varsayıyoruz
+        const data = await api.request(`/api/tedarikci/${TEDARIKCI_ID}/ozet`); // api.js'den
+        if(baslikElementi) baslikElementi.innerText = data.isim;
+        ozetKartlariniDoldur(data); // Bu dosyadaki fonksiyon
+    } catch (error) {
+        if(baslikElementi) baslikElementi.innerText = "Hata";
+        if(ozetKartlariContainer) ozetKartlariContainer.innerHTML = `<div class="col-12 text-center p-4 text-danger">${error.message}</div>`;
+        gosterMesaj("Özet yüklenemedi: " + error.message, "danger"); // ui.js'den
+    }
+}
+
+// Süt girdilerini yükler
 async function sutGirdileriniYukle(sayfa = 1) {
     yuklenenSekmeler.sut = true;
-    await genelVeriYukleyici({
+    await genelVeriYukleyici({ // data-loader.js'den
         apiURL: `/api/tedarikci/${TEDARIKCI_ID}/sut_girdileri?sayfa=${sayfa}&limit=${KAYIT_SAYISI}`,
         veriAnahtari: 'girdiler',
         tabloBodyId: 'sut-girdileri-tablosu',
-        kartContainerId: 'sut-kart-gorunumu',
+        kartContainerId: 'sut-kart-gorunumu', // Düzeltme: ID'ler farklı olmalı
         veriYokId: 'sut-veri-yok',
         sayfalamaId: 'sut-sayfalama',
         tabloRenderFn: renderSutAsTable,
@@ -96,17 +108,19 @@ async function sutGirdileriniYukle(sayfa = 1) {
         yukleFn: sutGirdileriniYukle,
         sayfa: sayfa,
         kayitSayisi: KAYIT_SAYISI,
-        mevcutGorunum: mevcutGorunum
+        // tedarikciDetayMevcutGorunum kullanılıyor
+        mevcutGorunum: tedarikciDetayMevcutGorunum
     });
 }
 
+// Yem işlemlerini yükler
 async function yemIslemleriniYukle(sayfa = 1) {
     yuklenenSekmeler.yem = true;
-    await genelVeriYukleyici({
+    await genelVeriYukleyici({ // data-loader.js'den
         apiURL: `/api/tedarikci/${TEDARIKCI_ID}/yem_islemleri?sayfa=${sayfa}&limit=${KAYIT_SAYISI}`,
         veriAnahtari: 'islemler',
         tabloBodyId: 'yem-islemleri-tablosu',
-        kartContainerId: 'yem-kart-gorunumu',
+        kartContainerId: 'yem-kart-gorunumu', // Düzeltme: ID'ler farklı olmalı
         veriYokId: 'yem-veri-yok',
         sayfalamaId: 'yem-sayfalama',
         tabloRenderFn: renderYemAsTable,
@@ -114,17 +128,19 @@ async function yemIslemleriniYukle(sayfa = 1) {
         yukleFn: yemIslemleriniYukle,
         sayfa: sayfa,
         kayitSayisi: KAYIT_SAYISI,
-        mevcutGorunum: mevcutGorunum
+        // tedarikciDetayMevcutGorunum kullanılıyor
+        mevcutGorunum: tedarikciDetayMevcutGorunum
     });
 }
 
+// Finansal işlemleri yükler
 async function finansalIslemleriYukle(sayfa = 1) {
     yuklenenSekmeler.finans = true;
-    await genelVeriYukleyici({
+    await genelVeriYukleyici({ // data-loader.js'den
         apiURL: `/api/tedarikci/${TEDARIKCI_ID}/finansal_islemler?sayfa=${sayfa}&limit=${KAYIT_SAYISI}`,
         veriAnahtari: 'islemler',
         tabloBodyId: 'finansal-islemler-tablosu',
-        kartContainerId: 'finans-kart-gorunumu',
+        kartContainerId: 'finans-kart-gorunumu', // Düzeltme: ID'ler farklı olmalı
         veriYokId: 'finans-veri-yok',
         sayfalamaId: 'finans-sayfalama',
         tabloRenderFn: renderFinansAsTable,
@@ -132,28 +148,34 @@ async function finansalIslemleriYukle(sayfa = 1) {
         yukleFn: finansalIslemleriYukle,
         sayfa: sayfa,
         kayitSayisi: KAYIT_SAYISI,
-        mevcutGorunum: mevcutGorunum
+        // tedarikciDetayMevcutGorunum kullanılıyor
+        mevcutGorunum: tedarikciDetayMevcutGorunum
     });
 }
 
-// --- Render Fonksiyonları (DEĞİŞİKLİK YOK) ---
+// --- RENDER FONKSİYONLARI ---
 
+// Süt girdisini tablo satırı olarak render et
 function renderSutAsTable(container, veriler) {
     veriler.forEach(girdi => {
         const tutar = parseFloat(girdi.litre || 0) * parseFloat(girdi.fiyat || 0);
+        // Kullanıcı adını güvenli hale getir
+        const kullaniciAdi = girdi.kullanicilar ? utils.sanitizeHTML(girdi.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<tr>
-            <td>${new Date(girdi.taplanma_tarihi).toLocaleDateString('tr-TR')}</td>
+            <td>${new Date(girdi.tarih).toLocaleDateString('tr-TR')}</td>
             <td class="text-end">${parseFloat(girdi.litre).toFixed(2)} L</td>
             <td class="text-end">${parseFloat(girdi.fiyat).toFixed(2)} TL</td>
             <td class="text-end">${tutar.toFixed(2)} TL</td>
-            <td>${girdi.kullanicilar.kullanici_adi}</td>
+            <td>${kullaniciAdi}</td>
         </tr>`;
     });
 }
 
+// Süt girdisini kart olarak render et
 function renderSutAsCards(container, veriler) {
     veriler.forEach(girdi => {
         const tutar = parseFloat(girdi.litre || 0) * parseFloat(girdi.fiyat || 0);
+        const kullaniciAdi = girdi.kullanicilar ? utils.sanitizeHTML(girdi.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<div class="col-lg-4 col-md-6 col-12">
             <div class="card p-2 h-100">
                 <div class="card-body p-2">
@@ -163,8 +185,8 @@ function renderSutAsCards(container, veriler) {
                     </div>
                     <div class="text-secondary small mt-1">Birim Fiyat: ${parseFloat(girdi.fiyat).toFixed(2)} TL</div>
                     <div class="d-flex justify-content-between align-items-end mt-2">
-                        <small class="text-secondary">${new Date(girdi.taplanma_tarihi).toLocaleDateString('tr-TR')}</small>
-                        <small class="text-secondary">Giren: ${girdi.kullanicilar.kullanici_adi}</small>
+                        <small class="text-secondary">${new Date(girdi.tarih).toLocaleDateString('tr-TR')}</small>
+                        <small class="text-secondary">Giren: ${kullaniciAdi}</small>
                     </div>
                 </div>
             </div>
@@ -172,33 +194,39 @@ function renderSutAsCards(container, veriler) {
     });
 }
 
+// Yem işlemini tablo satırı olarak render et
 function renderYemAsTable(container, veriler) {
     veriler.forEach(islem => {
+        const yemAdi = islem.yem_adi ? utils.sanitizeHTML(islem.yem_adi) : 'Bilinmeyen Yem';
+        const kullaniciAdi = islem.kullanicilar ? utils.sanitizeHTML(islem.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<tr>
-            <td>${new Date(islem.islem_tarihi).toLocaleDateString('tr-TR')}</td>
-            <td>${islem.yem_urunleri.yem_adi}</td>
+            <td>${new Date(islem.tarih).toLocaleDateString('tr-TR')}</td>
+            <td>${yemAdi}</td>
             <td class="text-end">${parseFloat(islem.miktar_kg).toFixed(2)} KG</td>
-            <td class="text-end">${parseFloat(islem.islem_anindaki_birim_fiyat).toFixed(2)} TL</td>
+            <td class="text-end">${parseFloat(islem.birim_fiyat).toFixed(2)} TL</td>
             <td class="text-end">${parseFloat(islem.toplam_tutar).toFixed(2)} TL</td>
-            <td>${islem.kullanicilar.kullanici_adi}</td>
+            <td>${kullaniciAdi}</td>
         </tr>`;
     });
 }
 
+// Yem işlemini kart olarak render et
 function renderYemAsCards(container, veriler) {
     veriler.forEach(islem => {
+        const yemAdi = islem.yem_adi ? utils.sanitizeHTML(islem.yem_adi) : 'Bilinmeyen Yem';
+        const kullaniciAdi = islem.kullanicilar ? utils.sanitizeHTML(islem.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<div class="col-lg-4 col-md-6 col-12">
             <div class="card p-2 h-100">
                 <div class="card-body p-2">
-                    <h6 class="card-title mb-1">${islem.yem_urunleri.yem_adi}</h6>
+                    <h6 class="card-title mb-1">${yemAdi}</h6>
                     <div class="d-flex justify-content-between">
                         <span class="fs-4 fw-bold text-primary">${parseFloat(islem.miktar_kg).toFixed(2)} KG</span>
                         <span class="fs-5 fw-bold text-danger">${parseFloat(islem.toplam_tutar).toFixed(2)} TL</span>
                     </div>
-                     <div class="text-secondary small mt-1">Birim Fiyat: ${parseFloat(islem.islem_anindaki_birim_fiyat).toFixed(2)} TL</div>
+                     <div class="text-secondary small mt-1">Birim Fiyat: ${parseFloat(islem.birim_fiyat).toFixed(2)} TL</div>
                     <div class="d-flex justify-content-between align-items-end mt-2">
-                        <small class="text-secondary">${new Date(islem.islem_tarihi).toLocaleDateString('tr-TR')}</small>
-                        <small class="text-secondary">Giren: ${islem.kullanicilar.kullanici_adi}</small>
+                        <small class="text-secondary">${new Date(islem.tarih).toLocaleDateString('tr-TR')}</small>
+                        <small class="text-secondary">Giren: ${kullaniciAdi}</small>
                     </div>
                 </div>
             </div>
@@ -206,39 +234,45 @@ function renderYemAsCards(container, veriler) {
     });
 }
 
+// Finansal işlemi tablo olarak render et
 function renderFinansAsTable(container, veriler) {
     veriler.forEach(islem => {
+        const kullaniciAdi = islem.kullanicilar ? utils.sanitizeHTML(islem.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<tr>
-            <td>${new Date(islem.islem_tarihi).toLocaleDateString('tr-TR')}</td>
-            <td><span class="badge bg-${islem.islem_tipi === 'Ödeme' ? 'success' : 'warning'}">${islem.islem_tipi}</span></td>
+            <td>${new Date(islem.tarih).toLocaleDateString('tr-TR')}</td>
+            <td><span class="badge bg-${islem.islem_tipi === 'Ödeme' ? 'success' : 'warning'}">${utils.sanitizeHTML(islem.islem_tipi)}</span></td>
             <td class="text-end">${parseFloat(islem.tutar).toFixed(2)} TL</td>
-            <td>${islem.aciklama || '-'}</td>
-            <td>${islem.kullanicilar.kullanici_adi}</td>
+            <td>${utils.sanitizeHTML(islem.aciklama) || '-'}</td>
+            <td>${kullaniciAdi}</td>
         </tr>`;
     });
 }
 
+// Finansal işlemi kart olarak render et
 function renderFinansAsCards(container, veriler) {
     veriler.forEach(islem => {
         const isOdeme = islem.islem_tipi === 'Ödeme';
+        const kullaniciAdi = islem.kullanicilar ? utils.sanitizeHTML(islem.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<div class="col-lg-4 col-md-6 col-12">
              <div class="finance-card ${isOdeme ? 'odeme' : 'avans'}" style="padding: 0.5rem; height: 100%;">
                 <div class="d-flex justify-content-between align-items-center">
                     <h5 class="tutar ${isOdeme ? 'text-success' : 'text-danger'}" style="font-size: 1.5rem;">${parseFloat(islem.tutar).toFixed(2)} TL</h5>
-                    <span class="badge bg-${isOdeme ? 'success' : 'warning'}">${islem.islem_tipi}</span>
+                    <span class="badge bg-${isOdeme ? 'success' : 'warning'}">${utils.sanitizeHTML(islem.islem_tipi)}</span>
                 </div>
-                <p class="aciklama flex-grow-1">${islem.aciklama || 'Açıklama yok'}</p>
+                <p class="aciklama flex-grow-1">${utils.sanitizeHTML(islem.aciklama) || 'Açıklama yok'}</p>
                 <div class="d-flex justify-content-between align-items-end">
-                    <small class="text-secondary">${new Date(islem.islem_tarihi).toLocaleDateString('tr-TR')}</small>
-                    <small class="text-secondary">Giren: ${islem.kullanicilar.kullanici_adi}</small>
+                    <small class="text-secondary">${new Date(islem.tarih).toLocaleDateString('tr-TR')}</small>
+                    <small class="text-secondary">Giren: ${kullaniciAdi}</small>
                 </div>
             </div>
         </div>`;
     });
 }
 
+// Özet kartlarını doldur
 function ozetKartlariniDoldur(ozet) {
     const container = document.getElementById('ozet-kartlari');
+    if (!container) return; // Element yoksa çık
     const toplam_sut_alacagi = parseFloat(ozet.toplam_sut_alacagi || 0).toFixed(2);
     const toplam_yem_borcu = parseFloat(ozet.toplam_yem_borcu || 0).toFixed(2);
     const toplam_odeme = parseFloat(ozet.toplam_odeme || 0).toFixed(2);
@@ -252,23 +286,28 @@ function ozetKartlariniDoldur(ozet) {
     `;
 }
 
-// --- PDF Fonksiyonları (DEĞİŞİKLİK YOK) ---
+// --- PDF Fonksiyonları ---
+
+// Hesap özeti PDF'ini indir
 function hesapOzetiIndir() {
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
     const url = `/api/tedarikci/${TEDARIKCI_ID}/hesap_ozeti_pdf?ay=${ay}&yil=${yil}`;
-    
+
+    // utils.js'deki indirVeAc fonksiyonunu kullan
     indirVeAc(url, 'pdf-indir-btn', {
         success: 'Hesap özeti indirildi ve yeni sekmede açıldı.',
         error: 'PDF özeti oluşturulurken hata oluştu.'
     });
 }
 
+// Müstahsil makbuzu PDF'ini indir
 function mustahsilMakbuzuIndir() {
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
     const url = `/api/tedarikci/${TEDARIKCI_ID}/mustahsil_makbuzu_pdf?ay=${ay}&yil=${yil}`;
 
+    // utils.js'deki indirVeAc fonksiyonunu kullan
     indirVeAc(url, 'mustahsil-indir-btn', {
         success: 'Müstahsil makbuzu indirildi ve yeni sekmede açıldı.',
         error: 'Müstahsil makbuzu oluşturulurken hata oluştu.'

@@ -27,12 +27,17 @@
 </head>
 <body
     data-app-version="{{ APP_VERSION }}"
+    {% if session.get('user') %}
+    data-user-role="{{ session.get('user', {}).get('rol', '') }}"
+    data-lisans-bitis="{{ session.get('user', {}).get('lisans_bitis_tarihi', '') }}"
+    {% endif %}
     {% block body_attributes %}{% endblock %}
 >
 
     {% block content %}{% endblock %}
 
-    {# Alt Navigasyon Barı #}
+    {# Alt Navigasyon Barı - Sadece giriş yapıldıysa göster #}
+    {% if session.get('user') %}
     <nav class="navbar fixed-bottom shadow-lg d-lg-none bottom-nav-custom"> {# bg-light kaldırıldı #}
         <div class="container-fluid">
             <ul class="nav nav-fill w-100">
@@ -69,11 +74,20 @@
                     </a>
                 </li>
                 {% endif %}
+                 {# YENİ: Profil linki eklendi (her rol görebilir) #}
+                <li class="nav-item">
+                    <a class="nav-link bottom-nav-link" href="{{ url_for('profil.profil_sayfasi') }}" data-page="profil">
+                         <i class="bi bi-person-circle d-block fs-4 mb-1"></i>
+                        <span class="bottom-nav-text">Profil</span>
+                    </a>
+                </li>
             </ul>
         </div>
     </nav>
+    {% endif %} {# session.get('user') kontrolü sonu #}
 
-    {# iOS Yükleme İstemcisi #}
+
+    {# iOS Yükleme İstemcisi (Her zaman yüklenebilir) #}
     <div id="ios-install-prompt" class="toast align-items-center text-white bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="d-flex">
             <div class="toast-body">
@@ -83,63 +97,71 @@
         </div>
     </div>
 
-    {# Genel Scriptler #}
+    {# Genel Scriptler (Her zaman yüklenmeli) #}
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    {# api.js ve ui.js genel fonksiyonlar içerdiği için her zaman yüklenebilir #}
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/store.js') }}"></script>
     <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/data-loader.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/chart-manager.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
-    <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
-    <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/push-manager.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/ios-install-prompt.js') }}"></script>
 
-    {# Alt bar aktif link JS'i #}
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const currentPage = window.location.pathname;
-            const navLinks = document.querySelectorAll('.bottom-nav-link');
-            navLinks.forEach(link => {
-                const linkPath = link.getAttribute('href');
-                if (linkPath === '/' && currentPage !== '/') return;
+    {# SADECE GİRİŞ YAPILDIYSA YÜKLENECEK SCRIPTLER #}
+    {% if session.get('user') %}
+        <script src="{{ url_for('static', filename='js/store.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/data-loader.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/chart-manager.js') }}"></script>
+        {# charts.js'i sadece raporlar ve ana panel kullanıyor gibi,
+           ama tema değişimi için chart-manager.js'e ihtiyaç var, o yüzden burada kalsın #}
+        <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+        <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
+        <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/push-manager.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/ios-install-prompt.js') }}"></script>
 
-                let isActive = false;
-                // Daha basit ve kapsayıcı kontrol
-                if (link.dataset.page === 'panel' && currentPage === '/panel') isActive = true;
-                else if (link.dataset.page === 'tedarikciler' && (currentPage.startsWith('/tedarikciler') || currentPage.startsWith('/tedarikci/'))) isActive = true;
-                else if (link.dataset.page === 'raporlar' && currentPage.startsWith('/raporlar')) isActive = true;
-                else if (link.dataset.page === 'yem' && currentPage.startsWith('/yem')) isActive = true; // /yem/yonetim ve diğerleri
-                else if (link.dataset.page === 'finans' && currentPage.startsWith('/finans')) isActive = true; // /finans/ ve diğerleri
+        {# Ana Panel ve Çiftçi Paneli Mantığı Scriptleri #}
+        <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/ciftci_panel.js') }}"></script>
 
-                if (isActive) { link.classList.add('active'); }
+        {# Alt bar aktif link JS'i #}
+        <script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const currentPage = window.location.pathname;
+                const navLinks = document.querySelectorAll('.bottom-nav-link');
+                navLinks.forEach(link => {
+                    const linkPath = link.getAttribute('href');
+                    // data-page attribute'u ile daha esnek kontrol
+                    const pageName = link.dataset.page;
+                    let isActive = false;
+
+                    if (pageName === 'panel' && currentPage === '/panel') isActive = true;
+                    else if (pageName === 'tedarikciler' && (currentPage.startsWith('/tedarikciler') || currentPage.startsWith('/tedarikci/'))) isActive = true;
+                    else if (pageName === 'raporlar' && currentPage.startsWith('/raporlar')) isActive = true;
+                    else if (pageName === 'yem' && currentPage.startsWith('/yem')) isActive = true;
+                    else if (pageName === 'finans' && currentPage.startsWith('/finans')) isActive = true;
+                    else if (pageName === 'profil' && currentPage.startsWith('/profil')) isActive = true; // Profil eklendi
+
+                    if (isActive) { link.classList.add('active'); }
+                });
             });
-        });
-    </script>
+        </script>
 
-    {# Service Worker Kaydı #}
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register("/service-worker.js")
-                    .then(registration => { console.log('Dinamik Service Worker başarıyla kaydedildi: ', registration); })
-                    .catch(error => { console.log('Dinamik Service Worker kaydı başarısız: ', error); });
-            });
-        }
-    </script>
-
-    {# Ana Panel ve Çiftçi Paneli Mantığı Scriptleri #}
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/ciftci_panel.js') }}"></script> {# YENİ EKLENDİ #}
+        {# Service Worker Kaydı (Sadece giriş yapıldıysa mantıklı) #}
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register("/service-worker.js")
+                        .then(registration => { console.log('Dinamik Service Worker başarıyla kaydedildi: ', registration); })
+                        .catch(error => { console.log('Dinamik Service Worker kaydı başarısız: ', error); });
+                });
+            }
+        </script>
+    {% endif %} {# session.get('user') kontrolü sonu #}
 
 
-    {# Sayfaya özel script'ler #}
+    {# Sayfaya özel script'ler (Her zaman en sonda) #}
     {% block scripts %}{% endblock %}
 
-    {# Modallar (Hakkında ve Şifre Değiştirme) #}
+    {# Hakkında Modalı (Her zaman erişilebilir olmalı) #}
     <div class="modal fade" id="hakkindaModal" tabindex="-1" aria-labelledby="hakkindaModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
@@ -148,7 +170,8 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <ul class="nav nav-tabs" id="hakkindaTab" role="tablist">
+                    {# Hakkında modalı içeriği aynı kalabilir #}
+                     <ul class="nav nav-tabs" id="hakkindaTab" role="tablist">
                         <li class="nav-item" role="presentation">
                             <button class="nav-link active" id="ozellikler-tab" data-bs-toggle="tab" data-bs-target="#ozellikler-pane" type="button" role="tab" aria-controls="ozellikler-pane" aria-selected="true">Özellikler & Kullanım</button>
                         </li>
@@ -159,16 +182,17 @@
                             <button class="nav-link" id="iletisim-tab" data-bs-toggle="tab" data-bs-target="#iletisim-pane" type="button" role="tab" aria-controls="iletisim-pane" aria-selected="false">İletişim & Destek</button>
                         </li>
                     </ul>
-                    <div class="tab-content pt-3" id="hakkindaTabContent">
+                     <div class="tab-content pt-3" id="hakkindaTabContent">
                         <div class="tab-pane fade show active" id="ozellikler-pane" role="tabpanel" aria-labelledby="ozellikler-tab" tabindex="0">
-                            <h5 class="fw-bold">Hızlı Başlangıç Rehberi</h5>
+                             <h5 class="fw-bold">Hızlı Başlangıç Rehberi</h5>
                             <p>Uygulamayı verimli bir şekilde kullanmaya başlamak için aşağıdaki adımları izleyebilirsiniz:</p>
                             <ol>
-                                <li><strong>Tedarikçilerinizi Ekleyin:</strong> Menüden "Tedarikçi Yönetimi"ne giderek süt aldığınız kişileri kaydedin.</li>
+                                <li><strong>Tedarikçilerinizi Ekleyin:</strong> Menüden "Tedarikçi Yönetimi"ne giderek süt aldığınız kişileri kaydedin. (Otomatik çiftçi hesabı da oluşacaktır.)</li>
                                 <li><strong>(İsteğe Bağlı) Yem Ürünlerini Tanımlayın:</strong> "Yem Yönetimi"nden sattığınız yemleri ve stokları girin.</li>
-                                <li><strong>Kullanıcıları Yönetin (Yetkiliyseniz):</strong> "Kullanıcı Yönetimi"nden toplayıcılarınızı ekleyin ve onlara tedarikçi atayın.</li>
-                                <li><strong>Veri Girişine Başlayın:</strong> Ana panelden günlük süt girdilerini, yem çıkışlarını ve "Finans Yönetimi"nden ödemeleri kaydedin.</li>
+                                <li><strong>Kullanıcıları Yönetin (Firma Yetkilisi):</strong> "Kullanıcı Yönetimi"nden toplayıcılarınızı ekleyin ve onlara tedarikçi atayın. Çiftçilerin şifresini sıfırlayabilirsiniz.</li>
+                                <li><strong>Veri Girişine Başlayın:</strong> Ana panelden günlük süt girdilerini, yem çıkışlarını ve "Finans Yönetimi"nden ödemeleri kaydedin (Toplayıcılar sadece atanmış tedarikçilere işlem yapabilir).</li>
                                 <li><strong>Raporları İnceleyin:</strong> "Raporlar" sayfasından veya tedarikçi detaylarından performansınızı takip edin, PDF çıktıları alın.</li>
+                                <li><strong>Çiftçi Portalı:</strong> Tedarikçi eklenince oluşan çiftçi hesabı ile giriş yapanlar kendi özetlerini görür.</li>
                             </ol>
                             <h5 class="fw-bold">Temel Özellikler</h5>
                             <ul>
@@ -176,10 +200,11 @@
                                 <li>Çevrimdışı (Offline) çalışma ve otomatik senkronizasyon.</li>
                                 <li>Detaylı raporlama (Günlük, Aylık, Tedarikçi Bazlı) ve grafiksel analizler.</li>
                                 <li>Otomatik PDF Hesap Özeti ve Müstahsil Makbuzu oluşturma.</li>
-                                <li>Kullanıcı rolleri (Firma Yetkilisi, Toplayıcı, Muhasebeci, Çiftçi - yakında).</li>
-                                <li>Tedarikçi atama ve veri izolasyonu.</li>
+                                <li>Kullanıcı rolleri (Firma Yetkilisi, Toplayıcı, Muhasebeci, Çiftçi).</li>
+                                <li>Tedarikçi atama ve veri izolasyonu (Toplayıcılar için).</li>
+                                <li>Otomatik Çiftçi hesabı oluşturma ve şifre sıfırlama.</li>
                                 <li>Yem stok takibi.</li>
-                                <li>Mobil uyumlu modern arayüz (PWA).</li>
+                                <li>Mobil uyumlu modern arayüz (PWA) ve bildirimler.</li>
                             </ul>
                         </div>
                         <div class="tab-pane fade" id="guncellemeler-pane" role="tabpanel" aria-labelledby="guncellemeler-tab" tabindex="0">
@@ -202,10 +227,12 @@
                                         </h2>
                                         <div id="collapse-{{ surum.id }}" class="accordion-collapse collapse {{ 'show' if loop.first }}" data-bs-parent="#guncellemeNotlariAccordion">
                                             <div class="accordion-body">
+                                                {# Sürüm notlarını markdown gibi işle (basic) #}
                                                 <ul>
                                                 {% for line in surum.notlar.split('\n') %}
-                                                    {% if line.strip() %}
-                                                    <li>{{ line.replace('- ', '') }}</li>
+                                                    {% set cleaned_line = line.strip().lstrip('- ').lstrip('* ') %}
+                                                    {% if cleaned_line %}
+                                                    <li>{{ cleaned_line | safe }}</li> {# safe filtresi basit HTML'e izin verir #}
                                                     {% endif %}
                                                 {% endfor %}
                                                 </ul>
@@ -233,6 +260,7 @@
             </div>
         </div>
     </div>
+    {# Şifre Değiştirme Modalı (Her zaman erişilebilir olmalı) #}
     <div class="modal fade" id="sifreDegistirModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Şifre Değiştir</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-2"><label for="mevcut-sifre-input" class="form-label">Mevcut Şifreniz</label><input type="password" class="form-control form-control-sm" id="mevcut-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-input" class="form-label">Yeni Şifre</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-tekrar-input" class="form-label">Yeni Şifre (Tekrar)</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-tekrar-input"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sifreDegistir()">Kaydet</button></div></div></div></div>
 
 </body>
