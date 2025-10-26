@@ -16,21 +16,21 @@ let veriOnayModal = null; // Onay modalı için yeni değişken
  */
 function initOfflineState() {
     const offlineUserString = localStorage.getItem('offlineUser');
-    
+
     if (!document.body.dataset.userRole) {
         if (offlineUserString) {
             const user = JSON.parse(offlineUserString);
-            
+
             document.body.dataset.userRole = user.rol;
             document.body.dataset.lisansBitis = user.lisans_bitis_tarihi;
 
             const userNameEl = document.getElementById('user-name-placeholder');
             const companyNameEl = document.getElementById('company-name-placeholder');
             const veriGirisPaneli = document.getElementById('veri-giris-paneli');
-            
+
             if (userNameEl) userNameEl.textContent = user.kullanici_adi;
             if (companyNameEl) companyNameEl.textContent = user.sirket_adi;
-            
+
             if (user.rol === 'muhasebeci' && veriGirisPaneli) {
                 veriGirisPaneli.style.display = 'none';
             } else if (veriGirisPaneli) {
@@ -45,22 +45,36 @@ function initOfflineState() {
 
 // Uygulama başlangıç noktası
 window.onload = async function() {
-    initOfflineState();
-    ui.init(); // Temel UI bileşenlerini (modallar, flatpickr) başlatır
-    veriOnayModal = new bootstrap.Modal(document.getElementById('veriOnayModal')); 
+    initOfflineState(); // Rolü belirler (kullaniciRolu global değişkenine atar)
+
+    // --- YENİ: Rol Kontrolü ve Yönlendirme ---
+    if (kullaniciRolu === 'ciftci') {
+        // Eğer kullanıcı çiftçi ise, ciftci_panel.js'deki başlatma fonksiyonunu çağır
+        if (typeof initCiftciPanel === 'function') {
+            initCiftciPanel(); // Bu fonksiyonu ciftci_panel.js'de oluşturacağız
+        } else {
+            console.error("initCiftciPanel fonksiyonu bulunamadı. ciftci_panel.js yüklendi mi?");
+        }
+        // Çiftçi için bu dosyadaki diğer işlemler yapılmayacak.
+        return;
+    }
+
+    // --- Çiftçi Değilse Normal Panel Başlatma İşlemleri ---
+    ui.init();
+    veriOnayModal = new bootstrap.Modal(document.getElementById('veriOnayModal'));
     ui.lisansUyarisiKontrolEt();
 
-    // --- TomSelect (Tedarikçi Seçici) BAŞLATMA KODU ---
-    if (document.getElementById('veri-giris-paneli').style.display !== 'none' && document.getElementById('tedarikci-sec')) {
+    // TomSelect (Tedarikçi Seçici) BAŞLATMA KODU
+    const veriGirisPaneli = document.getElementById('veri-giris-paneli');
+    if (veriGirisPaneli && document.getElementById('tedarikci-sec')) { // Muhasebeci kontrolü kaldırıldı, rol kontrolü aşağıda yapılıyor
         ui.tedarikciSecici = new TomSelect("#tedarikci-sec", {
             create: false,
             sortField: { field: "text", direction: "asc" },
             onChange: (value) => {
-                if (value && navigator.onLine) {
+                 if (value && navigator.onLine) {
                     api.fetchTedarikciIstatistikleri(value)
                         .then(data => { mevcutTedarikciIstatistikleri = data[0] || null; })
                         .catch(err => { mevcutTedarikciIstatistikleri = null; });
-
                     api.fetchSonFiyat(value).then(data => {
                        if(data && data.son_fiyat) {
                            const fiyatInput = document.getElementById('fiyat-input');
@@ -76,6 +90,23 @@ window.onload = async function() {
         });
     }
 
+    // Muhasebeci ise girdi formunu gizle
+    if (veriGirisPaneli) {
+        veriGirisPaneli.style.display = (kullaniciRolu === 'muhasebeci') ? 'none' : 'block';
+    }
+
+
+    mevcutGorunum = localStorage.getItem('anaPanelGorunum') || 'liste';
+    gorunumuAyarla(mevcutGorunum); // Normal panel için görünümü ayarla
+    await baslangicVerileriniYukle(); // Normal panel verilerini yükle
+
+    // Kaydet butonu olay dinleyicisi
+    const kaydetBtn = document.getElementById('kaydet-girdi-btn');
+    if(kaydetBtn) {
+        kaydetBtn.addEventListener('click', sutGirdisiEkle);
+    }
+};
+
     mevcutGorunum = localStorage.getItem('anaPanelGorunum') || 'liste';
     gorunumuAyarla(mevcutGorunum);
 
@@ -85,32 +116,20 @@ window.onload = async function() {
     if(kaydetBtn) {
         kaydetBtn.addEventListener('click', sutGirdisiEkle);
     }
-    
-    // --- EKSİK OLAN KISIM EKLENDİ ---
-    // Modallar kapandıktan sonra grafikleri yenilemek için olay dinleyicileri
-    const duzenleModalEl = document.getElementById('duzenleModal');
-    const silmeOnayModalEl = document.getElementById('silmeOnayModal');
-    
-    const grafikYenileCallback = () => {
-        charts.haftalikGrafigiOlustur();
-        charts.tedarikciGrafigiOlustur();
-    };
-
-    if (duzenleModalEl) duzenleModalEl.addEventListener('hidden.bs.modal', grafikYenileCallback);
-    if (silmeOnayModalEl) silmeOnayModalEl.addEventListener('hidden.bs.modal', grafikYenileCallback);
-    // --- EKLEME BİTTİ ---
-};
 
 /**
  * Uygulamanın ihtiyaç duyduğu tüm başlangıç verilerini paralel olarak yükler.
  */
 async function baslangicVerileriniYukle() {
     document.getElementById('girdiler-baslik').textContent = 'Bugünkü Girdiler';
-    
+
     const promises = [
-        ozetVerileriniYukle(),
+        ozetVerileriniYukle()
+        /* --- KALDIRILDI: Grafik oluşturma çağrıları ---
+        ,
         charts.haftalikGrafigiOlustur(),
         charts.tedarikciGrafigiOlustur()
+        --- KALDIRMA BİTTİ --- */
     ];
 
     if (document.body.dataset.userRole !== 'muhasebeci') {
@@ -171,16 +190,16 @@ async function girdileriGoster(sayfa = 1, tarih = null) {
         } else {
             ui.renderGirdiler([], mevcutGorunum);
         }
-        return; 
+        return;
     }
-    
+
     try {
         const sunucuVerisi = await api.fetchSutGirdileri(effectiveDate, sayfa);
         localStorage.setItem(cacheKey, JSON.stringify(sunucuVerisi));
 
         const bekleyenGirdiler = await bekleyenGirdileriGetir();
         const { tumGirdiler, toplamGirdi } = ui.mergeOnlineOfflineGirdiler(sunucuVerisi, bekleyenGirdiler, effectiveDate);
-        
+
         ui.renderGirdiler(tumGirdiler, mevcutGorunum);
         ui.sayfalamaNavOlustur('girdiler-sayfalama', toplamGirdi, sayfa, girdilerSayfaBasi, (yeniSayfa) => girdileriGoster(yeniSayfa, effectiveDate));
 
@@ -197,7 +216,7 @@ async function tedarikcileriYukle() {
     if (!ui.tedarikciSecici) return;
     try {
         const tedarikciler = await store.getTedarikciler();
-        ui.tumTedarikciler = tedarikciler; 
+        ui.tumTedarikciler = tedarikciler;
         ui.doldurTedarikciSecici(tedarikciler);
     } catch (error) {
         console.error("Tedarikçiler yüklenirken hata:", error);
@@ -220,8 +239,7 @@ function girdileriFiltrele() {
 }
 
 function filtreyiTemizle() {
-    ui.tarihFiltreleyici.setDate(new Date(), true);
-    baslangicVerileriniYukle();
+    ui.tarihFiltreleyici.setDate(new Date(), true); // onChange tetiklenir, tekrar yüklemeye gerek yok
 }
 
 async function sutGirdisiEkle() {
@@ -254,7 +272,7 @@ async function degeriDogrulaVeKaydet(girdi) {
             altSinir = ortalama_litre - (standart_sapma * 2);
             ustSinir = ortalama_litre + (standart_sapma * 2);
         } else {
-            const tolerans = Math.max(ortalama_litre * 0.5, 5); 
+            const tolerans = Math.max(ortalama_litre * 0.5, 5);
             altSinir = ortalama_litre - tolerans;
             ustSinir = ortalama_litre + tolerans;
         }
@@ -262,7 +280,7 @@ async function degeriDogrulaVeKaydet(girdi) {
         if (girilenLitre < altSinir || girilenLitre > ustSinir) {
             const mesaj = `Girdiğiniz <strong>${girilenLitre} Litre</strong> değeri, bu tedarikçinin ortalama (${ortalama_litre.toFixed(1)} L) girdisinden farklı görünüyor. Emin misiniz?`;
             document.getElementById('onay-mesaji').innerHTML = mesaj;
-            
+
             document.getElementById('onayla-ve-kaydet-btn').onclick = async () => {
                 veriOnayModal.hide();
                 await gercekKaydetmeIsleminiYap(girdi);
@@ -280,7 +298,7 @@ async function gercekKaydetmeIsleminiYap(yeniGirdi) {
         ui.toggleGirdiKaydetButton(true);
         try {
             const isOfflineUserValid = await ui.checkOfflineUserLicense();
-            if (!isOfflineUserValid) return; 
+            if (!isOfflineUserValid) return;
             const basarili = await kaydetCevrimdisi(yeniGirdi);
             if (basarili) {
                 ui.resetGirdiFormu();
@@ -308,7 +326,7 @@ async function gercekKaydetmeIsleminiYap(yeniGirdi) {
         </div>
         <p class="mb-1 girdi-detay">Toplayan: ${kullaniciAdi} | Saat: ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</p>
     `;
-    
+
     veriYokMesaji.style.display = 'none';
     if (listeElementi.firstChild) {
         listeElementi.insertBefore(geciciElement, listeElementi.firstChild);
@@ -324,22 +342,24 @@ async function gercekKaydetmeIsleminiYap(yeniGirdi) {
         gosterMesaj("Süt girdisi başarıyla kaydedildi.", "success");
         const bugun = utils.getLocalDateString();
         ui.updateOzetPanels(result.yeni_ozet, bugun);
-        
+
+        /* --- KALDIRILDI: Grafik güncelleme çağrıları ---
         charts.haftalikGrafigiOlustur();
         charts.tedarikciGrafigiOlustur();
+        --- KALDIRMA BİTTİ --- */
 
         await girdileriGoster(1, bugun);
 
     } catch (error) {
         console.error("İyimser ekleme başarısız oldu:", error);
         gosterMesaj("Kayıt başarısız. İnternet bağlantınızı kontrol edin.", "danger");
-        
+
         document.getElementById(geciciId)?.remove();
-        
+
         ui.tedarikciSecici.setValue(orjinalFormVerisi.tedarikci_id);
         document.getElementById('litre-input').value = orjinalFormVerisi.litre;
         document.getElementById('fiyat-input').value = orjinalFormVerisi.fiyat;
-        
+
         if (listeElementi.children.length === 0) {
             veriYokMesaji.style.display = 'block';
         }
@@ -356,12 +376,12 @@ async function sutGirdisiDuzenle() {
         gosterMesaj("Lütfen yeni litre ve fiyat değerlerini girin.", "warning");
         return;
     }
-    
+
     try {
-        const result = await api.updateSutGirdisi(girdiId, { 
-            yeni_litre: parseFloat(yeniLitre), 
+        const result = await api.updateSutGirdisi(girdiId, {
+            yeni_litre: parseFloat(yeniLitre),
             yeni_fiyat: parseFloat(yeniFiyat),
-            duzenleme_sebebi: duzenlemeSebebi 
+            duzenleme_sebebi: duzenlemeSebebi
         });
         gosterMesaj("Girdi başarıyla güncellendi.", "success");
         ui.duzenleModal.hide();
@@ -392,7 +412,7 @@ async function sutGirdisiSil() {
     silinecekElement.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
     silinecekElement.style.opacity = '0';
     silinecekElement.style.transform = 'translateX(-50px)';
-    
+
     setTimeout(() => { if(silinecekElement.parentNode) silinecekElement.remove() }, 400);
 
     try {
@@ -404,7 +424,7 @@ async function sutGirdisiSil() {
     } catch (error) {
         console.error("İyimser silme başarısız oldu:", error);
         gosterMesaj('Silme işlemi başarısız, girdi geri yüklendi.', 'danger');
-        
+
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = originalHTML;
         const restoredElement = tempDiv.firstChild;
@@ -419,7 +439,7 @@ async function sutGirdisiSil() {
 
 async function gecmisiGoster(girdiId) {
     ui.gecmisModal.show();
-    ui.renderGecmisModalContent(null, true); 
+    ui.renderGecmisModalContent(null, true);
     try {
         const gecmisKayitlari = await api.fetchGirdiGecmisi(girdiId);
         ui.renderGecmisModalContent(gecmisKayitlari);
@@ -465,9 +485,7 @@ async function verileriDisaAktar() {
 
 function gorunumuAyarla(aktifGorunum) {
     document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
-    document.getElementById(`${aktifGorunum}-gorunumu`).style.display = 'block';
-    document.getElementById('btn-view-list').classList.toggle('active', aktifGorunum === 'liste');
-    document.getElementById('btn-view-card').classList.toggle('active', aktifGorunum === 'kart');
+    document.getElementById(`${aktifGorunum}-gorunumu`).style.display = aktifGorunum === 'liste' ? 'block' : 'flex'; // Kartlar için flex kullanabiliriz
 }
 
 function gorunumuDegistir(yeniGorunum) {
@@ -477,4 +495,3 @@ function gorunumuDegistir(yeniGorunum) {
     gorunumuAyarla(yeniGorunum);
     girdileriGoster(1, ui.tarihFiltreleyici.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : null);
 }
-

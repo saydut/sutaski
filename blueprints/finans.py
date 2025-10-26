@@ -20,9 +20,17 @@ def finans_sayfasi():
 @login_required
 def get_finansal_islemler():
     try:
-        sirket_id = session['user']['sirket_id']
+        # GÜNCELLEME: Session'dan kullanıcı bilgilerini alıyoruz.
+        user_info = session['user']
+        sirket_id = user_info['sirket_id']
+        kullanici_id = user_info['id']
+        rol = user_info['rol']
+        
         sayfa = int(request.args.get('sayfa', 1))
-        islemler, toplam_sayi = finans_service.get_paginated_transactions(sirket_id, sayfa, limit=15)
+        
+        # GÜNCELLEME: Servis fonksiyonunu yeni parametrelerle çağırıyoruz.
+        islemler, toplam_sayi = finans_service.get_paginated_transactions(sirket_id, kullanici_id, rol, sayfa, limit=15)
+        
         return jsonify({"islemler": islemler, "toplam_kayit": toplam_sayi})
     except Exception:
         return jsonify({"error": "Finansal işlemler listelenirken bir sunucu hatası oluştu."}), 500

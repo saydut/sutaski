@@ -6,23 +6,22 @@
 
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
-    
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#3B82F6"/>
-    
+
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icon.png') }}">
-    <!-- YENİ: iOS için PWA meta etiketleri -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Dijital Mandıra">
-    
+
     <title>{% block title %}Süt Takip Sistemi{% endblock %}</title>
     {% block head_extra %}{% endblock %}
 </head>
@@ -33,7 +32,48 @@
 
     {% block content %}{% endblock %}
 
-    <!-- YENİ: iOS için Ana Ekrana Ekleme Yönlendirme Balonu -->
+    {# Alt Navigasyon Barı #}
+    <nav class="navbar fixed-bottom shadow-lg d-lg-none bottom-nav-custom"> {# bg-light kaldırıldı #}
+        <div class="container-fluid">
+            <ul class="nav nav-fill w-100">
+                <li class="nav-item">
+                    <a class="nav-link bottom-nav-link" href="{{ url_for('main.panel') }}" data-page="panel">
+                        <i class="bi bi-house-door-fill d-block fs-4 mb-1"></i>
+                        <span class="bottom-nav-text">Anasayfa</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link bottom-nav-link" href="{{ url_for('main.tedarikciler_sayfasi') }}" data-page="tedarikciler">
+                        <i class="bi bi-people-fill d-block fs-4 mb-1"></i>
+                        <span class="bottom-nav-text">Tedarikçi</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link bottom-nav-link" href="{{ url_for('main.raporlar_page') }}" data-page="raporlar">
+                        <i class="bi bi-bar-chart-line-fill d-block fs-4 mb-1"></i>
+                        <span class="bottom-nav-text">Raporlar</span>
+                    </a>
+                </li>
+                {# Sadece Firma Yetkilisi, Admin ve Toplayıcı görebilsin #}
+                {% if session.get('user', {}).get('rol') in ['firma_yetkilisi', 'toplayici', 'admin'] %}
+                <li class="nav-item">
+                    <a class="nav-link bottom-nav-link" href="{{ url_for('yem.yem_yonetimi_sayfasi') }}" data-page="yem">
+                        <i class="bi bi-inboxes-fill d-block fs-4 mb-1"></i>
+                        <span class="bottom-nav-text">Yem</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link bottom-nav-link" href="{{ url_for('finans.finans_sayfasi') }}" data-page="finans">
+                        <i class="bi bi-cash-coin d-block fs-4 mb-1"></i>
+                        <span class="bottom-nav-text">Finans</span>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </nav>
+
+    {# iOS Yükleme İstemcisi #}
     <div id="ios-install-prompt" class="toast align-items-center text-white bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="d-flex">
             <div class="toast-body">
@@ -43,6 +83,7 @@
         </div>
     </div>
 
+    {# Genel Scriptler #}
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
@@ -51,28 +92,54 @@
     <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
     <script src="{{ url_for('static', filename='js/data-loader.js') }}"></script>
     <script src="{{ url_for('static', filename='js/chart-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
     <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
     <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
     <script src="{{ url_for('static', filename='js/push-manager.js') }}"></script>
-    <!-- YENİ: iOS Yükleme Yönlendirmesi için script -->
     <script src="{{ url_for('static', filename='js/ios-install-prompt.js') }}"></script>
 
-<script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register("/service-worker.js")
-                .then(registration => {
-                    console.log('Dinamik Service Worker başarıyla kaydedildi: ', registration);
-                })
-                .catch(error => {
-                    console.log('Dinamik Service Worker kaydı başarısız: ', error);
-                });
-        });
-    }
-</script>
+    {# Alt bar aktif link JS'i #}
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const currentPage = window.location.pathname;
+            const navLinks = document.querySelectorAll('.bottom-nav-link');
+            navLinks.forEach(link => {
+                const linkPath = link.getAttribute('href');
+                if (linkPath === '/' && currentPage !== '/') return;
 
+                let isActive = false;
+                // Daha basit ve kapsayıcı kontrol
+                if (link.dataset.page === 'panel' && currentPage === '/panel') isActive = true;
+                else if (link.dataset.page === 'tedarikciler' && (currentPage.startsWith('/tedarikciler') || currentPage.startsWith('/tedarikci/'))) isActive = true;
+                else if (link.dataset.page === 'raporlar' && currentPage.startsWith('/raporlar')) isActive = true;
+                else if (link.dataset.page === 'yem' && currentPage.startsWith('/yem')) isActive = true; // /yem/yonetim ve diğerleri
+                else if (link.dataset.page === 'finans' && currentPage.startsWith('/finans')) isActive = true; // /finans/ ve diğerleri
+
+                if (isActive) { link.classList.add('active'); }
+            });
+        });
+    </script>
+
+    {# Service Worker Kaydı #}
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register("/service-worker.js")
+                    .then(registration => { console.log('Dinamik Service Worker başarıyla kaydedildi: ', registration); })
+                    .catch(error => { console.log('Dinamik Service Worker kaydı başarısız: ', error); });
+            });
+        }
+    </script>
+
+    {# Ana Panel ve Çiftçi Paneli Mantığı Scriptleri #}
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ciftci_panel.js') }}"></script> {# YENİ EKLENDİ #}
+
+
+    {# Sayfaya özel script'ler #}
     {% block scripts %}{% endblock %}
 
+    {# Modallar (Hakkında ve Şifre Değiştirme) #}
     <div class="modal fade" id="hakkindaModal" tabindex="-1" aria-labelledby="hakkindaModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
@@ -92,26 +159,29 @@
                             <button class="nav-link" id="iletisim-tab" data-bs-toggle="tab" data-bs-target="#iletisim-pane" type="button" role="tab" aria-controls="iletisim-pane" aria-selected="false">İletişim & Destek</button>
                         </li>
                     </ul>
-
                     <div class="tab-content pt-3" id="hakkindaTabContent">
                         <div class="tab-pane fade show active" id="ozellikler-pane" role="tabpanel" aria-labelledby="ozellikler-tab" tabindex="0">
-                            
                             <h5 class="fw-bold">Hızlı Başlangıç Rehberi</h5>
-                            <p>Uygulamayı verimli bir şekilde kullanmaya başlamak için aşağıdaki 3 adımı izleyebilirsiniz:</p>
+                            <p>Uygulamayı verimli bir şekilde kullanmaya başlamak için aşağıdaki adımları izleyebilirsiniz:</p>
                             <ol>
-                                <li><strong>Tedarikçilerinizi Ekleyin:</strong> İlk olarak, menüden "Tedarikçi Yönetimi" sayfasına giderek sisteme süt alımı yaptığınız tüm tedarikçileri kaydedin.</li>
-                                <li><strong>Stoklarınızı Tanımlayın:</strong> Ardından, "Yem Yönetimi" bölümünden sattığınız yem ürünlerini ve mevcut stok miktarlarını sisteme girin.</li>
-                                <li><strong>Veri Girişine Başlayın:</strong> Artık hazırsınız! Ana panelden günlük süt girdilerinizi ve tedarikçilere yaptığınız yem çıkışlarını kolayca kaydedebilirsiniz.</li>
+                                <li><strong>Tedarikçilerinizi Ekleyin:</strong> Menüden "Tedarikçi Yönetimi"ne giderek süt aldığınız kişileri kaydedin.</li>
+                                <li><strong>(İsteğe Bağlı) Yem Ürünlerini Tanımlayın:</strong> "Yem Yönetimi"nden sattığınız yemleri ve stokları girin.</li>
+                                <li><strong>Kullanıcıları Yönetin (Yetkiliyseniz):</strong> "Kullanıcı Yönetimi"nden toplayıcılarınızı ekleyin ve onlara tedarikçi atayın.</li>
+                                <li><strong>Veri Girişine Başlayın:</strong> Ana panelden günlük süt girdilerini, yem çıkışlarını ve "Finans Yönetimi"nden ödemeleri kaydedin.</li>
+                                <li><strong>Raporları İnceleyin:</strong> "Raporlar" sayfasından veya tedarikçi detaylarından performansınızı takip edin, PDF çıktıları alın.</li>
                             </ol>
                             <h5 class="fw-bold">Temel Özellikler</h5>
                             <ul>
-                                <li><strong>Kolay Veri Girişi:</strong> Günlük süt girdilerini, yem alımlarını ve finansal işlemleri (ödeme/avans) tek bir yerden hızla takip edin.</li>
-                                <li><strong>Akıllı Raporlama:</strong> Grafiksel ve detaylı raporlar (Günlük, Aylık, Tedarikçi Bazlı) ile işletmenizin performansını anlık olarak analiz edin.</li>
-                                <li><strong>PDF Dökümanlar:</strong> Tek tuşla tedarikçileriniz için profesyonel "Müstahsil Makbuzu" ve "Aylık Hesap Özeti" gibi PDF belgeleri oluşturun.</li>
-                                <li><strong>Esnek Yönetim:</strong> Tedarikçi, yem ve finans yönetimi modülleri ile tüm operasyonel verilerinizi kontrol altında tutun.</li>
+                                <li>Kolay ve hızlı veri girişi (Süt, Yem, Finans).</li>
+                                <li>Çevrimdışı (Offline) çalışma ve otomatik senkronizasyon.</li>
+                                <li>Detaylı raporlama (Günlük, Aylık, Tedarikçi Bazlı) ve grafiksel analizler.</li>
+                                <li>Otomatik PDF Hesap Özeti ve Müstahsil Makbuzu oluşturma.</li>
+                                <li>Kullanıcı rolleri (Firma Yetkilisi, Toplayıcı, Muhasebeci, Çiftçi - yakında).</li>
+                                <li>Tedarikçi atama ve veri izolasyonu.</li>
+                                <li>Yem stok takibi.</li>
+                                <li>Mobil uyumlu modern arayüz (PWA).</li>
                             </ul>
                         </div>
-
                         <div class="tab-pane fade" id="guncellemeler-pane" role="tabpanel" aria-labelledby="guncellemeler-tab" tabindex="0">
                              <div class="d-flex justify-content-between align-items-center mb-3 p-2 rounded" style="background-color: var(--bs-table-striped-bg);">
                                 <h6 class="mb-0">Mevcut Sürüm: {{ APP_VERSION }}</h6>
@@ -146,7 +216,6 @@
                                 {% endif %}
                             </div>
                         </div>
-
                         <div class="tab-pane fade" id="iletisim-pane" role="tabpanel" aria-labelledby="iletisim-tab" tabindex="0">
                             <h5>Teknik Destek ve Geri Bildirim</h5>
                             <p>Uygulama ile ilgili herhangi bir sorun, öneri veya geri bildirim için aşağıdaki WhatsApp numarası üzerinden bizimle iletişime geçebilirsiniz.</p>
@@ -164,9 +233,7 @@
             </div>
         </div>
     </div>
-    
     <div class="modal fade" id="sifreDegistirModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Şifre Değiştir</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-2"><label for="mevcut-sifre-input" class="form-label">Mevcut Şifreniz</label><input type="password" class="form-control form-control-sm" id="mevcut-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-input" class="form-label">Yeni Şifre</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-input"></div><div class="mb-2"><label for="kullanici-yeni-sifre-tekrar-input" class="form-label">Yeni Şifre (Tekrar)</label><input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-tekrar-input"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sifreDegistir()">Kaydet</button></div></div></div></div>
 
 </body>
 </html>
-

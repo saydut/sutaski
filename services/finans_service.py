@@ -3,20 +3,30 @@
 import logging
 from flask import g
 from decimal import Decimal, InvalidOperation
-from constants import FinansIslemTipi
+# DÜZELTME: Eksik olan FinansIslemTipi'ni constants dosyasından import ediyoruz.
+from constants import FinansIslemTipi, UserRole
 
 logger = logging.getLogger(__name__)
 
 class FinansService:
     """Finansal işlemler için servis katmanı."""
 
-    def get_paginated_transactions(self, sirket_id: int, sayfa: int, limit: int = 15):
+    # GÜNCELLEME: Fonksiyonun imzasına 'kullanici_id' ve 'rol' parametrelerini ekledik.
+    def get_paginated_transactions(self, sirket_id: int, kullanici_id: int, rol: str, sayfa: int, limit: int = 15):
         """Finansal işlemleri sayfalayarak listeler."""
         try:
             offset = (sayfa - 1) * limit
             query = g.supabase.table('finansal_islemler').select(
                 '*, tedarikciler(isim)', count='exact'
-            ).eq('sirket_id', sirket_id).order('islem_tarihi', desc=True).range(offset, offset + limit - 1)
+            ).eq('sirket_id', sirket_id)
+
+            # --- YENİ EKLENEN VERİ İZOLASYON MANTIĞI ---
+            # Eğer rol 'toplayici' ise, sadece kendi eklediği işlemleri görmesi için sorguyu filtrele.
+            if rol == UserRole.TOPLAYICI.value:
+                query = query.eq('kullanici_id', kullanici_id)
+            # --- YENİ MANTIK SONU ---
+
+            query = query.order('islem_tarihi', desc=True).range(offset, offset + limit - 1)
             response = query.execute()
             return response.data, response.count
         except Exception as e:

@@ -3,6 +3,8 @@
 import logging
 from flask import g
 from decimal import Decimal, InvalidOperation, DivisionByZero
+# YENİ: Rolleri kontrol edebilmek için UserRole'u import ediyoruz.
+from constants import UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -106,11 +108,20 @@ class YemService:
             logger.error(f"Yem ürünü silinirken hata: {e}", exc_info=True)
             raise Exception("Silme işlemi sırasında bir hata oluştu.")
 
-    def get_paginated_transactions(self, sirket_id: int, sayfa: int, limit: int = 5):
+    # GÜNCELLEME: Fonksiyonun imzasına 'kullanici_id' ve 'rol' parametrelerini ekledik.
+    def get_paginated_transactions(self, sirket_id: int, kullanici_id: int, rol: str, sayfa: int, limit: int = 5):
         """Yem çıkış işlemlerini sayfalayarak listeler."""
         try:
             offset = (sayfa - 1) * limit
-            query = g.supabase.table('yem_islemleri').select('*, tedarikciler(isim), yem_urunleri(yem_adi)', count='exact').eq('sirket_id', sirket_id).order('islem_tarihi', desc=True).range(offset, offset + limit - 1)
+            query = g.supabase.table('yem_islemleri').select('*, tedarikciler(isim), yem_urunleri(yem_adi)', count='exact').eq('sirket_id', sirket_id)
+
+            # --- YENİ EKLENEN VERİ İZOLASYON MANTIĞI ---
+            # Eğer rol 'toplayici' ise, sadece kendi eklediği işlemleri görmesi için sorguyu filtrele.
+            if rol == UserRole.TOPLAYICI.value:
+                query = query.eq('kullanici_id', kullanici_id)
+            # --- YENİ MANTIK SONU ---
+
+            query = query.order('islem_tarihi', desc=True).range(offset, offset + limit - 1)
             response = query.execute()
             return response.data, response.count
         except Exception as e:

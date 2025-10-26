@@ -7,6 +7,8 @@ from decimal import Decimal, InvalidOperation
 from datetime import datetime
 import pytz
 from utils import parse_supabase_timestamp
+# YENİ: Rolleri kontrol edebilmek için UserRole'u import ediyoruz.
+from constants import UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,8 @@ class SutService:
             logger.error(f"Günlük özet alınırken hata: {e}", exc_info=True)
             raise
 
-    def get_paginated_list(self, sirket_id: int, tarih_str: str, sayfa: int, limit: int = 6):
+    # GÜNCELLEME: Fonksiyonun imzasına 'kullanici_id' ve 'rol' parametrelerini ekledik.
+    def get_paginated_list(self, sirket_id: int, kullanici_id: int, rol: str, tarih_str: str, sayfa: int, limit: int = 6):
         """Süt girdilerini sayfalama ve tarihe göre filtreleme yaparak listeler."""
         try:
             offset = (sayfa - 1) * limit
@@ -33,6 +36,14 @@ class SutService:
                 'id,litre,fiyat,taplanma_tarihi,duzenlendi_mi,kullanicilar(kullanici_adi),tedarikciler(isim)', 
                 count='exact'
             ).eq('sirket_id', sirket_id)
+            
+            # --- YENİ EKLENEN VERİ İZOLASYON MANTIĞI ---
+            # Eğer fonksiyonu çağıran kullanıcının rolü 'toplayici' ise,
+            # sorguya ek bir filtre ekleyerek sadece kendi 'kullanici_id'sine sahip girdileri getirmesini sağlıyoruz.
+            # 'firma_yetkilisi' veya 'muhasebeci' ise bu koşul atlanır ve tüm girdileri görürler.
+            if rol == UserRole.TOPLAYICI.value:
+                query = query.eq('kullanici_id', kullanici_id)
+            # --- YENİ MANTIK SONU ---
             
             if tarih_str:
                 target_date = datetime.strptime(tarih_str, '%Y-%m-%d').date()

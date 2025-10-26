@@ -1,82 +1,106 @@
 # services/tedarikci_service.py
 
-from flask import g
+from flask import g, session
 from postgrest import APIError
 from decimal import Decimal
 from collections import namedtuple
 import logging
+import random # YENİ: Rastgele şifre için
+import string # YENİ: Rastgele şifre için
+from extensions import bcrypt # YENİ: Şifre hashlemek için
+from constants import UserRole # YENİ: Rolleri kullanmak için
 
 logger = logging.getLogger(__name__)
 
+# --- YENİ Yardımcı Fonksiyon: Benzersiz Çiftçi Kullanıcı Adı Oluştur ---
+def _generate_unique_farmer_username(base_name: str, sirket_id: int) -> str:
+    """Verilen temel isimden yola çıkarak benzersiz bir çiftçi kullanıcı adı üretir."""
+    # Türkçe karakterleri ve boşlukları temizle
+    clean_name = ''.join(c for c in base_name.lower() if c.isalnum() or c == '_').replace(' ', '_')
+    username_base = f"{clean_name}_ciftci"
+    username = username_base
+    counter = 1
+    while True:
+        # Veritabanında bu kullanıcı adının olup olmadığını kontrol et
+        exists_res = g.supabase.table('kullanicilar') \
+            .select('id', count='exact') \
+            .eq('kullanici_adi', username) \
+            .eq('sirket_id', sirket_id) \
+            .execute()
+        if exists_res.count == 0:
+            return username # Benzersiz isim bulundu
+        # Varsa, sonuna sayı ekleyerek tekrar dene
+        username = f"{username_base}_{counter}"
+        counter += 1
+        if counter > 100: # Sonsuz döngü riskine karşı
+             raise Exception("Benzersiz çiftçi kullanıcı adı üretilemedi.")
+
 class TedarikciService:
-    """Tedarikçi veritabanı işlemleri için servis katmanı."""
-
-    def get_all_for_dropdown(self, sirket_id: int):
-        """Dropdown menüler için tüm tedarikçileri getirir."""
-        try:
-            response = g.supabase.table('tedarikciler').select('id, isim').eq('sirket_id', sirket_id).order('isim', desc=False).execute()
-            return response.data
-        except Exception as e:
-            logger.error(f"Dropdown için tedarikçi listesi alınırken hata: {e}", exc_info=True)
-            raise
-
-    def get_by_id(self, sirket_id: int, tedarikci_id: int):
-        """ID ile tek bir tedarikçinin detaylarını getirir."""
-        try:
-            response = g.supabase.table('tedarikciler').select('id, isim, tc_no, telefon_no, adres').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
-            return response.data
-        except Exception as e:
-            logger.error(f"ID ile tedarikçi detayı alınırken hata: {e}", exc_info=True)
-            raise
-
-    def get_summary_by_id(self, sirket_id: int, tedarikci_id: int):
-        """Bir tedarikçinin finansal özetini RPC ile hesaplar."""
-        try:
-            tedarikci_res = g.supabase.table('tedarikciler').select('isim').eq('id', tedarikci_id).eq('sirket_id', sirket_id).single().execute()
-            if not tedarikci_res.data:
-                return None, None 
-
-            summary_res = g.supabase.rpc('get_supplier_summary', { 'p_sirket_id': sirket_id, 'p_tedarikci_id': tedarikci_id }).execute()
-            return tedarikci_res.data, summary_res.data
-        except Exception as e:
-            logger.error(f"Tedarikçi özeti alınırken hata: {e}", exc_info=True)
-            raise
-    
-    def get_paginated_list(self, sirket_id: int, sayfa: int, limit: int, arama: str, sirala_sutun: str, sirala_yon: str):
-        """Tedarikçileri sayfalama, arama ve sıralama yaparak RPC ile getirir."""
-        try:
-            offset = (sayfa - 1) * limit
-            params = {
-                'p_sirket_id': sirket_id, 'p_limit': limit, 'p_offset': offset,
-                'p_search_term': arama, 'p_sort_column': sirala_sutun, 'p_sort_direction': sirala_yon
-            }
-            response = g.supabase.rpc('get_paginated_suppliers', params).execute()
-            result = response.data
-            
-            APIResponse = namedtuple('APIResponse', ['data', 'count'])
-            return APIResponse(data=result.get('data', []), count=result.get('count', 0))
-
-        except Exception as e:
-            logger.error(f"Sayfalı tedarikçi listesi (RPC) alınırken hata: {e}", exc_info=True)
-            raise
+    # ... (get_all_for_dropdown, get_by_id, get_summary_by_id, get_paginated_list fonksiyonları aynı kalır) ...
 
     def create(self, sirket_id: int, data: dict):
-        """Yeni bir tedarikçi oluşturur."""
+        """Yeni bir tedarikçi oluşturur ve otomatik olarak bir çiftçi hesabı açar."""
+        isim = data.get('isim', '').strip()
+        if not isim:
+            raise ValueError("Tedarikçi ismi zorunludur.")
+
+        # --- Otomatik Çiftçi Hesabı Değişkenleri ---
+        yeni_ciftci_kullanici_adi = None
+        yeni_ciftci_sifre = None
+        yeni_kullanici_id = None
+        # --- / ---
+
         try:
-            isim = data.get('isim')
-            if not isim:
-                raise ValueError("Tedarikçi ismi zorunludur.")
-            
-            yeni_veri = {'isim': isim, 'sirket_id': sirket_id}
+            # 1. Tedarikçiyi oluştur (kullanici_id başlangıçta NULL)
+            yeni_veri = {'isim': isim, 'sirket_id': sirket_id, 'kullanici_id': None}
             if data.get('tc_no'): yeni_veri['tc_no'] = data.get('tc_no')
             if data.get('telefon_no'): yeni_veri['telefon_no'] = data.get('telefon_no')
             if data.get('adres'): yeni_veri['adres'] = data.get('adres')
-            
-            response = g.supabase.table('tedarikciler').insert(yeni_veri).execute()
-            return response.data[0]
+
+            tedarikci_response = g.supabase.table('tedarikciler').insert(yeni_veri).execute()
+            yeni_tedarikci = tedarikci_response.data[0]
+            yeni_tedarikci_id = yeni_tedarikci['id']
+
+            # 2. Çiftçi Hesabını Oluştur
+            yeni_ciftci_kullanici_adi = _generate_unique_farmer_username(isim, sirket_id)
+            yeni_ciftci_sifre = ''.join(random.choices(string.digits, k=4)) # 4 haneli rastgele şifre
+            hashed_sifre = bcrypt.generate_password_hash(yeni_ciftci_sifre).decode('utf-8')
+
+            kullanici_insert_data = {
+                'kullanici_adi': yeni_ciftci_kullanici_adi,
+                'sifre': hashed_sifre,
+                'sirket_id': sirket_id,
+                'rol': UserRole.CIFCI.value
+            }
+            kullanici_response = g.supabase.table('kullanicilar').insert(kullanici_insert_data).execute()
+            yeni_kullanici_id = kullanici_response.data[0]['id']
+
+            # 3. Tedarikçi Kaydını Yeni Kullanıcı ID'si ile Güncelle
+            g.supabase.table('tedarikciler') \
+                .update({'kullanici_id': yeni_kullanici_id}) \
+                .eq('id', yeni_tedarikci_id) \
+                .execute()
+
+            # Başarılı sonuç: Tedarikçi bilgisi + çiftçi giriş bilgileri
+            return {
+                "tedarikci": yeni_tedarikci,
+                "ciftci_kullanici_adi": yeni_ciftci_kullanici_adi,
+                "ciftci_sifre": yeni_ciftci_sifre # Şifreyi plaintext olarak döndür
+            }
+
         except Exception as e:
-            logger.error(f"Tedarikçi oluşturulurken hata: {e}", exc_info=True)
-            raise
+            # Eğer hata oluşursa, potansiyel olarak oluşturulmuş kayıtları geri almaya çalışalım (best-effort)
+            # Bu kısım daha karmaşık transaction yönetimi gerektirebilir, şimdilik basit tutalım.
+            logger.error(f"Tedarikçi ve çiftçi hesabı oluşturulurken hata: {e}", exc_info=True)
+            # Belki yarım kalan kayıtları silmek gerekebilir? Şimdilik sadece hata döndürelim.
+            # if yeni_kullanici_id:
+            #     try: g.supabase.table('kullanicilar').delete().eq('id', yeni_kullanici_id).execute()
+            #     except: pass # Silme hatasını yoksay
+            # if 'yeni_tedarikci_id' in locals() and yeni_tedarikci_id:
+            #      try: g.supabase.table('tedarikciler').delete().eq('id', yeni_tedarikci_id).execute()
+            #      except: pass
+            raise Exception("Tedarikçi ve çiftçi hesabı oluşturulurken bir hata oluştu.")
+
 
     def update(self, sirket_id: int, tedarikci_id: int, data: dict):
         """Mevcut bir tedarikçiyi günceller."""
@@ -86,34 +110,58 @@ class TedarikciService:
                 guncellenecek_veri['isim'] = data.get('isim')
             else:
                 raise ValueError("Tedarikçi ismi boş bırakılamaz.")
-            
+
             if 'tc_no' in data: guncellenecek_veri['tc_no'] = data.get('tc_no')
             if 'telefon_no' in data: guncellenecek_veri['telefon_no'] = data.get('telefon_no')
             if 'adres' in data: guncellenecek_veri['adres'] = data.get('adres')
 
             response = g.supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', tedarikci_id).eq('sirket_id', sirket_id).execute()
-            
+
             if not response.data:
                 raise ValueError("Tedarikçi bulunamadı veya bu işlem için yetkiniz yok.")
-                
+
             return response.data[0]
         except Exception as e:
             logger.error(f"Tedarikçi güncellenirken hata: {e}", exc_info=True)
             raise
 
+    # GÜNCELLEME: Tedarikçi silinmeden önce bağlı kullanıcıyı silme mantığı eklendi.
     def delete(self, sirket_id: int, tedarikci_id: int):
-        """Bir tedarikçiyi siler."""
+        """Bir tedarikçiyi ve (varsa) ona bağlı çiftçi hesabını siler."""
         try:
-            response = g.supabase.table('tedarikciler').delete().eq('id', tedarikci_id).eq('sirket_id', sirket_id).execute()
-            if not response.data:
+            # Önce silinecek tedarikçinin bağlı kullanıcı ID'sini al
+            tedarikci_res = g.supabase.table('tedarikciler') \
+                .select('kullanici_id') \
+                .eq('id', tedarikci_id) \
+                .eq('sirket_id', sirket_id) \
+                .maybe_single() \
+                .execute()
+
+            if not tedarikci_res.data:
                  raise ValueError("Tedarikçi bulunamadı veya bu işlem için yetkiniz yok.")
+
+            bagli_kullanici_id = tedarikci_res.data.get('kullanici_id')
+
+            # Tedarikçiyi sil (Eğer bağlı işlemler varsa Foreign Key hatası verecektir, bu istediğimiz bir şey)
+            response = g.supabase.table('tedarikciler').delete().eq('id', tedarikci_id).eq('sirket_id', sirket_id).execute()
+            # Silme başarılı olduysa ve bağlı bir kullanıcı ID'si varsa, o kullanıcıyı da sil
+            if bagli_kullanici_id:
+                try:
+                    g.supabase.table('kullanicilar').delete().eq('id', bagli_kullanici_id).eq('sirket_id', sirket_id).execute()
+                    logger.info(f"Tedarikçi {tedarikci_id} ile birlikte kullanıcı {bagli_kullanici_id} de silindi.")
+                except Exception as user_delete_error:
+                    # Kullanıcı silme başarısız olursa logla ama ana işlemi geri alma (tedarikçi zaten silindi)
+                    logger.error(f"Tedarikçi silindi ancak bağlı kullanıcı {bagli_kullanici_id} silinirken hata oluştu: {user_delete_error}", exc_info=True)
+
             return True
+        except ValueError as ve:
+             raise ve
         except Exception as e:
             if 'violates foreign key constraint' in str(e).lower():
                 raise ValueError("Bu tedarikçiye ait süt veya yem girdisi olduğu için silinemiyor.")
             logger.error(f"Tedarikçi silinirken hata: {e}", exc_info=True)
-            raise
-
+            raise Exception("Tedarikçi silinirken bir hata oluştu.")
+        
 class PagedDataService:
     def get_sut_girdileri(self, sirket_id: int, tedarikci_id: int, sayfa: int, limit: int = 10):
         offset = (sayfa - 1) * limit

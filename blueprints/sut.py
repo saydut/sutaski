@@ -17,11 +17,17 @@ logger = logging.getLogger(__name__)
 def get_sut_girdileri():
     """Süt girdilerini servis üzerinden listeler."""
     try:
-        sirket_id = session['user']['sirket_id']
+        # GÜNCELLEME: Session'dan sadece sirket_id'yi değil, kullanıcı bilgilerini de alıyoruz.
+        user_info = session['user']
+        sirket_id = user_info['sirket_id']
+        kullanici_id = user_info['id']
+        rol = user_info['rol']
+        
         secilen_tarih_str = request.args.get('tarih')
         sayfa = int(request.args.get('sayfa', 1))
         
-        girdiler, toplam_sayi = sut_service.get_paginated_list(sirket_id, secilen_tarih_str, sayfa)
+        # GÜNCELLEME: Servis fonksiyonunu yeni parametrelerle (kullanici_id, rol) çağırıyoruz.
+        girdiler, toplam_sayi = sut_service.get_paginated_list(sirket_id, kullanici_id, rol, secilen_tarih_str, sayfa)
         
         return jsonify({"girdiler": girdiler, "toplam_girdi_sayisi": toplam_sayi})
     except Exception as e:
@@ -143,4 +149,3 @@ def get_tedarikci_stats(tedarikci_id):
     except Exception as e:
         logger.error(f"İstatistik API hatası: {e}", exc_info=True)
         return jsonify({"error": "İstatistik verisi alınamadı."}), 500
-

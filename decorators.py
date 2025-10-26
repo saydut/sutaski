@@ -1,6 +1,6 @@
 from functools import wraps
 from flask import session, flash, redirect, url_for, jsonify, request
-from constants import UserRole 
+from constants import UserRole
 from extensions import turkey_tz
 from datetime import datetime
 
@@ -8,12 +8,8 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user' not in session:
-            # YENİ EKLENEN KONTROL
-            # Eğer istek bir API endpoint'ine yapılıyorsa, sayfa yönlendirmek yerine JSON hatası döndür.
             if request.path.startswith('/api/') or request.path.startswith('/yem/api/') or request.path.startswith('/finans/api/'):
                 return jsonify({"error": "Bu işlem için giriş yapmanız gerekmektedir."}), 401
-
-            # Eğer normal bir sayfa isteğiyse, eskisi gibi giriş sayfasına yönlendir.
             flash("Devam etmek için lütfen giriş yapın.", "info")
             return redirect(url_for('auth.login_page'))
         return f(*args, **kwargs)
@@ -24,7 +20,28 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if session.get('user', {}).get('rol') != UserRole.ADMIN.value:
             flash("Bu sayfaya erişim yetkiniz yok.", "danger")
-            return redirect(url_for('main.anasayfa'))
+            return redirect(url_for('main.panel'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# YENİ EKLENEN DECORATOR
+def firma_yetkilisi_required(f):
+    """
+    Sadece 'firma_yetkilisi' veya 'admin' rolündeki kullanıcıların erişimine izin verir.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user_rol = session.get('user', {}).get('rol')
+        izinli_roller = [UserRole.FIRMA_YETKILISI.value, UserRole.ADMIN.value]
+        
+        if user_rol not in izinli_roller:
+            # API isteği ise JSON, değilse ana panele yönlendir.
+            if request.path.startswith('/api/') or request.path.startswith('/firma/api/'):
+                return jsonify({"error": "Bu işlemi yapma yetkiniz yok."}), 403
+            
+            flash("Bu sayfaya erişim yetkiniz bulunmamaktadır.", "danger")
+            return redirect(url_for('main.panel'))
+            
         return f(*args, **kwargs)
     return decorated_function
 
@@ -32,11 +49,9 @@ def lisans_kontrolu(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         user_info = session.get('user')
-        # Admin rolündeki kullanıcıları lisans kontrolünden muaf tut
         if user_info and user_info.get('rol') == UserRole.ADMIN.value:
             return f(*args, **kwargs)
 
-        # Oturumda kullanıcı bilgisi yoksa giriş sayfasına yönlendir
         if not user_info:
             return redirect(url_for('auth.login_page'))
 
@@ -45,27 +60,20 @@ def lisans_kontrolu(f):
         if lisans_bitis:
             try:
                 lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis, '%Y-%m-%d').date()
-                
-                # Zaman dilimi fark etmeksizin Türkiye saatine göre bugünün tarihini al
                 bugun_tr = datetime.now(turkey_tz).date()
-
-                # *** MANTIKSAL DÜZELTME: Lisansın son günü dahil edilmeyecek şekilde kontrol ***
-                # Eğer bugün, lisansın bittiği güne eşit veya ondan sonraysa kullanıcıyı at.
                 if bugun_tr >= lisans_bitis_tarihi_obj:
                     flash("Şirketinizin lisans süresi dolmuştur. Lütfen sistem yöneticinizle iletişime geçin.", "danger")
-                    session.pop('user', None) # Güvenlik için oturumu sonlandır
+                    session.pop('user', None)
                     return redirect(url_for('auth.login_page'))
             except (ValueError, TypeError):
                  flash("Lisans tarihi formatı geçersiz.", "danger")
                  session.pop('user', None)
                  return redirect(url_for('auth.login_page'))
         else:
-             # Lisans tarihi hiç tanımlanmamışsa kullanıcıyı at
              flash("Şirketiniz için bir lisans tanımlanmamıştır.", "danger")
              session.pop('user', None)
              return redirect(url_for('auth.login_page'))
             
-        # Tüm kontrollerden geçtiyse, istenen sayfayı göster
         return f(*args, **kwargs)
     return decorated_function
 
@@ -78,11 +86,6 @@ def modification_allowed(f):
     def decorated_function(*args, **kwargs):
         user_rol = session.get('user', {}).get('rol')
         if user_rol == UserRole.MUHASEBECI.value:
-            # API isteği ise JSON, değilse HTML sayfası için farklı yanıtlar verilebilir.
-            # Şimdilik API odaklı olduğu için JSON dönüyoruz.
             return jsonify({"error": "Bu işlemi yapma yetkiniz yok."}), 403
         return f(*args, **kwargs)
     return decorated_function
-
-
-

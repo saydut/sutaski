@@ -94,9 +94,17 @@ def add_yem_islemi():
 @login_required
 def get_yem_islemleri():
     try:
-        sirket_id = session['user']['sirket_id']
+        # GÜNCELLEME: Session'dan kullanıcı bilgilerini alıyoruz.
+        user_info = session['user']
+        sirket_id = user_info['sirket_id']
+        kullanici_id = user_info['id']
+        rol = user_info['rol']
+        
         sayfa = int(request.args.get('sayfa', 1))
-        islemler, toplam_sayi = yem_service.get_paginated_transactions(sirket_id, sayfa)
+        
+        # GÜNCELLEME: Servis fonksiyonunu yeni parametrelerle çağırıyoruz.
+        islemler, toplam_sayi = yem_service.get_paginated_transactions(sirket_id, kullanici_id, rol, sayfa)
+        
         return jsonify({"islemler": islemler, "toplam_islem_sayisi": toplam_sayi})
     except Exception:
         return jsonify({"error": "Yem işlemleri listelenirken bir sunucu hatası oluştu."}), 500

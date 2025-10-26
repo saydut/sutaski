@@ -5,6 +5,8 @@ from extensions import bcrypt, turkey_tz
 from datetime import datetime
 from postgrest import APIError
 import logging
+# Bu import satırı çok önemli:
+from constants import UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +23,20 @@ class AuthService:
             if kullanici_var_mi.count > 0:
                 raise ValueError("Bu kullanıcı adı zaten mevcut.")
 
-            sirket_id = self._get_or_create_sirket(sirket_adi)
+            # Bu fonksiyon (sirket_id, is_yeni_sirket) döndürmeli
+            sirket_id, is_yeni_sirket = self._get_or_create_sirket(sirket_adi)
+            
+            # Anahtar kısım burası: is_yeni_sirket True ise rol 'firma_yetkilisi' olmalı
+            rol = UserRole.FIRMA_YETKILISI.value if is_yeni_sirket else UserRole.TOPLAYICI.value
+            
             hashed_sifre = bcrypt.generate_password_hash(sifre).decode('utf-8')
             
+            # Ve rol burada açıkça veritabanına eklenmeli
             g.supabase.table('kullanicilar').insert({
                 'kullanici_adi': kullanici_adi, 
                 'sifre': hashed_sifre,
-                'sirket_id': sirket_id
+                'sirket_id': sirket_id,
+                'rol': rol  # Bu satırın varlığı kritik
             }).execute()
 
             return {"message": "Kayıt başarılı!"}
@@ -45,15 +54,21 @@ class AuthService:
             raise Exception("Kayıt sırasında beklenmedik bir sunucu hatası oluştu.")
 
     def _get_or_create_sirket(self, sirket_adi):
-        """Verilen isimde bir şirket arar, bulamazsa yenisini oluşturur."""
+        """
+        Verilen isimde bir şirket arar, bulamazsa yenisini oluşturur.
+        Dönüş değeri olarak (sirket_id, is_yeni_sirket_mi) şeklinde bir tuple döndürür.
+        """
         formatted_name = sirket_adi.strip().title()
         sirket_response = g.supabase.table('sirketler').select('id').eq('sirket_adi', formatted_name).execute()
         
         if sirket_response.data:
-            return sirket_response.data[0]['id']
+            # Şirket zaten varsa, ID'sini ve 'yeni değil' (False) bilgisini döndür.
+            return sirket_response.data[0]['id'], False
         
+        # Şirket yoksa, yeni bir tane oluştur.
         yeni_sirket_response = g.supabase.table('sirketler').insert({'sirket_adi': formatted_name}).execute()
-        return yeni_sirket_response.data[0]['id']
+        # Yeni şirketin ID'sini ve 'yeni' (True) bilgisini döndür.
+        return yeni_sirket_response.data[0]['id'], True
 
 
     def login_user(self, kullanici_adi, sifre):

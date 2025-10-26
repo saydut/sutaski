@@ -618,3 +618,56 @@ h5 { font-size: 0.95rem; }
     max-width: 90%;
 }
 
+/* === YENİ: Alt Navigasyon Barı Stilleri === */
+.bottom-nav-custom {
+    background-color: var(--surface); /* Tema ile uyumlu arka plan */
+    border-top: 1px solid var(--border); /* Üst kenarlık */
+    padding: 0.25rem 0; /* İç boşluk (dikey) */
+    /* Gölge zaten shadow-lg ile eklendi ama yedek olarak burada da olabilir */
+    /* box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1); */
+    transition: background-color 0.4s, border-color 0.4s;
+}
+
+.bottom-nav-link {
+    color: var(--text-secondary); /* Normal link rengi */
+    text-align: center;
+    padding: 0.5rem 0.25rem; /* İkon ve metin etrafındaki boşluk */
+    transition: color 0.3s;
+    display: flex; /* Dikey hizalama için */
+    flex-direction: column; /* İkon ve metni alt alta dizer */
+    align-items: center; /* Yatayda ortalar */
+    justify-content: center; /* Dikeyde ortalar */
+}
+
+.bottom-nav-link:hover {
+    color: var(--text-primary); /* Üzerine gelince biraz daha belirgin renk */
+}
+
+.bottom-nav-link.active {
+    color: var(--primary); /* Aktif link rengi (ana tema rengi) */
+    font-weight: 600; /* Aktif linki biraz kalın yapalım */
+}
+
+.bottom-nav-link i {
+    /* İkonların boyutu zaten HTML'de fs-4 ile ayarlandı */
+    line-height: 1; /* İkonun etrafındaki ekstra boşluğu azaltır */
+}
+
+.bottom-nav-text {
+    font-size: 0.7rem; /* İkon altındaki metin boyutu */
+    margin-top: 2px;
+    line-height: 1.1;
+}
+
+/* Koyu tema için özel ayar (Bootstrap'in bg-light'ını ezer) */
+:root[data-theme='dark'] .bottom-nav-custom {
+    background-color: var(--surface);
+    border-top: 1px solid var(--border);
+}
+
+/* Sayfa içeriğinin alt barın üzerine binmesini engellemek için body'ye padding ekleyebiliriz (mobil için) */
+@media (max-width: 991.98px) { /* d-lg-none breakpoint'i */
+    body {
+        padding-bottom: 70px; /* Alt barın yüksekliği kadar (yaklaşık) */
+    }
+}
