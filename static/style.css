@@ -21,6 +21,18 @@
     --bs-body-bg: var(--background);
     --bs-body-color: var(--text-primary);
     --bs-border-color: var(--border);
+    --bs-pagination-color: var(--text-secondary); /* Sayfalama link rengi */
+    --bs-pagination-bg: var(--surface); /* Sayfalama arka planı */
+    --bs-pagination-border-color: var(--border); /* Sayfalama kenarlığı */
+    --bs-pagination-hover-color: var(--text-primary); /* Üzerine gelince link rengi */
+    --bs-pagination-hover-bg: var(--input-bg); /* Üzerine gelince arka plan */
+    --bs-pagination-hover-border-color: var(--input-border); /* Üzerine gelince kenarlık */
+    --bs-pagination-active-color: #fff; /* Aktif sayfa link rengi */
+    --bs-pagination-active-bg: var(--primary); /* Aktif sayfa arka planı */
+    --bs-pagination-active-border-color: var(--primary); /* Aktif sayfa kenarlığı */
+    --bs-pagination-disabled-color: #6c757d; /* Pasif link rengi */
+    --bs-pagination-disabled-bg: var(--surface); /* Pasif link arka planı */
+    --bs-pagination-disabled-border-color: var(--border); /* Pasif link kenarlığı */
 }
 
 :root[data-theme='light'] {
@@ -45,6 +57,18 @@
     --bs-body-bg: var(--background);
     --bs-body-color: var(--text-primary);
     --bs-border-color: var(--border);
+    --bs-pagination-color: var(--primary); /* Sayfalama link rengi */
+    --bs-pagination-bg: var(--surface); /* Sayfalama arka planı */
+    --bs-pagination-border-color: var(--border); /* Sayfalama kenarlığı */
+    --bs-pagination-hover-color: var(--primary-hover); /* Üzerine gelince link rengi */
+    --bs-pagination-hover-bg: #e9ecef; /* Üzerine gelince arka plan */
+    --bs-pagination-hover-border-color: #dee2e6; /* Üzerine gelince kenarlık */
+    --bs-pagination-active-color: #fff; /* Aktif sayfa link rengi */
+    --bs-pagination-active-bg: var(--primary); /* Aktif sayfa arka planı */
+    --bs-pagination-active-border-color: var(--primary); /* Aktif sayfa kenarlığı */
+    --bs-pagination-disabled-color: #6c757d; /* Pasif link rengi */
+    --bs-pagination-disabled-bg: var(--surface); /* Pasif link arka planı */
+    --bs-pagination-disabled-border-color: var(--border); /* Pasif link kenarlığı */
 }
 
 /* Genel Stiller ve Bootstrap Override */
@@ -101,6 +125,17 @@ a:hover {
     border-color: var(--primary);
     color: var(--text-primary);
     box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+/* YENİ: Sayı inputlarındaki okları gizle */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type=number] {
+    -moz-appearance: textfield; /* Firefox için */
+    appearance: textfield; /* Standart */
 }
 
 .btn {
@@ -264,6 +299,36 @@ h5 { font-size: 0.95rem; }
     --bs-nav-tabs-link-active-bg: var(--surface);
     --bs-nav-tabs-link-active-border-color: var(--border);
 }
+/* YENİ: Sayfalama (Pagination) için Bootstrap override'ları */
+.pagination {
+    --bs-pagination-focus-box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--primary) 25%, transparent);
+}
+.page-link {
+     border-radius: 0.5rem; /* Kenarları biraz yuvarlat */
+     margin: 0 2px; /* Butonlar arasına boşluk */
+}
+/* Koyu tema için özel sayfalama link rengi (normalde --bs-pagination-color yeterli ama garanti olsun) */
+:root[data-theme='dark'] .page-link {
+    color: var(--text-secondary);
+    background-color: var(--surface);
+    border-color: var(--border);
+}
+:root[data-theme='dark'] .page-link:hover {
+    color: var(--text-primary);
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+}
+:root[data-theme='dark'] .page-item.active .page-link {
+    color: #fff;
+    background-color: var(--primary);
+    border-color: var(--primary);
+}
+:root[data-theme='dark'] .page-item.disabled .page-link {
+     color: #6c757d;
+     background-color: var(--surface);
+     border-color: var(--border);
+}
+
 /* --- OVERRIDE SONU --- */
 
 @media (max-width: 768px) {

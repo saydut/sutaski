@@ -158,13 +158,18 @@ async function finansalIslemleriYukle(sayfa = 1) {
 // Süt girdisini tablo satırı olarak render et
 function renderSutAsTable(container, veriler) {
     veriler.forEach(girdi => {
-        const tutar = parseFloat(girdi.litre || 0) * parseFloat(girdi.fiyat || 0);
+        // DÜZELTME: girdi.tarih yerine girdi.taplanma_tarihi kullanıldı.
+        const tarihStr = girdi.taplanma_tarihi ? new Date(girdi.taplanma_tarihi).toLocaleDateString('tr-TR') : 'Geçersiz Tarih';
+        // DÜZELTME: parseFloat'tan önce kontrol eklendi.
+        const litre = parseFloat(girdi.litre || 0);
+        const fiyat = parseFloat(girdi.fiyat || 0);
+        const tutar = litre * fiyat;
         // Kullanıcı adını güvenli hale getir
         const kullaniciAdi = girdi.kullanicilar ? utils.sanitizeHTML(girdi.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<tr>
-            <td>${new Date(girdi.tarih).toLocaleDateString('tr-TR')}</td>
-            <td class="text-end">${parseFloat(girdi.litre).toFixed(2)} L</td>
-            <td class="text-end">${parseFloat(girdi.fiyat).toFixed(2)} TL</td>
+            <td>${tarihStr}</td>
+            <td class="text-end">${litre.toFixed(2)} L</td>
+            <td class="text-end">${fiyat.toFixed(2)} TL</td>
             <td class="text-end">${tutar.toFixed(2)} TL</td>
             <td>${kullaniciAdi}</td>
         </tr>`;
@@ -174,18 +179,23 @@ function renderSutAsTable(container, veriler) {
 // Süt girdisini kart olarak render et
 function renderSutAsCards(container, veriler) {
     veriler.forEach(girdi => {
-        const tutar = parseFloat(girdi.litre || 0) * parseFloat(girdi.fiyat || 0);
+        // DÜZELTME: girdi.tarih yerine girdi.taplanma_tarihi kullanıldı.
+        const tarihStr = girdi.taplanma_tarihi ? new Date(girdi.taplanma_tarihi).toLocaleDateString('tr-TR') : 'Geçersiz Tarih';
+        // DÜZELTME: parseFloat'tan önce kontrol eklendi.
+        const litre = parseFloat(girdi.litre || 0);
+        const fiyat = parseFloat(girdi.fiyat || 0);
+        const tutar = litre * fiyat;
         const kullaniciAdi = girdi.kullanicilar ? utils.sanitizeHTML(girdi.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<div class="col-lg-4 col-md-6 col-12">
             <div class="card p-2 h-100">
                 <div class="card-body p-2">
                     <div class="d-flex justify-content-between">
-                        <span class="fs-4 fw-bold text-primary">${parseFloat(girdi.litre).toFixed(2)} L</span>
+                        <span class="fs-4 fw-bold text-primary">${litre.toFixed(2)} L</span>
                         <span class="fs-5 fw-bold text-success">${tutar.toFixed(2)} TL</span>
                     </div>
-                    <div class="text-secondary small mt-1">Birim Fiyat: ${parseFloat(girdi.fiyat).toFixed(2)} TL</div>
+                    <div class="text-secondary small mt-1">Birim Fiyat: ${fiyat.toFixed(2)} TL</div>
                     <div class="d-flex justify-content-between align-items-end mt-2">
-                        <small class="text-secondary">${new Date(girdi.tarih).toLocaleDateString('tr-TR')}</small>
+                        <small class="text-secondary">${tarihStr}</small>
                         <small class="text-secondary">Giren: ${kullaniciAdi}</small>
                     </div>
                 </div>
@@ -197,14 +207,22 @@ function renderSutAsCards(container, veriler) {
 // Yem işlemini tablo satırı olarak render et
 function renderYemAsTable(container, veriler) {
     veriler.forEach(islem => {
-        const yemAdi = islem.yem_adi ? utils.sanitizeHTML(islem.yem_adi) : 'Bilinmeyen Yem';
+        // DÜZELTME: islem.tarih yerine islem.islem_tarihi kullanıldı.
+        const tarihStr = islem.islem_tarihi ? new Date(islem.islem_tarihi).toLocaleDateString('tr-TR') : 'Geçersiz Tarih';
+        // DÜZELTME: islem.yem_urunleri['yem_adi'] kontrolü eklendi.
+        const yemAdi = islem.yem_urunleri && islem.yem_urunleri.yem_adi ? utils.sanitizeHTML(islem.yem_urunleri.yem_adi) : 'Bilinmeyen Yem';
+        // DÜZELTME: parseFloat'tan önce kontrol eklendi.
+        const miktar = parseFloat(islem.miktar_kg || 0);
+        // DÜZELTME: islem.birim_fiyat yerine islem.islem_anindaki_birim_fiyat kullanıldı ve kontrol eklendi.
+        const birimFiyat = parseFloat(islem.islem_anindaki_birim_fiyat || 0);
+        const toplamTutar = parseFloat(islem.toplam_tutar || 0); // Bu zaten hesaplanmış geliyor
         const kullaniciAdi = islem.kullanicilar ? utils.sanitizeHTML(islem.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<tr>
-            <td>${new Date(islem.tarih).toLocaleDateString('tr-TR')}</td>
+            <td>${tarihStr}</td>
             <td>${yemAdi}</td>
-            <td class="text-end">${parseFloat(islem.miktar_kg).toFixed(2)} KG</td>
-            <td class="text-end">${parseFloat(islem.birim_fiyat).toFixed(2)} TL</td>
-            <td class="text-end">${parseFloat(islem.toplam_tutar).toFixed(2)} TL</td>
+            <td class="text-end">${miktar.toFixed(2)} KG</td>
+            <td class="text-end">${birimFiyat.toFixed(2)} TL</td>
+            <td class="text-end">${toplamTutar.toFixed(2)} TL</td>
             <td>${kullaniciAdi}</td>
         </tr>`;
     });
@@ -213,19 +231,26 @@ function renderYemAsTable(container, veriler) {
 // Yem işlemini kart olarak render et
 function renderYemAsCards(container, veriler) {
     veriler.forEach(islem => {
-        const yemAdi = islem.yem_adi ? utils.sanitizeHTML(islem.yem_adi) : 'Bilinmeyen Yem';
+        // DÜZELTME: islem.tarih yerine islem.islem_tarihi kullanıldı.
+        const tarihStr = islem.islem_tarihi ? new Date(islem.islem_tarihi).toLocaleDateString('tr-TR') : 'Geçersiz Tarih';
+        // DÜZELTME: islem.yem_urunleri['yem_adi'] kontrolü eklendi.
+        const yemAdi = islem.yem_urunleri && islem.yem_urunleri.yem_adi ? utils.sanitizeHTML(islem.yem_urunleri.yem_adi) : 'Bilinmeyen Yem';
+        // DÜZELTME: parseFloat'tan önce kontrol eklendi.
+        const miktar = parseFloat(islem.miktar_kg || 0);
+        const birimFiyat = parseFloat(islem.islem_anindaki_birim_fiyat || 0);
+        const toplamTutar = parseFloat(islem.toplam_tutar || 0);
         const kullaniciAdi = islem.kullanicilar ? utils.sanitizeHTML(islem.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<div class="col-lg-4 col-md-6 col-12">
             <div class="card p-2 h-100">
                 <div class="card-body p-2">
                     <h6 class="card-title mb-1">${yemAdi}</h6>
                     <div class="d-flex justify-content-between">
-                        <span class="fs-4 fw-bold text-primary">${parseFloat(islem.miktar_kg).toFixed(2)} KG</span>
-                        <span class="fs-5 fw-bold text-danger">${parseFloat(islem.toplam_tutar).toFixed(2)} TL</span>
+                        <span class="fs-4 fw-bold text-primary">${miktar.toFixed(2)} KG</span>
+                        <span class="fs-5 fw-bold text-danger">${toplamTutar.toFixed(2)} TL</span>
                     </div>
-                     <div class="text-secondary small mt-1">Birim Fiyat: ${parseFloat(islem.birim_fiyat).toFixed(2)} TL</div>
+                     <div class="text-secondary small mt-1">Birim Fiyat: ${birimFiyat.toFixed(2)} TL</div>
                     <div class="d-flex justify-content-between align-items-end mt-2">
-                        <small class="text-secondary">${new Date(islem.tarih).toLocaleDateString('tr-TR')}</small>
+                        <small class="text-secondary">${tarihStr}</small>
                         <small class="text-secondary">Giren: ${kullaniciAdi}</small>
                     </div>
                 </div>
@@ -237,11 +262,15 @@ function renderYemAsCards(container, veriler) {
 // Finansal işlemi tablo olarak render et
 function renderFinansAsTable(container, veriler) {
     veriler.forEach(islem => {
+        // DÜZELTME: islem.tarih yerine islem.islem_tarihi kullanıldı.
+        const tarihStr = islem.islem_tarihi ? new Date(islem.islem_tarihi).toLocaleDateString('tr-TR') : 'Geçersiz Tarih';
+        // DÜZELTME: parseFloat'tan önce kontrol eklendi.
+        const tutar = parseFloat(islem.tutar || 0);
         const kullaniciAdi = islem.kullanicilar ? utils.sanitizeHTML(islem.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<tr>
-            <td>${new Date(islem.tarih).toLocaleDateString('tr-TR')}</td>
+            <td>${tarihStr}</td>
             <td><span class="badge bg-${islem.islem_tipi === 'Ödeme' ? 'success' : 'warning'}">${utils.sanitizeHTML(islem.islem_tipi)}</span></td>
-            <td class="text-end">${parseFloat(islem.tutar).toFixed(2)} TL</td>
+            <td class="text-end">${tutar.toFixed(2)} TL</td>
             <td>${utils.sanitizeHTML(islem.aciklama) || '-'}</td>
             <td>${kullaniciAdi}</td>
         </tr>`;
@@ -251,17 +280,21 @@ function renderFinansAsTable(container, veriler) {
 // Finansal işlemi kart olarak render et
 function renderFinansAsCards(container, veriler) {
     veriler.forEach(islem => {
+        // DÜZELTME: islem.tarih yerine islem.islem_tarihi kullanıldı.
+        const tarihStr = islem.islem_tarihi ? new Date(islem.islem_tarihi).toLocaleDateString('tr-TR') : 'Geçersiz Tarih';
         const isOdeme = islem.islem_tipi === 'Ödeme';
+        // DÜZELTME: parseFloat'tan önce kontrol eklendi.
+        const tutar = parseFloat(islem.tutar || 0);
         const kullaniciAdi = islem.kullanicilar ? utils.sanitizeHTML(islem.kullanicilar.kullanici_adi) : 'Bilinmiyor';
         container.innerHTML += `<div class="col-lg-4 col-md-6 col-12">
              <div class="finance-card ${isOdeme ? 'odeme' : 'avans'}" style="padding: 0.5rem; height: 100%;">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="tutar ${isOdeme ? 'text-success' : 'text-danger'}" style="font-size: 1.5rem;">${parseFloat(islem.tutar).toFixed(2)} TL</h5>
+                    <h5 class="tutar ${isOdeme ? 'text-success' : 'text-danger'}" style="font-size: 1.5rem;">${tutar.toFixed(2)} TL</h5>
                     <span class="badge bg-${isOdeme ? 'success' : 'warning'}">${utils.sanitizeHTML(islem.islem_tipi)}</span>
                 </div>
                 <p class="aciklama flex-grow-1">${utils.sanitizeHTML(islem.aciklama) || 'Açıklama yok'}</p>
                 <div class="d-flex justify-content-between align-items-end">
-                    <small class="text-secondary">${new Date(islem.tarih).toLocaleDateString('tr-TR')}</small>
+                    <small class="text-secondary">${tarihStr}</small>
                     <small class="text-secondary">Giren: ${kullaniciAdi}</small>
                 </div>
             </div>
