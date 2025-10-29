@@ -8,10 +8,14 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user' not in session:
-            if request.path.startswith('/api/') or request.path.startswith('/yem/api/') or request.path.startswith('/finans/api/'):
-                return jsonify({"error": "Bu işlem için giriş yapmanız gerekmektedir."}), 401
-            flash("Devam etmek için lütfen giriş yapın.", "info")
-            return redirect(url_for('auth.login_page'))
+            # Oturum yoksa, isteğin türüne bakılmaksızın 401 Unauthorized yanıtı döndür.
+            # Yanıta, istemcinin login sayfasına yönlendirme yapması gerektiğini
+            # belirten bir bayrak ekleyelim.
+            return jsonify({
+                "error": "Bu işlemi yapmak veya sayfayı görüntülemek için giriş yapmanız gerekmektedir.",
+                "redirect_to_login": True # İstemci tarafı için bayrak
+            }), 401
+        # Oturum varsa, normal işleme devam et
         return f(*args, **kwargs)
     return decorated_function
 

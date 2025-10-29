@@ -131,8 +131,10 @@ self.addEventListener('fetch', event => {
    let payload = { title: 'Süt Takip Sistemi', body: 'Yeni bir bildiriminiz var.' };
    try { payload = event.data.json(); } catch (e) { payload.body = event.data.text(); }
    event.waitUntil(self.registration.showNotification(payload.title, {
-       body: payload.body, icon: payload.icon || '/static/images/icon.png',
-       badge: '/static/images/favicon.ico', data: { url: payload.data ? payload.data.url : '/panel' }
+       body: payload.body,
+       icon: payload.icon || '/static/images/icon.png', // Büyük ikon
+       badge: '/static/images/notification-icon-white.png', // <-- YENİ BEYAZ İKONUN YOLU
+       data: { url: payload.data ? payload.data.url : '/panel' }
    }));
  });
 

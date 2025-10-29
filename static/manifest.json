@@ -16,6 +16,12 @@
       "src": "/static/images/icon.png",
       "sizes": "512x512",
       "type": "image/png"
+    },
+    {
+      "src": "/static/images/notification-icon-white.png", 
+      "sizes": "96x96",                                 
+      "type": "image/png",
+      "purpose": "monochrome"                           
     }
   ]
 }

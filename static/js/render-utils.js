@@ -136,7 +136,7 @@ const renderUtils = {
                             <div class="d-flex gap-2">${cevrimdisiEtiketi} ${duzenlendiEtiketi}</div>
                         </div>
                         <div class="d-flex justify-content-between align-items-center my-2">
-                            <span class="fs-4 fw-bold text-primary">${litre.toFixed(2)} L</span> {# Litre düzeltildi #}
+                            <span class="fs-4 fw-bold text-primary">${litre.toFixed(2)} L</span> 
                             <span class="fs-5 fw-bold text-success">${tutar.toFixed(2)} TL</span>
                         </div>
                         <div class="d-flex justify-content-between align-items-center">

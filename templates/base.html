@@ -101,7 +101,6 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
-    {# api.js ve ui.js genel fonksiyonlar içerdiği için her zaman yüklenebilir #}
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
     {# --- YENİ EKLENEN SATIR --- #}
     <script src="{{ url_for('static', filename='js/render-utils.js') }}"></script>
@@ -111,6 +110,7 @@
 
     {# SADECE GİRİŞ YAPILDIYSA YÜKLENECEK SCRIPTLER #}
     {% if session.get('user') %}
+        <script src="{{ url_for('static', filename='js/modal_handler.js') }}"></script>
         <script src="{{ url_for('static', filename='js/store.js') }}"></script>
         <script src="{{ url_for('static', filename='js/data-loader.js') }}"></script>
         <script src="{{ url_for('static', filename='js/chart-manager.js') }}"></script>
@@ -122,11 +122,23 @@
         <script src="{{ url_for('static', filename='js/push-manager.js') }}"></script>
         <script src="{{ url_for('static', filename='js/ios-install-prompt.js') }}"></script>
 
+
         {# Ana Panel ve Çiftçi Paneli Mantığı Scriptleri #}
         {# main.js diğer temel scriptlerden SONRA gelmeli #}
         <script src="{{ url_for('static', filename='js/main.js') }}"></script>
         <script src="{{ url_for('static', filename='js/ciftci_panel.js') }}"></script>
 
+        {# Service Worker Kaydı (Sadece giriş yapıldıysa mantıklı) #}
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register("/service-worker.js")
+                        .then(registration => { console.log('Dinamik Service Worker başarıyla kaydedildi: ', registration); })
+                        .catch(error => { console.log('Dinamik Service Worker kaydı başarısız: ', error); });
+                });
+            }
+        </script>
+        
         {# Alt bar aktif link JS'i #}
         <script>
             document.addEventListener('DOMContentLoaded', () => {

@@ -16,24 +16,39 @@ const api = {
         try {
             const response = await fetch(url, options);
 
-            // --- YENİ: 401 Hata Kontrolü ---
+// --- YENİ: 401 Hata Kontrolü ---
             if (response.status === 401) {
-                console.warn('API isteği yetkisiz (401). Oturum zaman aşımına uğramış olabilir. Giriş sayfasına yönlendiriliyor.');
-                // Yerel kullanıcı bilgisini temizle (varsa)
-                localStorage.removeItem('offlineUser');
-                // Kullanıcıyı bilgilendirerek giriş sayfasına yönlendir
-                // Not: gosterMesaj fonksiyonu ui.js'de tanımlı olmalı ve bu dosyadan önce yüklenmeli
-                if (typeof gosterMesaj === 'function') {
-                    gosterMesaj('Oturumunuz zaman aşımına uğradı veya geçersiz. Lütfen tekrar giriş yapın.', 'warning', 7000);
+                let errorData = {};
+                try {
+                    errorData = await response.json(); // JSON hatasını almayı dene
+                } catch(e) { /* JSON yoksa boş obje kalır */ }
+
+                console.warn('API isteği yetkisiz (401). Oturum zaman aşımına uğramış olabilir.');
+
+                // --- BAYRAK KONTROLÜ ---
+                if (errorData.redirect_to_login === true) {
+                    localStorage.removeItem('offlineUser');
+                    if (typeof gosterMesaj === 'function') {
+                        gosterMesaj(errorData.error || 'Oturumunuz zaman aşımına uğradı. Lütfen tekrar giriş yapın.', 'warning', 7000);
+                    }
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 1500);
+                } else {
+                    // Eğer bayrak yoksa veya farklı bir 401 hatasıysa, sadece mesaj gösterilebilir
+                    // veya farklı bir işlem yapılabilir. Şimdilik yine login'e yönlendirelim.
+                    localStorage.removeItem('offlineUser');
+                     if (typeof gosterMesaj === 'function') {
+                         gosterMesaj(errorData.error || 'Yetkisiz işlem. Giriş sayfasına yönlendiriliyorsunuz.', 'danger', 7000);
+                     }
+                     setTimeout(() => {
+                         window.location.href = '/login';
+                     }, 1500);
                 }
-                // Kısa bir gecikmeyle yönlendirme yapalım ki mesaj görünsün
-                setTimeout(() => {
-                    window.location.href = '/login'; // Giriş sayfasının URL'si
-                }, 1500);
-                // Yönlendirme sonrası hatayı tekrar fırlat ki çağıran fonksiyon devam etmesin
-                throw new Error('Yetkisiz Erişim (401)');
+                // --- /BAYRAK KONTROLÜ ---
+
+                throw new Error(errorData.error || 'Yetkisiz Erişim (401)');
             }
-            // --- 401 KONTROLÜ SONU ---
 
             // Yanıt JSON değilse (örn: CSV export) farklı işlem gerekebilir
             // Şimdilik tüm yanıtların JSON olduğunu varsayıyoruz, CSV için özel fetch yapısı var.
