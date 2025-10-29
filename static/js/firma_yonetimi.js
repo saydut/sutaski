@@ -1,25 +1,37 @@
 // static/js/firma_yonetimi.js
 
 let silmeOnayModal;
-let kullaniciDuzenleModal; // YENİ: Düzenleme modalı için değişken
-let tedarikciSeciciTomSelect; // YENİ: Düzenleme modalındaki TomSelect instance'ı
+let kullaniciDuzenleModal;
+let tedarikciSeciciTomSelect;
+let ciftciSifreAyarlaModal; // Yeni modal instance için global değişken
 
 // Sayfa yüklendiğinde çalışacak ana fonksiyon
 window.onload = function() {
     // Gerekli modalları başlat
     silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
-    kullaniciDuzenleModal = new bootstrap.Modal(document.getElementById('kullaniciDuzenleModal')); // YENİ
+    kullaniciDuzenleModal = new bootstrap.Modal(document.getElementById('kullaniciDuzenleModal'));
+    // Yeni modalı başlat (ID'nin _firma_modals.html dosyasındakiyle eşleştiğinden emin ol)
+    const ciftciModalElement = document.getElementById('ciftciSifreAyarlaModal');
+    if (ciftciModalElement) {
+        ciftciSifreAyarlaModal = new bootstrap.Modal(ciftciModalElement);
+    } else {
+        console.warn("Çiftçi şifre ayarlama modal elementi (ciftciSifreAyarlaModal) bulunamadı.");
+    }
+
 
     // Yeni kullanıcı ekleme formunun gönderilme olayını dinle
-    document.getElementById('yeni-kullanici-form').addEventListener('submit', yeniKullaniciEkle);
+    const yeniKullaniciForm = document.getElementById('yeni-kullanici-form');
+    if(yeniKullaniciForm) yeniKullaniciForm.addEventListener('submit', yeniKullaniciEkle);
 
     // Düzenleme modalındaki çoklu tedarikçi seçiciyi başlat
-    // YENİ: TomSelect'i burada başlatıyoruz
-    tedarikciSeciciTomSelect = new TomSelect("#edit-tedarikci-sec", {
-        plugins: ['remove_button'], // Seçilenleri kolayca kaldırmak için
-        create: false,
-        sortField: { field: "text", direction: "asc" }
-    });
+    const editTedarikciSelect = document.getElementById('edit-tedarikci-sec');
+    if(editTedarikciSelect) {
+        tedarikciSeciciTomSelect = new TomSelect(editTedarikciSelect, {
+            plugins: ['remove_button'], // Seçilenleri kolayca kaldırmak için
+            create: false,
+            sortField: { field: "text", direction: "asc" }
+        });
+    }
 
     // Sayfa verilerini sunucudan yükle
     verileriYukle();
@@ -29,36 +41,46 @@ window.onload = function() {
  * Sunucudan kullanıcı listesini ve lisans limitini çeker, ardından arayüzü günceller.
  */
 async function verileriYukle() {
+    // Bu fonksiyon aynı kalıyor
     const tabloBody = document.getElementById('kullanicilar-tablosu');
     const lisansBilgisiElementi = document.getElementById('lisans-bilgisi');
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+    if (!tabloBody || !lisansBilgisiElementi || !veriYokMesaji) {
+        console.error("verileriYukle: Gerekli DOM elementleri bulunamadı.");
+        return;
+    }
 
-    // Yükleniyor durumunu göster
+
     tabloBody.innerHTML = '<tr><td colspan="4" class="text-center"><div class="spinner-border spinner-border-sm"></div> Yükleniyor...</td></tr>';
     lisansBilgisiElementi.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
     veriYokMesaji.style.display = 'none';
 
     try {
         const data = await api.request('/firma/api/yonetim_data'); // api.js kullandığımızı varsayıyoruz
-
-        lisansBilgisiniGoster(data.kullanicilar, data.limit);
-        kullaniciTablosunuDoldur(data.kullanicilar);
+        if (data && data.kullanicilar && data.limit !== undefined) {
+             lisansBilgisiniGoster(data.kullanicilar, data.limit);
+             kullaniciTablosunuDoldur(data.kullanicilar);
+        } else {
+            throw new Error("API'den eksik veri geldi.");
+        }
 
     } catch (error) {
-        tabloBody.innerHTML = '';
+        tabloBody.innerHTML = ''; // Hata durumunda yükleniyor... yazısını kaldır
         gosterMesaj(error.message || 'Veriler yüklenirken bir hata oluştu.', 'danger');
         lisansBilgisiElementi.innerText = 'Hata';
     }
 }
 
 /**
- * Kullanıcı listesini tabloya render eder.
+ * Kullanıcı listesini tabloya render eder. (Çiftçi şifre butonu eklendi)
  * @param {Array} kullanicilar - Sunucudan gelen kullanıcı objeleri dizisi.
  */
 function kullaniciTablosunuDoldur(kullanicilar) {
     const tabloBody = document.getElementById('kullanicilar-tablosu');
     const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    tabloBody.innerHTML = '';
+    if (!tabloBody || !veriYokMesaji) return; // Elementler yoksa çık
+
+    tabloBody.innerHTML = ''; // Temizle
 
     if (!kullanicilar || kullanicilar.length === 0) {
         veriYokMesaji.style.display = 'block';
@@ -68,22 +90,63 @@ function kullaniciTablosunuDoldur(kullanicilar) {
     veriYokMesaji.style.display = 'none';
 
     kullanicilar.forEach(kullanici => {
-        const olusturulmaTarihi = new Date(kullanici.created_at).toLocaleDateString('tr-TR');
-        const rolText = kullanici.rol.charAt(0).toUpperCase() + kullanici.rol.slice(1);
+        let olusturulmaTarihi = "Bilinmiyor";
+        try {
+            olusturulmaTarihi = new Date(kullanici.created_at).toLocaleDateString('tr-TR');
+        } catch(e) { /* Hata olursa varsayılan kalır */ }
 
-        // YENİ: Düzenle butonu eklendi, onclick ile duzenlemeModaliniAc fonksiyonunu çağırıyor
-        const row = `
-            <tr id="kullanici-satir-${kullanici.id}">
-                <td><strong>${utils.sanitizeHTML(kullanici.kullanici_adi)}</strong></td>
-                <td><span class="badge bg-secondary">${rolText}</span></td>
-                <td>${olusturulmaTarihi}</td>
-                <td class="text-center">
+        // Rol metnini daha kullanıcı dostu yapalım
+        let rolText = (kullanici.rol || '').replace('_', ' '); // Önce alt çizgiyi boşlukla değiştir
+        rolText = rolText.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '); // Her kelimenin baş harfini büyüt
+        if (rolText === 'Ciftci') rolText = 'Çiftçi'; // Türkçe karakter düzeltmesi
+        else if (rolText === 'Firma Yetkilisi') rolText = 'Yetkili';
+
+
+        // Role göre rozet rengi
+        let rolBadgeClass = 'bg-secondary'; // Varsayılan
+        if (kullanici.rol === 'firma_yetkilisi') rolBadgeClass = 'bg-primary';
+        else if (kullanici.rol === 'toplayici') rolBadgeClass = 'bg-info text-dark';
+        else if (kullanici.rol === 'muhasebeci') rolBadgeClass = 'bg-warning text-dark';
+        else if (kullanici.rol === 'ciftci') rolBadgeClass = 'bg-success';
+
+
+        // --- Çiftçi için Şifre Ayarla butonu ---
+        let sifreButonu = '';
+        // Sadece 'ciftci' rolü için butonu göster
+        if (kullanici.rol === 'ciftci') {
+            // Kullanıcı adındaki tırnak işaretlerini escape et
+            const guvenliKullaniciAdi = (kullanici.kullanici_adi || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            sifreButonu = `
+                <button class="btn btn-sm btn-outline-warning ms-1"
+                        onclick="ciftciSifreModaliniAc(${kullanici.id}, '${guvenliKullaniciAdi}')"
+                        title="Çiftçi Şifresini Ayarla">
+                    <i class="bi bi-key-fill"></i>
+                </button>`;
+        }
+        // --- /Çiftçi butonu ---
+
+        // Diğer roller için Düzenle ve Sil butonları
+        let duzenleSilButonlari = '';
+        if (kullanici.rol !== 'ciftci') {
+             const guvenliKullaniciAdi = (kullanici.kullanici_adi || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+             duzenleSilButonlari = `
                     <button class="btn btn-sm btn-outline-primary me-1" onclick="duzenlemeModaliniAc(${kullanici.id})">
                         <i class="bi bi-pencil"></i> Düzenle
                     </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="silmeOnayiAc(${kullanici.id}, '${utils.sanitizeHTML(kullanici.kullanici_adi)}')">
+                    <button class="btn btn-sm btn-outline-danger" onclick="silmeOnayiAc(${kullanici.id}, '${guvenliKullaniciAdi}')">
                         <i class="bi bi-trash"></i> Sil
                     </button>
+                    `;
+        }
+
+        const row = `
+            <tr id="kullanici-satir-${kullanici.id}">
+                <td><strong>${utils.sanitizeHTML(kullanici.kullanici_adi)}</strong></td>
+                <td><span class="badge ${rolBadgeClass}">${rolText}</span></td>
+                <td>${olusturulmaTarihi}</td>
+                <td class="text-center">
+                    ${duzenleSilButonlari}
+                    ${sifreButonu} {# Şifre butonunu buraya ekle #}
                 </td>
             </tr>
         `;
@@ -91,13 +154,14 @@ function kullaniciTablosunuDoldur(kullanicilar) {
     });
 }
 
+
 /**
  * Lisans kullanım durumunu arayüzde gösterir.
- * @param {Array} kullanicilar - Mevcut kullanıcıların listesi.
- * @param {number} limit - Maksimum toplayıcı limiti.
  */
 function lisansBilgisiniGoster(kullanicilar, limit) {
+    // Bu fonksiyon aynı kalıyor
     const lisansBilgisiElementi = document.getElementById('lisans-bilgisi');
+    if (!lisansBilgisiElementi) return; // Element yoksa çık
     const toplayiciSayisi = kullanicilar.filter(k => k.rol === 'toplayici').length;
 
     let renkSinifi = 'text-success';
@@ -116,17 +180,16 @@ function lisansBilgisiniGoster(kullanicilar, limit) {
 
 /**
  * Yeni kullanıcı ekleme formunu yönetir.
- * @param {Event} event - Form submit olayı.
  */
 async function yeniKullaniciEkle(event) {
-    event.preventDefault(); // Formun sayfayı yenilemesini engelle
-
+    // Bu fonksiyon aynı kalıyor
+    event.preventDefault();
     const kaydetButton = document.getElementById('kaydet-btn');
+    if (!kaydetButton) return; // Buton yoksa çık
     const originalButtonText = kaydetButton.innerHTML;
     const veri = {
         kullanici_adi: document.getElementById('kullanici-adi-input').value.trim(),
         sifre: document.getElementById('sifre-input').value,
-        // YENİ: Telefon ve adres bilgilerini de gönderiyoruz
         telefon_no: document.getElementById('telefon-input').value.trim(),
         adres: document.getElementById('adres-input').value.trim()
     };
@@ -147,122 +210,127 @@ async function yeniKullaniciEkle(event) {
         });
 
         gosterMesaj(result.message, 'success');
-        document.getElementById('yeni-kullanici-form').reset(); // Formu temizle
-        await verileriYukle(); // Listeyi ve lisans sayacını güncelle
+        document.getElementById('yeni-kullanici-form').reset();
+        await verileriYukle();
 
     } catch (error) {
         gosterMesaj(error.message, 'danger');
     } finally {
         kaydetButton.disabled = false;
-        kaydetButton.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Toplayıcıyı Ekle'; // Buton metnini eski haline getir
+        kaydetButton.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Toplayıcıyı Ekle';
     }
 }
 
 /**
  * Silme onay modal'ını açar.
- * @param {number} id - Silinecek kullanıcının ID'si.
- * @param {string} kullaniciAdi - Silinecek kullanıcının adı.
  */
 function silmeOnayiAc(id, kullaniciAdi) {
-    document.getElementById('silinecek-kullanici-id').value = id;
-    document.getElementById('silinecek-kullanici-adi').innerText = kullaniciAdi;
-    silmeOnayModal.show();
+    // Bu fonksiyon aynı kalıyor
+    const idInput = document.getElementById('silinecek-kullanici-id');
+    const nameSpan = document.getElementById('silinecek-kullanici-adi');
+    if(idInput) idInput.value = id;
+    if(nameSpan) nameSpan.innerText = kullaniciAdi;
+    if(silmeOnayModal) silmeOnayModal.show();
 }
 
 /**
  * API'yi çağırarak kullanıcıyı siler.
  */
 async function kullaniciSil() {
-    const id = document.getElementById('silinecek-kullanici-id').value;
-    silmeOnayModal.hide();
+    // Bu fonksiyon aynı kalıyor
+    const idInput = document.getElementById('silinecek-kullanici-id');
+    if (!idInput) return; // Input yoksa çık
+    const id = idInput.value;
+    if(silmeOnayModal) silmeOnayModal.hide();
 
-    // İyimser Arayüz Güncellemesi
     const silinecekSatir = document.getElementById(`kullanici-satir-${id}`);
-    const originalHTML = silinecekSatir ? silinecekSatir.outerHTML : null; // Geri yükleme için sakla
+    const originalHTML = silinecekSatir ? silinecekSatir.outerHTML : null;
     const parent = silinecekSatir ? silinecekSatir.parentNode : null;
     const nextSibling = silinecekSatir ? silinecekSatir.nextSibling : null;
 
     if (silinecekSatir) {
         silinecekSatir.style.transition = 'opacity 0.4s ease';
         silinecekSatir.style.opacity = '0';
-        setTimeout(() => silinecekSatir.remove(), 400);
+        setTimeout(() => {
+            if (silinecekSatir.parentNode) silinecekSatir.remove(); // Hâlâ varsa sil
+             // Liste boşaldıysa "veri yok" mesajını kontrol et
+             if (parent && parent.children.length === 0) {
+                 const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+                 if(veriYokMesaji) veriYokMesaji.style.display = 'block';
+             }
+        }, 400);
     }
 
     try {
         const result = await api.request(`/firma/api/kullanici_sil/${id}`, { method: 'DELETE' });
         gosterMesaj(result.message, 'success');
-        // Silme başarılı olduğu için sadece lisans sayacını güncelle
         const data = await api.request('/firma/api/yonetim_data');
         lisansBilgisiniGoster(data.kullanicilar, data.limit);
-
-        // Eğer silindikten sonra hiç kullanıcı kalmadıysa "veri yok" mesajını göster
+        // Liste boşaldıysa "veri yok" mesajını burada da kontrol et (zaten yukarıda var ama garanti olsun)
         if (parent && parent.children.length === 0) {
-            document.getElementById('veri-yok-mesaji').style.display = 'block';
+             const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+             if(veriYokMesaji) veriYokMesaji.style.display = 'block';
         }
-
     } catch (error) {
         gosterMesaj(error.message, 'danger');
-        // Hata durumunda satırı geri ekle (eğer önceden varsa)
         if (originalHTML && parent) {
-            const temp = document.createElement('tbody'); // Geçici bir element
+            const temp = document.createElement('tbody');
             temp.innerHTML = originalHTML;
             const restoredRow = temp.firstChild;
-            restoredRow.style.opacity = '1'; // Görünür yap
-            parent.insertBefore(restoredRow, nextSibling); // Eski yerine ekle
+            if (restoredRow) { // Elementin varlığını kontrol et
+                 restoredRow.style.opacity = '1';
+                 parent.insertBefore(restoredRow, nextSibling);
+                 // Veri yok mesajını gizle
+                 const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+                 if(veriYokMesaji) veriYokMesaji.style.display = 'none';
+            }
         }
-        await verileriYukle(); // Listeyi tam olarak senkronize etmek için yeniden yükle
+        await verileriYukle(); // Hata durumunda listeyi tam senkronize et
     }
 }
 
-// --- YENİ FONKSİYONLAR ---
-
 /**
  * Kullanıcı düzenleme modalını açar ve ilgili verileri yükler.
- * @param {number} kullaniciId - Düzenlenecek kullanıcının ID'si.
  */
 async function duzenlemeModaliniAc(kullaniciId) {
+    // Bu fonksiyon aynı kalıyor
     const modalElement = document.getElementById('kullaniciDuzenleModal');
     const tedarikciAtamaAlani = document.getElementById('tedarikci-atama-alani');
     const form = document.getElementById('kullanici-duzenle-form');
-    form.reset(); // Önceki verileri temizle
-    tedarikciSeciciTomSelect.clear(); // TomSelect'i temizle
-    tedarikciSeciciTomSelect.clearOptions();
+    if (!modalElement || !tedarikciAtamaAlani || !form || !tedarikciSeciciTomSelect) return; // Elementler yoksa çık
 
-    // Geçici yükleniyor durumu
+    form.reset();
+    tedarikciSeciciTomSelect.clear();
+    tedarikciSeciciTomSelect.clearOptions();
     modalElement.querySelector('.modal-title').innerText = 'Yükleniyor...';
     tedarikciAtamaAlani.style.display = 'none';
 
     try {
         const data = await api.request(`/firma/api/kullanici_detay/${kullaniciId}`);
+        if (!data || !data.kullanici_detay || !data.kullanici_detay.kullanici || !data.tum_tedarikciler) {
+            throw new Error("API'den eksik kullanıcı detayı geldi.");
+        }
         const kullanici = data.kullanici_detay.kullanici;
-        const atananTedarikciler = data.kullanici_detay.atanan_tedarikciler;
+        const atananTedarikciler = data.kullanici_detay.atanan_tedarikciler || [];
         const tumTedarikciler = data.tum_tedarikciler;
 
-        // Modal başlığını ve ID'yi ayarla
         modalElement.querySelector('.modal-title').innerText = `Kullanıcı Düzenle: ${utils.sanitizeHTML(kullanici.kullanici_adi)}`;
         document.getElementById('edit-kullanici-id').value = kullanici.id;
-
-        // Form alanlarını doldur
         document.getElementById('edit-kullanici-adi-input').value = kullanici.kullanici_adi;
         document.getElementById('edit-telefon-input').value = kullanici.telefon_no || '';
         document.getElementById('edit-adres-input').value = kullanici.adres || '';
-        document.getElementById('edit-sifre-input').value = ''; // Şifre alanını her zaman boş başlat
+        document.getElementById('edit-sifre-input').value = '';
 
-        // Eğer kullanıcı toplayıcı ise tedarikçi seçme alanını göster ve doldur
         if (kullanici.rol === 'toplayici') {
             tedarikciAtamaAlani.style.display = 'block';
-
-            // TomSelect'i tüm tedarikçilerle doldur
             const options = tumTedarikciler.map(t => ({ value: t.id, text: utils.sanitizeHTML(t.isim) }));
             tedarikciSeciciTomSelect.addOptions(options);
-
-            // Önceden atanmış tedarikçileri seçili hale getir
             tedarikciSeciciTomSelect.setValue(atananTedarikciler);
         } else {
-            tedarikciAtamaAlani.style.display = 'none'; // Muhasebeci ise gizle
+            tedarikciAtamaAlani.style.display = 'none';
         }
 
-        kullaniciDuzenleModal.show(); // Modalı göster
+        if(kullaniciDuzenleModal) kullaniciDuzenleModal.show();
 
     } catch (error) {
         gosterMesaj(error.message || 'Kullanıcı detayları yüklenemedi.', 'danger');
@@ -273,13 +341,16 @@ async function duzenlemeModaliniAc(kullaniciId) {
  * Kullanıcı bilgilerini ve atamalarını günceller.
  */
 async function kullaniciGuncelle() {
-    const id = document.getElementById('edit-kullanici-id').value;
+    // Bu fonksiyon aynı kalıyor
+    const idInput = document.getElementById('edit-kullanici-id');
     const guncelleButton = document.getElementById('guncelle-btn');
+    if (!idInput || !guncelleButton || !tedarikciSeciciTomSelect) return; // Elementler yoksa çık
+    const id = idInput.value;
     const originalButtonText = guncelleButton.innerHTML;
 
     const veri = {
         kullanici_adi: document.getElementById('edit-kullanici-adi-input').value.trim(),
-        sifre: document.getElementById('edit-sifre-input').value, // Boşsa backend bunu dikkate almayacak
+        sifre: document.getElementById('edit-sifre-input').value,
         telefon_no: document.getElementById('edit-telefon-input').value.trim(),
         adres: document.getElementById('edit-adres-input').value.trim(),
         atanan_tedarikciler: tedarikciSeciciTomSelect.getValue() // TomSelect'ten seçili ID'leri al
@@ -301,8 +372,8 @@ async function kullaniciGuncelle() {
         });
 
         gosterMesaj(result.message, 'success');
-        kullaniciDuzenleModal.hide();
-        await verileriYukle(); // Listeyi güncelle
+        if(kullaniciDuzenleModal) kullaniciDuzenleModal.hide();
+        await verileriYukle();
 
     } catch (error) {
         gosterMesaj(error.message, 'danger');
@@ -312,40 +383,81 @@ async function kullaniciGuncelle() {
     }
 }
 
-// --- YENİ FONKSİYON: Çiftçi Şifresini Sıfırla ---
-async function sifreSifirlaCiftci(kullaniciId, kullaniciAdi) {
-    if (!confirm(`${kullaniciAdi} adlı çiftçinin şifresini sıfırlamak istediğinizden emin misiniz? Yeni 4 haneli bir şifre oluşturulacaktır.`)) {
+// --- YENİ FONKSİYONLAR ---
+
+/**
+ * Çiftçi şifre ayarlama modalını açar ve kullanıcı bilgilerini doldurur.
+ */
+function ciftciSifreModaliniAc(kullaniciId, kullaniciAdi) {
+    const idInput = document.getElementById('ciftci-sifre-ayarla-id');
+    const nameSpan = document.getElementById('ciftci-sifre-ayarla-kullanici');
+    const passInput = document.getElementById('ciftci-yeni-sifre-input');
+    const passRepeatInput = document.getElementById('ciftci-yeni-sifre-tekrar-input');
+
+    if (idInput) idInput.value = kullaniciId;
+    if (nameSpan) nameSpan.innerText = kullaniciAdi;
+    if (passInput) passInput.value = ''; // Alanları temizle
+    if (passRepeatInput) passRepeatInput.value = '';
+
+    if (ciftciSifreAyarlaModal) {
+        ciftciSifreAyarlaModal.show();
+    } else {
+        console.error("Çiftçi şifre ayarlama modalı başlatılamamış!");
+    }
+}
+
+/**
+ * Çiftçi şifre ayarlama modalındaki yeni şifreyi alır ve API'ye gönderir.
+ */
+async function ciftciSifreKaydet() {
+    const idInput = document.getElementById('ciftci-sifre-ayarla-id');
+    const yeniSifreInput = document.getElementById('ciftci-yeni-sifre-input');
+    const yeniSifreTekrarInput = document.getElementById('ciftci-yeni-sifre-tekrar-input');
+    const kaydetButton = document.querySelector('#ciftciSifreAyarlaModal .btn-primary');
+    if (!idInput || !yeniSifreInput || !yeniSifreTekrarInput || !kaydetButton) {
+        console.error("ciftciSifreKaydet: Gerekli DOM elementleri bulunamadı.");
         return;
     }
 
-    // Butonu geçici olarak devre dışı bırak (opsiyonel ama iyi olur)
-    const button = event.target.closest('button'); // Tıklanan butonu bul
-    let originalButtonHtml = '';
-    if(button) {
-        originalButtonHtml = button.innerHTML;
-        button.disabled = true;
-        button.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+    const id = idInput.value;
+    const yeniSifre = yeniSifreInput.value;
+    const yeniSifreTekrar = yeniSifreTekrarInput.value;
+    const originalButtonText = kaydetButton.innerHTML;
+
+    if (!yeniSifre || !yeniSifreTekrar) {
+        gosterMesaj('Lütfen yeni şifreyi ve tekrarını girin.', 'warning');
+        return;
     }
+    if (yeniSifre !== yeniSifreTekrar) {
+        gosterMesaj('Girilen yeni şifreler eşleşmiyor.', 'warning');
+        return;
+    }
+    // İsteğe bağlı: Minimum şifre uzunluğu kontrolü
+    // if (yeniSifre.length < 4) {
+    //     gosterMesaj('Yeni şifre en az 4 karakter olmalıdır.', 'warning');
+    //     return;
+    // }
+
+    kaydetButton.disabled = true;
+    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
 
     try {
-        // Backend API'sini çağır (POST metodu ile)
-        const result = await api.request(`/firma/api/ciftci_sifre_sifirla/${kullaniciId}`, {
-            method: 'POST'
+        // Yeni API endpoint'ini ve metodu kullan
+        const result = await api.request(`/firma/api/ciftci_sifre_setle/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ yeni_sifre: yeniSifre }) // Sadece yeni şifreyi gönder
         });
 
-        // Başarılı olursa yeni şifreyi göster
-        const mesaj = `${result.message}<br><strong class="fs-5">${kullaniciAdi}</strong> için yeni şifre: <strong class="fs-4 text-danger">${result.yeni_sifre}</strong><br><small>Bu şifreyi çiftçiye iletin.</small>`;
-        gosterMesaj(mesaj, 'success', 15000); // 15 saniye göster
+        gosterMesaj(result.message, 'success'); // Başarı mesajını göster
+        if (ciftciSifreAyarlaModal) ciftciSifreAyarlaModal.hide(); // Modalı kapat
 
     } catch (error) {
-        // Hata olursa mesaj göster
-        gosterMesaj(error.message || 'Şifre sıfırlanırken bir hata oluştu.', 'danger');
+        // Hata mesajını göster
+        gosterMesaj(error.message || 'Şifre ayarlanırken bir hata oluştu.', 'danger');
     } finally {
         // Butonu tekrar aktif et
-        if(button) {
-            button.disabled = false;
-            button.innerHTML = originalButtonHtml;
-        }
+        kaydetButton.disabled = false;
+        kaydetButton.innerHTML = 'Şifreyi Kaydet';
     }
 }
-// --- YENİ FONKSİYON SONU ---

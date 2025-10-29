@@ -9,5 +9,6 @@ class UserRole(Enum):
 
 
 class FinansIslemTipi(Enum):
-    ODEME = 'Ödeme'
-    AVANS = 'Avans'
+    ODEME = 'Ödeme' # Şirket -> Çiftçi (Hakediş)
+    AVANS = 'Avans' # Şirket -> Çiftçi (Ön Ödeme)
+    TAHSILAT = 'Tahsilat' # Çiftçi -> Şirket (Yeni)

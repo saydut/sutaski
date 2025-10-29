@@ -736,3 +736,7 @@ h5 { font-size: 0.95rem; }
         padding-bottom: 70px; /* Alt barın yüksekliği kadar (yaklaşık) */
     }
 }
+
+.finance-card.tahsilat {
+    border-left: 4px solid var(--info); /* Tema ile uyumlu mavi renk */
+}

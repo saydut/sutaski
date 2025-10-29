@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>Müstahsil Makbuzu</title>
     <style>
+        /* Stil tanımlamaları önceki cevapla aynı kalabilir,
+           .islem-tipi-tahsilat stili eklenebilir. */
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
         body { font-family: 'Roboto', sans-serif; font-size: 9pt; color: #333; }
         .container { width: 95%; margin: 0 auto; }
@@ -27,14 +29,22 @@
         .footer-section { display: flex; justify-content: space-between; margin-top: 40px; }
         .footer-section div { width: 45%; text-align: center; }
         .footer-section .signature { border-bottom: 1px solid #333; padding-bottom: 2px; margin-top: 40px; }
-        .islem-tipi-odeme { color: #008000; }
-        .islem-tipi-avans { color: #D9534F; }
+        .islem-tipi-odeme, .islem-tipi-avans { color: #D9534F; } /* Şirketten çıkış kırmızı */
+        .islem-tipi-tahsilat { color: #5CB85C; } /* Şirkete giriş yeşil */
+        h3 { /* Yeni eklenen başlık için stil */
+            font-size: 11pt; /* Makbuzda biraz daha küçük */
+            color: #334155;
+            border-bottom: 1px solid #E2E8F0;
+            padding-bottom: 3px;
+            margin-top: 15px;
+            margin-bottom: 8px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header"><h1>MÜSTAHSİL MAKBUZU</h1></div>
-        
+
         <div class="info-section">
             <div>
                 <h2>DÜZENLEYEN</h2>
@@ -65,7 +75,7 @@
                     <td>{{ girdi.tarih }}</td><td>Soğutulmuş Çiğ İnek Sütü</td>
                     <td class="text-right">{{ "%.2f"|format(girdi.litre | float) }} Lt.</td>
                     <td class="text-right">{{ "%.2f"|format(girdi.fiyat | float) }} TL</td>
-                    <td class="text-right">{{ "%.2f"|format(girdi.tutar | float) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(girdi.tutar) }} TL</td> {# tutar zaten Decimal #}
                 </tr>
                 {% else %}
                 <tr><td colspan="5" style="text-align:center;">Bu ay için süt alımı bulunmamaktadır.</td></tr>
@@ -85,57 +95,82 @@
                 {% for islem in yem_islemleri %}
                 <tr>
                     <td>{{ islem.islem_tarihi }}</td><td>{{ islem.yem_adi }}</td>
-                    <td class="text-right">{{ "%.2f"|format(islem.miktar_kg | float) }}</td>
-                    <td class="text-right">{{ "%.2f"|format(islem.islem_anindaki_birim_fiyat | float) }} TL</td>
-                    <td class="text-right">{{ "%.2f"|format(islem.toplam_tutar | float) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.miktar_kg) }}</td> {# Zaten Decimal #}
+                    <td class="text-right">{{ "%.2f"|format(islem.islem_anindaki_birim_fiyat) }} TL</td> {# Zaten Decimal #}
+                    <td class="text-right">{{ "%.2f"|format(islem.toplam_tutar) }} TL</td> {# Zaten Decimal #}
                 </tr>
                 {% else %}
                 <tr><td colspan="5" style="text-align:center;">Bu ay için yem alımı bulunmamaktadır.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
-        
-        <h2 class="table-title">Ödemeler / Avanslar</h2>
+
+        {# --- Finansal İşlemler Bölümü Güncellemesi --- #}
+        <h3>Şirketten Yapılan Ödemeler (Avans/Hakediş)</h3>
         <table>
              <thead><tr><th style="width:15%;">Tarih</th><th>İşlem Tipi</th><th>Açıklama</th><th class="text-right">Tutar</th></tr></thead>
              <tbody>
-                {% for islem in finansal_islemler %}
+                {% for islem in sirket_odemeleri %} {# Yeni Liste Adı #}
                 <tr>
                     <td>{{ islem.islem_tarihi }}</td>
-                    <td><span class="islem-tipi-{{ 'odeme' if islem.islem_tipi == 'Ödeme' else 'avans' }}">{{ islem.islem_tipi }}</span></td>
+                    <td><span class="islem-tipi-{{ 'avans' if islem.islem_tipi == 'Avans' else 'odeme' }}">{{ islem.islem_tipi }}</span></td>
                     <td>{{ islem.aciklama or '-' }}</td>
-                    <td class="text-right">{{ "%.2f"|format(islem.tutar | float) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.tutar) }} TL</td> {# Zaten Decimal #}
                 </tr>
                 {% else %}
-                <tr><td colspan="4" style="text-align:center;">Bu ay için ödeme veya avans işlemi bulunmamaktadır.</td></tr>
+                <tr><td colspan="4" style="text-align:center;">Bu ay şirketten ödeme (Avans/Hakediş) yapılmamıştır.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
 
+        <h3>Çiftçiden Alınan Tahsilatlar</h3>
+        <table>
+             <thead><tr><th style="width:15%;">Tarih</th><th>İşlem Tipi</th><th>Açıklama</th><th class="text-right">Tutar</th></tr></thead>
+             <tbody>
+                {% for islem in tahsilatlar %} {# Yeni Liste Adı #}
+                <tr>
+                    <td>{{ islem.islem_tarihi }}</td>
+                    <td><span class="islem-tipi-tahsilat">{{ islem.islem_tipi }}</span></td>
+                    <td>{{ islem.aciklama or '-' }}</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.tutar) }} TL</td> {# Zaten Decimal #}
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align:center;">Bu ay çiftçiden tahsilat yapılmamıştır.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {# --- Finansal İşlemler Sonu --- #}
+
+        {# --- Özet Tablosu Güncellemesi --- #}
         <div class="summary-section">
             <table class="summary-table">
                 <tr>
                     <td class="label">Süt Alım Toplam Tutarı</td>
-                    <td class="text-right">{{ "%.2f"|format(ozet.toplam_sut_tutari | float) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(ozet.toplam_sut_tutari) }} TL</td> {# Zaten Decimal #}
                 </tr>
                 <tr>
                     <td class="label">G.V. Stopajı (%{{ (stopaj_orani * 100) | int }})</td>
-                    <td class="text-right">- {{ "%.2f"|format(ozet.stopaj_tutari | float) }} TL</td>
+                    <td class="text-right">- {{ "%.2f"|format(ozet.stopaj_tutari) }} TL</td> {# Zaten Decimal #}
                 </tr>
                 <tr>
                     <td class="label">Yem Alım Toplamı</td>
-                    <td class="text-right">- {{ "%.2f"|format(ozet.toplam_yem_borcu | float) }} TL</td>
+                    <td class="text-right">- {{ "%.2f"|format(ozet.toplam_yem_borcu) }} TL</td> {# Zaten Decimal #}
                 </tr>
                  <tr>
-                    <td class="label">Yapılan Ödeme/Avans Toplamı</td>
-                    <td class="text-right">- {{ "%.2f"|format(ozet.toplam_odeme | float) }} TL</td>
+                    <td class="label">Şirketten Yapılan Ödeme Toplamı</td> {# Başlık Güncellendi #}
+                    <td class="text-right">- {{ "%.2f"|format(ozet.toplam_sirket_odemesi) }} TL</td> {# Yeni Alan Adı #}
+                </tr>
+                <tr>
+                    <td class="label">Çiftçiden Alınan Tahsilat Toplamı</td> {# Yeni Satır #}
+                    <td class="text-right">+ {{ "%.2f"|format(ozet.toplam_tahsilat) }} TL</td> {# Yeni Alan Adı #}
                 </tr>
                 <tr class="total">
                     <td class="label">ÖDENECEK NET TUTAR</td>
-                    <td class="text-right">{{ "%.2f"|format(ozet.net_odenecek | float) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(ozet.net_odenecek) }} TL</td> {# Hesaplama report_service içinde #}
                 </tr>
             </table>
         </div>
+        {# --- Özet Tablosu Sonu --- #}
 
         <div class="footer-section">
             <div><p>Malı Satan</p><p>{{ tedarikci.isim }}</p><p class="signature">İmza</p></div>

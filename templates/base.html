@@ -36,8 +36,8 @@
 
     {% block content %}{% endblock %}
 
-    {# Alt Navigasyon Barı - Sadece giriş yapıldıysa göster #}
-    {% if session.get('user') %}
+    {# Alt Navigasyon Barı - Sadece giriş yapıldıysa ve rol 'ciftci' DEĞİLSE göster #}
+    {% if session.get('user') and session.get('user', {}).get('rol') != 'ciftci' %}
     <nav class="navbar fixed-bottom shadow-lg d-lg-none bottom-nav-custom"> {# bg-light kaldırıldı #}
         <div class="container-fluid">
             <ul class="nav nav-fill w-100">
@@ -74,7 +74,7 @@
                     </a>
                 </li>
                 {% endif %}
-                 {# YENİ: Profil linki eklendi (her rol görebilir) #}
+                 {# Profil linki eklendi (her rol görebilir) #}
                 <li class="nav-item">
                     <a class="nav-link bottom-nav-link" href="{{ url_for('profil.profil_sayfasi') }}" data-page="profil">
                          <i class="bi bi-person-circle d-block fs-4 mb-1"></i>
@@ -84,7 +84,7 @@
             </ul>
         </div>
     </nav>
-    {% endif %} {# session.get('user') kontrolü sonu #}
+    {% endif %} {# session.get('user') ve rol kontrolü sonu #}
 
 
     {# iOS Yükleme İstemcisi (Her zaman yüklenebilir) #}
@@ -101,16 +101,20 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    {# api.js ve ui.js genel fonksiyonlar içerdiği için her zaman yüklenebilir #}
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
     {# --- YENİ EKLENEN SATIR --- #}
     <script src="{{ url_for('static', filename='js/render-utils.js') }}"></script>
     {# --- ui.js render-utils'den SONRA gelmeli --- #}
     <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    {# Genel scriptler burada biter #}
 
 
     {# SADECE GİRİŞ YAPILDIYSA YÜKLENECEK SCRIPTLER #}
     {% if session.get('user') %}
+        {# Modal handler'ı BURAYA taşıyın, ui.js'den sonra #}
         <script src="{{ url_for('static', filename='js/modal_handler.js') }}"></script>
+
         <script src="{{ url_for('static', filename='js/store.js') }}"></script>
         <script src="{{ url_for('static', filename='js/data-loader.js') }}"></script>
         <script src="{{ url_for('static', filename='js/chart-manager.js') }}"></script>
@@ -122,31 +126,19 @@
         <script src="{{ url_for('static', filename='js/push-manager.js') }}"></script>
         <script src="{{ url_for('static', filename='js/ios-install-prompt.js') }}"></script>
 
-
         {# Ana Panel ve Çiftçi Paneli Mantığı Scriptleri #}
         {# main.js diğer temel scriptlerden SONRA gelmeli #}
         <script src="{{ url_for('static', filename='js/main.js') }}"></script>
         <script src="{{ url_for('static', filename='js/ciftci_panel.js') }}"></script>
 
-        {# Service Worker Kaydı (Sadece giriş yapıldıysa mantıklı) #}
-        <script>
-            if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                    navigator.serviceWorker.register("/service-worker.js")
-                        .then(registration => { console.log('Dinamik Service Worker başarıyla kaydedildi: ', registration); })
-                        .catch(error => { console.log('Dinamik Service Worker kaydı başarısız: ', error); });
-                });
-            }
-        </script>
-        
-        {# Alt bar aktif link JS'i #}
+        {# Sadece 'ciftci' rolü DEĞİLSE alt bar aktif link JS'ini ekle #}
+        {% if session.get('user', {}).get('rol') != 'ciftci' %}
         <script>
             document.addEventListener('DOMContentLoaded', () => {
                 const currentPage = window.location.pathname;
                 const navLinks = document.querySelectorAll('.bottom-nav-link');
                 navLinks.forEach(link => {
                     const linkPath = link.getAttribute('href');
-                    // data-page attribute'u ile daha esnek kontrol
                     const pageName = link.dataset.page;
                     let isActive = false;
 
@@ -155,12 +147,13 @@
                     else if (pageName === 'raporlar' && currentPage.startsWith('/raporlar')) isActive = true;
                     else if (pageName === 'yem' && currentPage.startsWith('/yem')) isActive = true;
                     else if (pageName === 'finans' && currentPage.startsWith('/finans')) isActive = true;
-                    else if (pageName === 'profil' && currentPage.startsWith('/profil')) isActive = true; // Profil eklendi
+                    else if (pageName === 'profil' && currentPage.startsWith('/profil')) isActive = true;
 
                     if (isActive) { link.classList.add('active'); }
                 });
             });
         </script>
+        {% endif %}
 
         {# Service Worker Kaydı (Sadece giriş yapıldıysa mantıklı) #}
         <script>
@@ -282,3 +275,4 @@
 
 </body>
 </html>
+

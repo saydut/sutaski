@@ -1,4 +1,5 @@
 -- Dosya: supabase/rpc/get_supplier_summary.sql
+-- Bu fonksiyon bir tedarikçinin süt, yem, ödeme/avans ve tahsilatlarını toplayıp net bakiyeyi hesaplar.
 
 CREATE OR REPLACE FUNCTION get_supplier_summary(
     p_sirket_id integer,
@@ -12,7 +13,8 @@ AS $$
 DECLARE
     total_sut_alacagi numeric;
     total_yem_borcu numeric;
-    total_odeme numeric;
+    total_sirket_odemesi numeric; -- Ödeme ve Avans toplamı (Şirketten Çiftçiye)
+    total_tahsilat numeric;      -- Tahsilat toplamı (Çiftçiden Şirkete)
 BEGIN
     -- 1. Toplam süt alacağını hesapla (litre * fiyat)
     SELECT COALESCE(SUM(litre * fiyat), 0)
@@ -26,18 +28,31 @@ BEGIN
     FROM yem_islemleri
     WHERE sirket_id = p_sirket_id AND tedarikci_id = p_tedarikci_id;
 
-    -- 3. Toplam finansal işlemi (ödeme/avans) hesapla
+    -- 3. Şirketin yaptığı toplam ödemeyi (Ödeme + Avans) hesapla
     SELECT COALESCE(SUM(tutar), 0)
-    INTO total_odeme
+    INTO total_sirket_odemesi
     FROM finansal_islemler
-    WHERE sirket_id = p_sirket_id AND tedarikci_id = p_tedarikci_id;
+    WHERE sirket_id = p_sirket_id
+      AND tedarikci_id = p_tedarikci_id
+      AND islem_tipi IN ('Ödeme', 'Avans'); -- Sadece Ödeme ve Avans
 
-    -- 4. Sonuçları tek bir JSON nesnesi olarak döndür
+    -- 4. Çiftçiden alınan toplam tahsilatı hesapla
+    SELECT COALESCE(SUM(tutar), 0)
+    INTO total_tahsilat
+    FROM finansal_islemler
+    WHERE sirket_id = p_sirket_id
+      AND tedarikci_id = p_tedarikci_id
+      AND islem_tipi = 'Tahsilat'; -- Sadece Tahsilat
+
+    -- 5. Sonuçları tek bir JSON nesnesi olarak döndür
     RETURN json_build_object(
         'toplam_sut_alacagi', total_sut_alacagi,
         'toplam_yem_borcu', total_yem_borcu,
-        'toplam_odeme', total_odeme,
-        'net_bakiye', (total_sut_alacagi - total_yem_borcu - total_odeme)
+        'toplam_sirket_odemesi', total_sirket_odemesi, -- Yeni alan
+        'toplam_tahsilat', total_tahsilat,          -- Yeni alan
+        -- Yeni Net Bakiye: Alacaklar - Borçlar - Şirket Ödemeleri + Tahsilatlar
+        'net_bakiye', (total_sut_alacagi - total_yem_borcu - total_sirket_odemesi + total_tahsilat)
+        -- Eski 'toplam_odeme' alanı artık 'toplam_sirket_odemesi' oldu, gerekirse frontend'de uyarlama yapılır.
     );
 END;
 $$;

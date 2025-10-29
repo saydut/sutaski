@@ -44,35 +44,37 @@ def get_ciftci_ozet():
     """Giriş yapmış çiftçinin finansal özetini getirir."""
     tedarikci_id = _get_ciftci_tedarikci_id()
     if tedarikci_id is None:
-        # Hata _get_ciftci_tedarikci_id içinde loglandı, burada sadece yetkisiz mesajı dönüyoruz
         return jsonify({"error": "Bu bilgilere erişim yetkiniz yok veya profilinizle eşleşen bir tedarikçi kaydı bulunamadı."}), 403
 
     sirket_id = session['user']['sirket_id']
 
     try:
-        # Tedarikçi özeti için RPC fonksiyonunu kullanalım (bu fonksiyon zaten vardı)
+        # Güncellenmiş RPC fonksiyonunu çağır
         summary_res = g.supabase.rpc('get_supplier_summary', {
             'p_sirket_id': sirket_id,
             'p_tedarikci_id': tedarikci_id
         }).execute()
 
         if not summary_res.data:
-             # RPC hata döndürürse veya veri bulamazsa
              return jsonify({
                 "toplam_sut_alacagi": "0.00",
                 "toplam_yem_borcu": "0.00",
-                "toplam_odeme": "0.00",
+                "toplam_sirket_odemesi": "0.00", # Yeni alan adı
+                "toplam_tahsilat": "0.00",      # Yeni alan adı
                 "net_bakiye": "0.00"
             })
 
         ozet = summary_res.data
-        # Sayıları string olarak formatlayıp gönderelim (Decimal->JSON sorunları yaşamamak için)
+        # Sayıları string olarak formatlayıp gönderelim
+        # --- GÜNCELLEME: Yeni alan adları kullanıldı ---
         formatted_ozet = {
             "toplam_sut_alacagi": f"{Decimal(ozet.get('toplam_sut_alacagi', 0)):.2f}",
             "toplam_yem_borcu": f"{Decimal(ozet.get('toplam_yem_borcu', 0)):.2f}",
-            "toplam_odeme": f"{Decimal(ozet.get('toplam_odeme', 0)):.2f}",
+            "toplam_sirket_odemesi": f"{Decimal(ozet.get('toplam_sirket_odemesi', 0)):.2f}", # Eski toplam_odeme yerine
+            "toplam_tahsilat": f"{Decimal(ozet.get('toplam_tahsilat', 0)):.2f}",          # Yeni alan
             "net_bakiye": f"{Decimal(ozet.get('net_bakiye', 0)):.2f}"
         }
+        # --- GÜNCELLEME SONU ---
         return jsonify(formatted_ozet)
 
     except Exception as e:
@@ -90,28 +92,26 @@ def get_ciftci_sut_girdileri():
 
     sirket_id = session['user']['sirket_id']
     sayfa = int(request.args.get('sayfa', 1))
-    limit = int(request.args.get('limit', 10)) # Sayfa başına kayıt sayısı
+    limit = int(request.args.get('limit', 5)) # Sayfa başına kayıt sayısı (Önceki JS ile uyumlu hale getirdim)
     offset = (sayfa - 1) * limit
 
     try:
-        # Sadece ilgili tedarikçinin süt girdilerini çek
         query = g.supabase.table('sut_girdileri').select(
-            'id, taplanma_tarihi, litre, fiyat', # Sadece çiftçinin görmesi gereken alanlar
-            count='exact' # Toplam kayıt sayısı için
+            'id, taplanma_tarihi, litre, fiyat',
+            count='exact'
         ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id) \
          .order('taplanma_tarihi', desc=True) \
          .range(offset, offset + limit - 1)
 
         response = query.execute()
 
-        # Litre ve Fiyat'ı ondalık sayıya çevirip tutarı hesapla
         girdiler = []
         for girdi in response.data:
             litre = Decimal(girdi.get('litre', '0'))
             fiyat = Decimal(girdi.get('fiyat', '0'))
             girdiler.append({
                 "id": girdi['id'],
-                "tarih": girdi['taplanma_tarihi'], # Frontend'de formatlanabilir
+                "tarih": girdi['taplanma_tarihi'],
                 "litre": f"{litre:.2f}",
                 "fiyat": f"{fiyat:.2f}",
                 "tutar": f"{(litre * fiyat):.2f}"
@@ -134,13 +134,12 @@ def get_ciftci_yem_alimlarim():
 
     sirket_id = session['user']['sirket_id']
     sayfa = int(request.args.get('sayfa', 1))
-    limit = int(request.args.get('limit', 10))
+    limit = int(request.args.get('limit', 5)) # Sayfa başına kayıt sayısı
     offset = (sayfa - 1) * limit
 
     try:
-        # Sadece ilgili tedarikçinin yem işlemlerini çek
         query = g.supabase.table('yem_islemleri').select(
-            'id, islem_tarihi, miktar_kg, islem_anindaki_birim_fiyat, toplam_tutar, yem_urunleri(yem_adi)', # Yem adını da alalım
+            'id, islem_tarihi, miktar_kg, islem_anindaki_birim_fiyat, toplam_tutar, yem_urunleri(yem_adi)',
             count='exact'
         ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id) \
          .order('islem_tarihi', desc=True) \
@@ -148,7 +147,6 @@ def get_ciftci_yem_alimlarim():
 
         response = query.execute()
 
-        # Veriyi formatlayarak döndür
         islemler = []
         for islem in response.data:
             islemler.append({
@@ -165,3 +163,47 @@ def get_ciftci_yem_alimlarim():
     except Exception as e:
         logger.error(f"Çiftçi yem alımları alınırken hata (Tedarikçi ID: {tedarikci_id}): {e}", exc_info=True)
         return jsonify({"error": "Yem alımları alınırken bir sunucu hatası oluştu."}), 500
+
+# --- YENİ ENDPOINT: Çiftçinin Kendi Finansal İşlemleri ---
+@ciftci_bp.route('/finans_islemleri', methods=['GET'])
+@login_required
+def get_ciftci_finans_islemleri():
+    """Giriş yapmış çiftçinin finansal işlemlerini (ödeme/avans/tahsilat) sayfalayarak getirir."""
+    tedarikci_id = _get_ciftci_tedarikci_id()
+    if tedarikci_id is None:
+        return jsonify({"error": "Bu bilgilere erişim yetkiniz yok veya profilinizle eşleşen bir tedarikçi kaydı bulunamadı."}), 403
+
+    sirket_id = session['user']['sirket_id']
+    sayfa = int(request.args.get('sayfa', 1))
+    limit = int(request.args.get('limit', 5)) # Sayfa başına kayıt sayısı
+    offset = (sayfa - 1) * limit
+
+    try:
+        # Sadece ilgili tedarikçinin finansal işlemlerini çek
+        query = g.supabase.table('finansal_islemler').select(
+            'id, islem_tarihi, islem_tipi, tutar, aciklama', # Kullanıcı adını göstermeye gerek yok
+            count='exact'
+        ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id) \
+         .order('islem_tarihi', desc=True) \
+         .range(offset, offset + limit - 1)
+
+        response = query.execute()
+
+        # Veriyi formatlayarak döndür
+        islemler = []
+        for islem in response.data:
+            islemler.append({
+                "id": islem['id'],
+                "tarih": islem['islem_tarihi'],
+                "islem_tipi": islem['islem_tipi'],
+                "tutar": f"{Decimal(islem.get('tutar','0')):.2f}",
+                "aciklama": islem['aciklama']
+            })
+
+        return jsonify({"islemler": islemler, "toplam_kayit": response.count})
+
+    except Exception as e:
+        logger.error(f"Çiftçi finans işlemleri alınırken hata (Tedarikçi ID: {tedarikci_id}): {e}", exc_info=True)
+        return jsonify({"error": "Finansal işlemler alınırken bir sunucu hatası oluştu."}), 500
+# --- /YENİ ENDPOINT ---
+
