@@ -37,7 +37,22 @@ const utils = {
  * Hem yerel kullanıcı verisini siler hem de sunucudan çıkış yapar.
  */
 function guvenliCikis() {
+    console.log("Güvenli Çıkış yapılıyor...");
+    // 1. Yerel depolamayı temizle
     localStorage.removeItem('offlineUser');
+    console.log("localStorage['offlineUser'] temizlendi.");
+
+    // 2. Global değişkenleri sıfırla (varsa)
+    if (typeof kullaniciRolu !== 'undefined') {
+        kullaniciRolu = null;
+        console.log("Global 'kullaniciRolu' sıfırlandı.");
+    }
+     // window altındaki değişkenleri de sıfırlayalım (ihtiyaç olursa)
+     window.anaPanelMevcutGorunum = 'liste';
+     window.anaPanelMevcutSayfa = 1;
+
+    // 3. Backend logout endpoint'ine yönlendir
+    console.log("'/logout' adresine yönlendiriliyor.");
     window.location.href = '/logout';
 }
 

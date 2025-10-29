@@ -1,12 +1,13 @@
 // ====================================================================================
-// API İLETİŞİM KATMANI (api.js) - YENİDEN DÜZENLENDİ
+// API İLETİŞİM KATMANI (api.js) - HATA YÖNETİMİ GÜÇLENDİRİLDİ
 // Bu dosya, sunucu ile olan tüm 'fetch' tabanlı iletişimi yönetir.
-// Artık projedeki TEK sunucu iletişim noktası burasıdır.
+// 401 Unauthorized hatası alındığında login sayfasına yönlendirme eklendi.
 // ====================================================================================
 
 const api = {
     /**
      * Genel bir API isteği yapmak için merkezi fonksiyon.
+     * 401 hatası alındığında kullanıcıyı login sayfasına yönlendirir.
      * @param {string} url - İstek yapılacak URL.
      * @param {object} options - Fetch için yapılandırma seçenekleri.
      * @returns {Promise<any>} - Başarılı olursa JSON verisi.
@@ -14,14 +15,49 @@ const api = {
     async request(url, options = {}) {
         try {
             const response = await fetch(url, options);
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+
+            // --- YENİ: 401 Hata Kontrolü ---
+            if (response.status === 401) {
+                console.warn('API isteği yetkisiz (401). Oturum zaman aşımına uğramış olabilir. Giriş sayfasına yönlendiriliyor.');
+                // Yerel kullanıcı bilgisini temizle (varsa)
+                localStorage.removeItem('offlineUser');
+                // Kullanıcıyı bilgilendirerek giriş sayfasına yönlendir
+                // Not: gosterMesaj fonksiyonu ui.js'de tanımlı olmalı ve bu dosyadan önce yüklenmeli
+                if (typeof gosterMesaj === 'function') {
+                    gosterMesaj('Oturumunuz zaman aşımına uğradı veya geçersiz. Lütfen tekrar giriş yapın.', 'warning', 7000);
+                }
+                // Kısa bir gecikmeyle yönlendirme yapalım ki mesaj görünsün
+                setTimeout(() => {
+                    window.location.href = '/login'; // Giriş sayfasının URL'si
+                }, 1500);
+                // Yönlendirme sonrası hatayı tekrar fırlat ki çağıran fonksiyon devam etmesin
+                throw new Error('Yetkisiz Erişim (401)');
             }
-            return data;
+            // --- 401 KONTROLÜ SONU ---
+
+            // Yanıt JSON değilse (örn: CSV export) farklı işlem gerekebilir
+            // Şimdilik tüm yanıtların JSON olduğunu varsayıyoruz, CSV için özel fetch yapısı var.
+            // Eğer response.ok değilse ve 401 de değilse, hatayı JSON'dan almaya çalış
+            if (!response.ok) {
+                let errorData;
+                try {
+                    errorData = await response.json();
+                } catch (e) {
+                    // JSON parse edilemiyorsa genel bir hata ver
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            // Yanıt başarılıysa JSON verisini döndür
+            return await response.json();
+
         } catch (error) {
-            console.error(`API isteği hatası (${url}):`, error);
-            throw error;
+            // 401 dışındaki hataları logla ve tekrar fırlat
+            if (error.message !== 'Yetkisiz Erişim (401)') {
+                console.error(`API isteği hatası (${url}):`, error);
+            }
+            throw error; // Hatayı çağıran fonksiyona ilet
         }
     },
 
@@ -29,6 +65,7 @@ const api = {
     fetchGunlukOzet(tarih) { return this.request(`/api/rapor/gunluk_ozet?tarih=${tarih}`); },
     fetchHaftalikOzet() { return this.request('/api/rapor/haftalik_ozet'); },
     fetchTedarikciDagilimi() { return this.request('/api/rapor/tedarikci_dagilimi'); },
+    fetchDetayliRapor(baslangic, bitis) { return this.request(`/api/rapor/detayli_rapor?baslangic=${baslangic}&bitis=${bitis}`); }, // Raporlar sayfası için ekledim
 
     // --- Süt Girdisi API'ları ---
     fetchSutGirdileri(tarih, sayfa) { return this.request(`/api/sut_girdileri?tarih=${tarih}&sayfa=${sayfa}`); },
@@ -39,51 +76,105 @@ const api = {
 
     // --- Tedarikçi API'ları ---
     fetchTedarikciler() { return this.request('/api/tedarikciler_dropdown', { cache: 'no-cache' }); },
+    fetchTedarikcilerListe(sayfa, arama, sirala, yon, limit) { // Tedarikçiler sayfası için
+        return this.request(`/api/tedarikciler_liste?sayfa=${sayfa}&arama=${encodeURIComponent(arama)}&sirala=${sirala}&yon=${yon}&limit=${limit}`);
+    },
+    fetchTedarikciDetay(id) { return this.request(`/api/tedarikci/${id}`); }, // Tedarikçiler düzenleme için
+    fetchTedarikciOzet(id) { return this.request(`/api/tedarikci/${id}/ozet`); }, // Tedarikçi detay sayfası için
     fetchTedarikciIstatistikleri(tedarikciId) { return this.request(`/api/tedarikci/${tedarikciId}/stats`); },
     fetchSonFiyat(tedarikciId) { return this.request(`/api/tedarikci/${tedarikciId}/son_fiyat`); },
     postTedarikci(veri) { return this.request('/api/tedarikci_ekle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     updateTedarikci(id, veri) { return this.request(`/api/tedarikci_duzenle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     deleteTedarikci(id) { return this.request(`/api/tedarikci_sil/${id}`, { method: 'DELETE' }); },
+    // Tedarikçi detay sayfası için sayfalama endpoint'leri
+    fetchTedarikciSutGirdileri(id, sayfa, limit) { return this.request(`/api/tedarikci/${id}/sut_girdileri?sayfa=${sayfa}&limit=${limit}`); },
+    fetchTedarikciYemIslemleri(id, sayfa, limit) { return this.request(`/api/tedarikci/${id}/yem_islemleri?sayfa=${sayfa}&limit=${limit}`); },
+    fetchTedarikciFinansIslemleri(id, sayfa, limit) { return this.request(`/api/tedarikci/${id}/finansal_islemler?sayfa=${sayfa}&limit=${limit}`); },
 
     // --- Yem Ürünü API'ları ---
+    fetchYemUrunleri(sayfa) { return this.request(`/yem/api/urunler?sayfa=${sayfa}`); }, // Yem yönetimi için
+    fetchYemUrunleriListe() { return this.request('/yem/api/urunler/liste'); }, // Dropdown için
     postYemUrunu(veri) { return this.request('/yem/api/urunler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     updateYemUrunu(id, veri) { return this.request(`/yem/api/urunler/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     deleteYemUrunu(id) { return this.request(`/yem/api/urunler/${id}`, { method: 'DELETE' }); },
-    fetchYemUrunleriListe() { return this.request('/yem/api/urunler/liste'); },
 
     // --- Yem İşlemi API'ları ---
+    fetchYemIslemleri(sayfa) { return this.request(`/yem/api/islemler/liste?sayfa=${sayfa}`); }, // Yem yönetimi için
     postYemIslemi(veri) { return this.request('/yem/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     updateYemIslemi(id, veri) { return this.request(`/yem/api/islemler/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     deleteYemIslemi(id) { return this.request(`/yem/api/islemler/${id}`, { method: 'DELETE' }); },
 
     // --- Finansal İşlem API'ları ---
+    fetchFinansalIslemler(sayfa, limit) { return this.request(`/finans/api/islemler?sayfa=${sayfa}&limit=${limit}`); }, // Finans yönetimi için
     postFinansalIslem(veri) { return this.request('/finans/api/islemler', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     updateFinansalIslem(id, veri) { return this.request(`/finans/api/islemler/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     deleteFinansalIslem(id) { return this.request(`/finans/api/islemler/${id}`, { method: 'DELETE' }); },
 
     // --- Kullanıcı ve Profil API'ları ---
-    postChangePassword(veri) { return this.request('/api/user/change_password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
-    
+    fetchProfil() { return this.request('/api/profil'); }, // Profil sayfası için
+    updateProfil(veri) { return this.request('/api/profil', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); }, // Profil sayfası için
+    postChangePassword(veri) { return this.request('/api/user/change_password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); }, // base.html modal için
+
+    // --- Firma Yönetimi API'ları ---
+    fetchYonetimData() { return this.request('/firma/api/yonetim_data'); },
+    postToplayiciEkle(veri) { return this.request('/firma/api/toplayici_ekle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    deleteKullanici(id) { return this.request(`/firma/api/kullanici_sil/${id}`, { method: 'DELETE' }); },
+    fetchKullaniciDetay(id) { return this.request(`/firma/api/kullanici_detay/${id}`); },
+    updateKullanici(id, veri) { return this.request(`/firma/api/kullanici_guncelle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    postCiftciSifreSifirla(id) { return this.request(`/firma/api/ciftci_sifre_sifirla/${id}`, { method: 'POST'}); }, // Çiftçi şifre sıfırlama
+
+    // --- Çiftçi API'ları ---
+    fetchCiftciOzet() { return this.request('/api/ciftci/ozet'); },
+    fetchCiftciSutGirdileri(sayfa, limit) { return this.request(`/api/ciftci/sut_girdileri?sayfa=${sayfa}&limit=${limit}`); },
+    fetchCiftciYemAlimlari(sayfa, limit) { return this.request(`/api/ciftci/yem_alimlarim?sayfa=${sayfa}&limit=${limit}`); },
+
+    // --- Push Bildirim API'ları ---
+    fetchVapidPublicKey() { return this.request('/api/push/vapid_public_key'); },
+    postSaveSubscription(sub) { return this.request('/api/push/save_subscription', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub) }); },
+
     // --- CSV Dışa Aktarma (Blob döndürdüğü için özel) ---
     async fetchCsvExport(tarih) {
         try {
             const url = `/api/rapor/export_csv${tarih ? `?tarih=${tarih}` : ''}`;
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('CSV dosyası oluşturulurken bir hata oluştu.');
-            
+            const response = await fetch(url); // Doğrudan fetch kullanıyoruz, çünkü JSON beklemiyoruz
+
+            // --- YENİ: 401 Kontrolü CSV için de eklendi ---
+            if (response.status === 401) {
+                console.warn('CSV export yetkisiz (401). Oturum zaman aşımına uğramış olabilir. Giriş sayfasına yönlendiriliyor.');
+                localStorage.removeItem('offlineUser');
+                if (typeof gosterMesaj === 'function') {
+                    gosterMesaj('Oturumunuz zaman aşımına uğradı veya geçersiz. Lütfen tekrar giriş yapın.', 'warning', 7000);
+                }
+                setTimeout(() => { window.location.href = '/login'; }, 1500);
+                throw new Error('Yetkisiz Erişim (401)');
+            }
+            // --- 401 KONTROLÜ SONU ---
+
+            if (!response.ok) {
+                 // Hata mesajını response'dan almaya çalışalım (eğer varsa)
+                 let errorMsg = 'CSV dosyası oluşturulurken bir hata oluştu.';
+                 try {
+                     const errorData = await response.json(); // Belki backend JSON hata döndürür
+                     errorMsg = errorData.error || errorMsg;
+                 } catch(e) { /* JSON yoksa varsayılan mesaj kalır */ }
+                 throw new Error(errorMsg);
+            }
+
             const disposition = response.headers.get('Content-Disposition');
             let filename = "sut_raporu.csv";
             if (disposition && disposition.includes('attachment')) {
                 const filenameMatch = /filename[^;=\n]*=(['"]?)([^'";\n]+)\1?/;
                 const matches = filenameMatch.exec(disposition);
-                if (matches && matches[2]) filename = matches[2];
+                if (matches && matches[2]) filename = matches[2].replace(/['"]/g, ''); // Tırnakları temizle
             }
-            
+
             const blob = await response.blob();
             return { filename, blob };
         } catch (error) {
-            console.error("CSV dışa aktarılırken hata oluştu:", error);
-            throw error;
+             if (error.message !== 'Yetkisiz Erişim (401)') { // 401 ise zaten loglandı/mesaj verildi
+                 console.error("CSV dışa aktarılırken hata oluştu:", error);
+             }
+            throw error; // Hatayı tekrar fırlat ki çağıran fonksiyon bilsin
         }
     }
 };

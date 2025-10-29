@@ -103,7 +103,11 @@
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     {# api.js ve ui.js genel fonksiyonlar içerdiği için her zaman yüklenebilir #}
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    {# --- YENİ EKLENEN SATIR --- #}
+    <script src="{{ url_for('static', filename='js/render-utils.js') }}"></script>
+    {# --- ui.js render-utils'den SONRA gelmeli --- #}
     <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+
 
     {# SADECE GİRİŞ YAPILDIYSA YÜKLENECEK SCRIPTLER #}
     {% if session.get('user') %}
@@ -119,6 +123,7 @@
         <script src="{{ url_for('static', filename='js/ios-install-prompt.js') }}"></script>
 
         {# Ana Panel ve Çiftçi Paneli Mantığı Scriptleri #}
+        {# main.js diğer temel scriptlerden SONRA gelmeli #}
         <script src="{{ url_for('static', filename='js/main.js') }}"></script>
         <script src="{{ url_for('static', filename='js/ciftci_panel.js') }}"></script>
 
