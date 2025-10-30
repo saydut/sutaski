@@ -35,6 +35,17 @@ async function kayitOl() {
             }, 2000);
         } else {
             gosterMesaj(result.error || "Bir hata oluştu.", "danger");
+            
+            // --- YENİ EKLENEN BLOK ---
+            // Eğer sunucu bakım modu nedeniyle "redirect_to_landing" bayrağını gönderirse,
+            // kullanıcıyı ana sayfaya yönlendir.
+            if (result.redirect_to_landing === true) {
+                setTimeout(() => {
+                    window.location.href = '/'; // Ana landing sayfasına git
+                }, 2000); // Mesajı okuması için 2 saniye bekle
+            }
+            // --- YENİ BLOK SONU ---
+
             kayitButton.disabled = false;
             kayitButton.innerHTML = originalButtonText;
         }

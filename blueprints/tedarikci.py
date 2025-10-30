@@ -47,21 +47,24 @@ def get_tedarikci_ozet(tedarikci_id):
     """Bir tedarikçinin finansal özetini RPC ile hesaplar."""
     try:
         sirket_id = session['user']['sirket_id']
-        tedarikci_data, ozet_verisi = tedarikci_service.get_summary_by_id(sirket_id, tedarikci_id)
+        # Servis fonksiyonu (tedarikci_data, ozet_verisi_formatli) döndürür
+        tedarikci_data, ozet_verisi_formatli = tedarikci_service.get_summary_by_id(sirket_id, tedarikci_id)
 
         if not tedarikci_data:
             return jsonify({"error": "Tedarikçi bulunamadı."}), 404
 
-        # Ozet verisi yoksa veya boşsa varsayılan değerler kullan
-        ozet_verisi = ozet_verisi or {}
-
-        sonuc = {
-            "isim": tedarikci_data.get('isim', 'Bilinmeyen Tedarikçi'),
-            "toplam_sut_alacagi": f"{Decimal(ozet_verisi.get('toplam_sut_alacagi', 0)):.2f}",
-            "toplam_yem_borcu": f"{Decimal(ozet_verisi.get('toplam_yem_borcu', 0)):.2f}",
-            "toplam_odeme": f"{Decimal(ozet_verisi.get('toplam_odeme', 0)):.2f}",
-            "net_bakiye": f"{Decimal(ozet_verisi.get('net_bakiye', 0)):.2f}"
+        # HATA DÜZELTMESİ: Servisten zaten formatlı (string) dict geliyor.
+        # Eski kod yanlış alanı (toplam_odeme) arıyordu ve gereksiz yere yeniden formatlıyordu.
+        sonuc = ozet_verisi_formatli or {
+            "toplam_sut_alacagi": "0.00",
+            "toplam_yem_borcu": "0.00",
+            "toplam_sirket_odemesi": "0.00", # Yeni alan
+            "toplam_tahsilat": "0.00",      # Yeni alan
+            "net_bakiye": "0.00"
         }
+        # Sadece isim bilgisini ekleyip direkt döndürelim.
+        sonuc["isim"] = tedarikci_data.get('isim', 'Bilinmeyen Tedarikçi')
+        
         return jsonify(sonuc)
     except Exception as e:
         logger.error(f"/tedarikci/{tedarikci_id}/ozet hatası: {e}", exc_info=True)

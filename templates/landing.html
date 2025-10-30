@@ -3,18 +3,15 @@
 {% block title %}Dijital Mandıra - Hesap Kitabı Bırakın, Kâra Odaklanın{% endblock %}
 
 {% block content %}
-<!-- NAVİGASYON BARI -->
 <nav class="navbar navbar-expand-lg navbar-dark sticky-top" style="background-color: var(--surface); box-shadow: 0 4px 6px -1px var(--shadow);">
     <div class="container">
         <a class="navbar-brand fw-bold" href="#">
             <img src="{{ url_for('static', filename='images/icon.png') }}" alt="Logo" width="40" height="40" class="d-inline-block align-text-top me-2">
             Dijital Mandıra
         </a>
-        <!-- Değişiklik burada: Butonları dikeyde ortalamak için "align-items-center" eklendi -->
         <div class="d-flex align-items-center">
             <a href="{{ url_for('auth.login_page') }}" class="btn btn-outline-primary me-2">Giriş Yap</a>
             <a href="{{ url_for('auth.register_page') }}" class="btn btn-primary me-2">Ücretsiz Başla</a>
-            <!-- YENİ EKLENEN TEMA BUTONU -->
             <button id="theme-toggle" class="btn">
                 <i id="sun-icon" class="bi bi-sun-fill"></i>
                 <i id="moon-icon" class="bi bi-moon-fill"></i>
@@ -23,13 +20,24 @@
     </div>
 </nav>
 
-<!-- YENİ EKLENEN SATIR -->
 <div id="alert-container" class="p-3" style="position: fixed; top: 10px; right: 10px; z-index: 1050;"></div>
 
 
-<!-- KAHRAMAN BÖLÜMÜ (VİDEOLU) -->
 <div class="hero-gradient">
     <div class="container text-center py-5 my-5">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div id="flash-message-wrapper"> 
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show col-lg-8 mx-auto" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
         <h1 class="display-4 fw-bold">Hesap Kitabı Bırakın, Kâra Odaklanın.</h1>
         <p class="lead col-lg-8 mx-auto text-secondary" style="font-size: 1.25rem; font-weight: 300;">
             Süt toplama operasyonunuzdaki kağıt işlerini, hesap hatalarını ve zaman kaybını ortadan kaldırın. Dijital Mandıra ile tüm işletmeniz cebinizde.
@@ -43,7 +51,6 @@
     </div>
 </div>
 
-<!-- ÖZELLİKLER ÖZET BÖLÜMÜ -->
 <div class="container py-5">
     <div class="text-center">
         <h2 class="fw-bold">Dijital Mandıra Nedir?</h2>
@@ -57,7 +64,6 @@
 </div>
 
 
-<!-- MOBİL ÖNCELİKLİ BÖLÜM (ANİMASYONLU) -->
 <div class="py-5 my-5" style="background-color: var(--surface);">
     <div class="container">
         <div class="text-center mb-5">
@@ -87,7 +93,6 @@
     </div>
 </div>
 
-<!-- NEDEN DİJİTAL MANDIRA? BÖLÜMÜ -->
 <div class="container py-5 my-5 neden-dijital-mandira">
     <div class="row g-5 align-items-center">
         <div class="col-lg-4">
@@ -105,7 +110,6 @@
     </div>
 </div>
 
-<!-- İNTERAKTİF ÖZELLİKLER BÖLÜMÜ (EKSİKSİZ) -->
 <div class="py-5 my-5" style="background-color: var(--surface);">
     <div class="container">
         <h2 class="text-center mb-5 fw-bold">Detaylı Özellikler</h2>
@@ -152,7 +156,6 @@
     </div>
 </div>
 
-<!-- FİYATLANDIRMA BÖLÜMÜ -->
 <div class="container py-5" id="fiyatlandirma">
     <h2 class="text-center mb-5 fw-bold">İşletmenize En Uygun Planı Seçin</h2>
     <div class="row justify-content-center g-4">
@@ -162,7 +165,6 @@
     </div>
 </div>
 
-<!-- SSS VE İLETİŞİM BÖLÜMÜ -->
 <div class="py-5 my-5" style="background-color: var(--surface);">
     <div class="container">
         <div class="row">
@@ -172,14 +174,12 @@
     </div>
 </div>
 
-<!-- FOOTER -->
 <footer class="container py-4 text-center text-secondary">
     <small>&copy; 2025 Dijital Mandıra. Tüm hakları saklıdır.</small>
 </footer>
 {% endblock %}
 
 {% block scripts %}
-<!-- MOBİL SLIDESHOW İÇİN JAVASCRIPT KODU -->
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const slideshow = document.querySelector('.phone-slideshow');
@@ -205,26 +205,33 @@ document.addEventListener('DOMContentLoaded', function () {
         const urlParams = new URLSearchParams(window.location.search);
         const fromLogin = urlParams.get('from_login');
 
-        // Eğer kullanıcı login sayfasındaki "Ana Sayfa" butonundan geldiyse (URL'de parametre varsa),
-        // yönlendirme yapma ve script'i burada durdur.
+        // 1. Eğer 'from_login=true' parametresi varsa (login sayfasındaki "Ana Sayfa" butonu), yönlendirme.
         if (fromLogin === 'true') {
             return;
+        }
+        
+        // 2. YENİ KONTROL: Eğer sayfada bir flash mesajı gösteriliyorsa (örn: bakım modu uyarısı),
+        //    kullanıcının mesajı okuyabilmesi için yönlendirme.
+        //    (Bu ID'yi yukarıdaki flash mesaj bloğuna ekledik)
+        const flashWrapper = document.getElementById('flash-message-wrapper');
+        if (flashWrapper && flashWrapper.innerHTML.trim() !== '') {
+            // Flash mesajı var, yönlendirme yapma.
+            return; 
         }
         
         const beklemeSuresi = 0;
         const hasVisited = localStorage.getItem('sutaski_has_visited');
 
-        // Eğer bu ilk ziyaret değilse (daha önce gelinmişse), yönlendirmeyi planla.
+        // 3. Eğer bu ilk ziyaret değilse ve yukarıdaki kontroller geçildiyse, yönlendir.
         if (hasVisited) {
             setTimeout(function() {
                 // İkinci ve sonraki tüm ziyaretlerde (ister PWA, ister tarayıcı) giriş ekranına yönlendir.
                 window.location.href = '/login';
             }, beklemeSuresi);
         } else {
-            // Eğer bu ilk ziyarettiyse, bir sonraki ziyaret için kalıcı işaret bırak.
+            // 4. Bu ilk ziyarettiyse, işaret bırak.
             localStorage.setItem('sutaski_has_visited', 'true');
         }
     })();
 </script>
 {% endblock %}
-

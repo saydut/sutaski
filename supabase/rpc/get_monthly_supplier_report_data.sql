@@ -38,7 +38,8 @@ BEGIN
     ) t;
 
     -- 2. Yem İşlemlerini Topla
-    SELECT COALESCE(json_agg(y ORDER BY yi.islem_tarihi), '[]'::json) INTO yem_islemleri_json
+    -- HATA DÜZELTMESİ: ORDER BY 'yi.islem_tarihi' yerine 'y.islem_tarihi' olmalı
+    SELECT COALESCE(json_agg(y ORDER BY y.islem_tarihi), '[]'::json) INTO yem_islemleri_json
     FROM (
         SELECT
             to_char((yi.islem_tarihi AT TIME ZONE 'Europe/Istanbul'), 'DD.MM.YYYY HH24:MI') AS islem_tarihi_formatted, -- Formatlanmış tarih
@@ -55,7 +56,8 @@ BEGIN
     ) y;
 
     -- 3. Finansal İşlemleri Topla
-    SELECT COALESCE(json_agg(f ORDER BY fi.islem_tarihi), '[]'::json) INTO finansal_islemler_json
+    -- HATA DÜZELTMESİ: ORDER BY 'fi.islem_tarihi' yerine 'f.islem_tarihi' olmalı
+    SELECT COALESCE(json_agg(f ORDER BY f.islem_tarihi), '[]'::json) INTO finansal_islemler_json
     FROM (
         SELECT
             to_char((fi.islem_tarihi AT TIME ZONE 'Europe/Istanbul'), 'DD.MM.YYYY HH24:MI') AS islem_tarihi_formatted, -- Formatlanmış tarih

@@ -210,7 +210,7 @@ function gorunumuDegistir(yeniGorunum) {
 
 // Yem ürünleri için arayüzü ayarlar (Değişiklik Yok)
 function gorunumuAyarla() {
-    document.querySelectorAll('#yem-urunleri-tablosu, #yem-urunleri-kart-listesi').forEach(el => {
+    document.querySelectorAll('#tablo-gorunumu, #kart-gorunumu').forEach(el => {
         const parentContainer = el.closest('.gorunum-konteyneri');
         if(parentContainer) parentContainer.style.display = 'none';
     });
@@ -267,26 +267,77 @@ function formatFiyat(urun) {
     return `${parseFloat(urun.birim_fiyat).toFixed(2)} TL / KG`;
 }
 
-// Yem ürününü tablo satırı olarak render et (Değişiklik Yok)
+// YENİ FONKSİYON: Stok gösterimini formatlar (KG ve Çuval)
+function formatStokGosterimi(urun) {
+    const stokMiktari = parseFloat(urun.stok_miktari_kg);
+    const cuvalAgirligi = parseFloat(urun.cuval_agirligi_kg);
+
+    if (cuvalAgirligi > 0 && stokMiktari > 0) {
+        // Bu bir çuval ürünü, adedi de hesapla
+        const cuvalAdedi = (stokMiktari / cuvalAgirligi);
+        // .toFixed(1) ondalık bırakır, Number() sondaki .0'ı siler
+        const cuvalAdediStr = Number.isInteger(cuvalAdedi) ? cuvalAdedi : cuvalAdedi.toFixed(1); 
+        // HTML olarak döndürüyoruz ki text-secondary çalışsın
+        return `${stokMiktari.toFixed(2)} KG <span class="text-secondary">(${cuvalAdediStr} Çuval)</span>`;
+    } else {
+        // Bu bir KG ürünü veya stok 0
+        return `${stokMiktari.toFixed(2)} KG`;
+    }
+}
+
+
+// Yem ürününü tablo satırı olarak render et (GÜNCELLENDİ)
 function renderYemUrunuAsTable(container, urunler) {
     urunler.forEach(urun => {
         const stokMiktari = parseFloat(urun.stok_miktari_kg);
         const isKritik = stokMiktari <= KRITIK_STOK_SEVIYESI;
         const uyariIconu = isKritik ? `<i class="bi bi-exclamation-triangle-fill text-danger me-2" title="Stok kritik seviyede!"></i>` : '';
         const fiyatGosterim = formatFiyat(urun);
-        container.innerHTML += `<tr id="yem-urun-${urun.id}" class="${isKritik ? 'table-warning' : ''}"><td>${uyariIconu}<strong>${utils.sanitizeHTML(urun.yem_adi)}</strong></td><td class="text-end">${stokMiktari.toFixed(2)} KG</td><td class="text-end">${fiyatGosterim}</td><td class="text-center"><button class="btn btn-sm btn-outline-primary" onclick='yemDuzenleAc(${JSON.stringify(urun)})'><i class="bi bi-pencil"></i></button> <button class="btn btn-sm btn-outline-danger" onclick="yemSilmeOnayiAc(${urun.id}, '${utils.sanitizeHTML(urun.yem_adi.replace(/'/g, "\\'"))}')"><i class="bi bi-trash"></i></button></td></tr>`;
+        // YENİ İSTEK: Stok gösterimini formatStokGosterimi fonksiyonu ile yap
+        const stokGosterim = formatStokGosterimi(urun);
+        
+        container.innerHTML += `
+            <tr id="yem-urun-${urun.id}" class="${isKritik ? 'table-warning' : ''}">
+                <td>${uyariIconu}<strong>${utils.sanitizeHTML(urun.yem_adi)}</strong></td>
+                <td class="text-end">${stokGosterim}</td> <!-- Değişiklik burada -->
+                <td class="text-end">${fiyatGosterim}</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-primary" onclick='yemDuzenleAc(${JSON.stringify(urun)})'><i class="bi bi-pencil"></i></button> 
+                    <button class="btn btn-sm btn-outline-danger" onclick="yemSilmeOnayiAc(${urun.id}, '${utils.sanitizeHTML(urun.yem_adi.replace(/'/g, "\\'"))}')"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>`;
     });
 }
 
-// Yem ürününü kart olarak render et (Değişiklik Yok)
+// Yem ürününü kart olarak render et (GÜNCELLENDİ)
 function renderYemUrunuAsCards(container, urunler) {
     urunler.forEach(urun => {
         const stokMiktari = parseFloat(urun.stok_miktari_kg);
         const isKritik = stokMiktari <= KRITIK_STOK_SEVIYESI;
         const fiyatGosterim = formatFiyat(urun);
-        container.innerHTML += `<div class="col-md-6 col-12" id="yem-urun-${urun.id}"><div class="yem-card ${isKritik ? 'stok-kritik' : ''}"><div class="yem-card-header"><h5>${utils.sanitizeHTML(urun.yem_adi)}</h5></div><div class="yem-card-body"><p class="mb-1 text-secondary">Mevcut Stok</p><p class="stok-bilgisi ${isKritik ? 'text-danger' : ''}">${stokMiktari.toFixed(2)} KG</p></div><div class="yem-card-footer"><span class="fiyat-bilgisi">${fiyatGosterim}</span><div class="btn-group"><button class="btn btn-sm btn-outline-primary" onclick='yemDuzenleAc(${JSON.stringify(urun)})'><i class="bi bi-pencil"></i></button> <button class="btn btn-sm btn-outline-danger" onclick="yemSilmeOnayiAc(${urun.id}, '${utils.sanitizeHTML(urun.yem_adi.replace(/'/g, "\\'"))}')"><i class="bi bi-trash"></i></button></div></div></div></div>`;
+        // YENİ İSTEK: Stok gösterimini formatStokGosterimi fonksiyonu ile yap
+        const stokGosterim = formatStokGosterimi(urun);
+
+        container.innerHTML += `
+            <div class="col-md-6 col-12" id="yem-urun-${urun.id}">
+                <div class="yem-card ${isKritik ? 'stok-kritik' : ''}">
+                    <div class="yem-card-header"><h5>${utils.sanitizeHTML(urun.yem_adi)}</h5></div>
+                    <div class="yem-card-body">
+                        <p class="mb-1 text-secondary">Mevcut Stok</p>
+                        <p class="stok-bilgisi ${isKritik ? 'text-danger' : ''}">${stokGosterim}</p> <!-- Değişiklik burada -->
+                    </div>
+                    <div class="yem-card-footer">
+                        <span class="fiyat-bilgisi">${fiyatGosterim}</span>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-primary" onclick='yemDuzenleAc(${JSON.stringify(urun)})'><i class="bi bi-pencil"></i></button> 
+                            <button class="btn btn-sm btn-outline-danger" onclick="yemSilmeOnayiAc(${urun.id}, '${utils.sanitizeHTML(urun.yem_adi.replace(/'/g, "\\'"))}')"><i class="bi bi-trash"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
     });
 }
+
 
 // Yem işlemlerini yükler (Değişiklik Yok)
 async function yemIslemleriniYukle(sayfa = 1) {

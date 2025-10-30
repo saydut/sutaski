@@ -58,9 +58,15 @@ class YemService:
 
 
         if fiyatlandirma_tipi == 'cuval':
-            cuval_fiyati = Decimal(data.get('cuval_fiyati', '0'))
-            cuval_agirligi_kg = Decimal(data.get('cuval_agirligi_kg', '0'))
-            stok_adedi = Decimal(data.get('stok_adedi', '0'))
+            # HATA DÜZELTMESİ: data.get() None döndürebilir, bu da Decimal(None) hatasına yol açar.
+            # data.get(...) or '0' kullanarak None veya "" gelirse '0' kullanılmasını sağlıyoruz.
+            cuval_fiyati = Decimal(data.get('cuval_fiyati') or '0')
+            cuval_agirligi_kg = Decimal(data.get('cuval_agirligi_kg') or '0')
+            # Yem düzenleme modalı 'stok_adedi' değil, 'yem-stok-input' değerini gönderir.
+            # JS tarafı (yemUrunuKaydet) bunu 'stok_adedi' veya 'stok_miktari_kg' olarak ayarlar.
+            # GÜNCELLEME: JS'den 'stok_adedi' geliyorsa onu, yoksa 'stok_miktari_kg' yi al.
+            stok_adedi = Decimal(data.get('stok_adedi') or data.get('stok_miktari_kg') or '0')
+
 
             if cuval_fiyati <= 0 or cuval_agirligi_kg <= 0 or stok_adedi < 0:
                 raise ValueError("Çuval fiyatı, ağırlığı ve stok adedi pozitif değerler olmalıdır.")
@@ -70,8 +76,9 @@ class YemService:
             urun_verisi["cuval_fiyati"] = str(cuval_fiyati)
             urun_verisi["cuval_agirligi_kg"] = str(cuval_agirligi_kg)
         else: # KG fiyatı
-            birim_fiyat = Decimal(data.get('birim_fiyat', '0'))
-            stok_miktari_kg = Decimal(data.get('stok_miktari_kg', '0'))
+            # HATA DÜZELTMESİ: data.get(...) or '0' kullan.
+            birim_fiyat = Decimal(data.get('birim_fiyat') or '0')
+            stok_miktari_kg = Decimal(data.get('stok_miktari_kg') or '0')
 
             if birim_fiyat <= 0 or stok_miktari_kg < 0:
                 raise ValueError("Birim fiyat ve stok pozitif değerler olmalıdır.")
@@ -102,10 +109,23 @@ class YemService:
             if 'sirket_id' in guncel_veri:
                 del guncel_veri['sirket_id']
 
-            response = g.supabase.table('yem_urunleri').update(guncel_veri).eq('id', id).eq('sirket_id', sirket_id).select().execute()
-            if not response.data:
+            # --- HATA DÜZELTMESİ ---
+            # .update() ve .select() birlikte zincirlenemez.
+            # 1. Önce güncellemeyi yap ve çalıştır.
+            response = g.supabase.table('yem_urunleri').update(guncel_veri) \
+                .eq('id', id).eq('sirket_id', sirket_id).execute()
+            
+            # 2. Güncelleme başarılıysa, güncellenen veriyi çekmek için ayrı bir sorgu yap.
+            # response.data, güncelleme başarılı olsa bile boş dönebilir, 
+            # bu yüzden hata kontrolünü buradan kaldırıp, aşağıdaki select sorgusuna güveniyoruz.
+            
+            guncellenen_urun_response = g.supabase.table('yem_urunleri').select() \
+                .eq('id', id).eq('sirket_id', sirket_id).single().execute()
+            
+            if not guncellenen_urun_response.data:
+            # --- DÜZELTME SONU ---
                 raise ValueError("Ürün bulunamadı veya bu işlem için yetkiniz yok.")
-            return response.data[0]
+            return guncellenen_urun_response.data
         except (InvalidOperation, TypeError, DivisionByZero):
             raise ValueError("Lütfen tüm fiyat ve ağırlık alanlarına geçerli sayılar girin.")
         except ValueError as ve:
@@ -339,3 +359,4 @@ class YemService:
 
 
 yem_service = YemService()
+
