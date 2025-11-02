@@ -6,7 +6,7 @@ let finansMevcutGorunum = 'tablo';
 const KAYIT_SAYISI = 10;
 
 window.onload = function() {
-    tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
+    tedarikciSecici = new TomSelect("#tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" },onChange: guncelBakiyeyiGetir });
     tarihSecici = flatpickr("#islem-tarihi-input", { enableTime: true, dateFormat: "Y-m-d H:i:S", locale: "tr" }); // YYYY-MM-DD HH:MM:SS formatı
     duzenleModal = new bootstrap.Modal(document.getElementById('duzenleModal'));
     silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
