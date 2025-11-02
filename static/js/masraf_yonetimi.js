@@ -1,4 +1,4 @@
-// static/js/masraf_yonetimi.js
+// static/js/masraf_yonetimi.js (API Fonksiyonları Düzeltildi + Mobil Tablo Düzeltildi)
 
 // --- Global Değişkenler ---
 let kategoriModal, kategoriSilModal, masrafModal, masrafSilModal;
@@ -60,8 +60,8 @@ async function kategorileriYukle() {
     veriYokMesaji.style.display = 'none';
 
     try {
-        // YENİ: API endpoint'i /masraf/api/kategori/listele olacak (api.js'ye eklenecek)
-        tumKategoriler = await api.request('/masraf/api/kategori/listele');
+        // api.js'deki özel fonksiyonu kullan
+        tumKategoriler = await api.fetchMasrafKategorileri();
         
         listeContainer.innerHTML = '';
         kategoriSelect.clearOptions();
@@ -78,10 +78,11 @@ async function kategorileriYukle() {
             kategoriOptions.push({ value: kat.id, text: kategoriAdiHtml });
             
             // Kategori listesini oluştur (sol taraf)
+            // Mobil görünüm için responsive flex sınıfları
             listeContainer.innerHTML += `
-                <li class="list-group-item d-flex justify-content-between align-items-center" id="kategori-satir-${kat.id}">
-                    <span>${kategoriAdiHtml}</span>
-                    <div>
+                <li class="list-group-item d-sm-flex justify-content-sm-between align-items-sm-center" id="kategori-satir-${kat.id}">
+                    <span class="d-block mb-2 mb-sm-0" style="word-break: break-word;">${kategoriAdiHtml}</span>
+                    <div class="flex-shrink-0 ms-sm-2">
                         <button class="btn btn-sm btn-outline-primary py-0 px-1 me-1" onclick="kategoriDuzenleAc(${kat.id})" title="Düzenle">
                             <i class="bi bi-pencil" style="font-size: 0.8rem;"></i>
                         </button>
@@ -121,11 +122,8 @@ async function kategoriEkle(event) {
     button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
     try {
-        const result = await api.request('/masraf/api/kategori/ekle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ kategori_adi: kategoriAdi })
-        });
+        // api.js'deki özel fonksiyonu kullan
+        const result = await api.postMasrafKategorisi({ kategori_adi: kategoriAdi });
         
         gosterMesaj(result.message, 'success');
         input.value = '';
@@ -140,7 +138,6 @@ async function kategoriEkle(event) {
 
 /**
  * Kategori düzenleme modalını açar ve doldurur.
- * (Global scope'da olması için window. ile tanımlandı)
  */
 window.kategoriDuzenleAc = function(id) {
     const kategori = tumKategoriler.find(k => k.id === id);
@@ -171,11 +168,8 @@ async function kategoriGuncelle() {
     button.textContent = "Kaydediliyor...";
 
     try {
-        const result = await api.request(`/masraf/api/kategori/guncelle/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ kategori_adi: kategoriAdi })
-        });
+        // api.js'deki özel fonksiyonu kullan
+        const result = await api.updateMasrafKategorisi(id, { kategori_adi: kategoriAdi });
         gosterMesaj(result.message, 'success');
         kategoriModal.hide();
         await kategorileriYukle(); // Listeyi ve select'leri güncelle
@@ -189,7 +183,6 @@ async function kategoriGuncelle() {
 
 /**
  * Kategori silme onay modalını açar.
- * (Global scope'da olması için window. ile tanımlandı)
  */
 window.kategoriSilOnayiAc = function(id, ad) {
     document.getElementById('silinecek-kategori-id').value = id;
@@ -208,11 +201,11 @@ async function kategoriSilOnayla() {
     button.textContent = "Siliniyor...";
     
     try {
-        const result = await api.request(`/masraf/api/kategori/sil/${id}`, { method: 'DELETE' });
+        // api.js'deki özel fonksiyonu kullan
+        const result = await api.deleteMasrafKategorisi(id);
         gosterMesaj(result.message, 'success');
         await kategorileriYukle(); // Listeyi ve select'leri güncelle
     } catch (error) {
-        // Hata mesajı backend'den (ValueError) geleceği için burada gösterilir
         gosterMesaj(error.message, 'danger');
     } finally {
         kategoriSilModal.hide();
@@ -236,7 +229,8 @@ async function masraflariYukle(sayfa = 1) {
     veriYokMesaji.style.display = 'none';
 
     try {
-        const data = await api.request(`/masraf/api/listele?sayfa=${sayfa}&limit=${MASRAF_SAYFA_BASI}`);
+        // api.js'deki özel fonksiyonu kullan
+        const data = await api.fetchMasraflar(sayfa, MASRAF_SAYFA_BASI);
         
         tabloBody.innerHTML = ''; // Tabloyu temizle
         
@@ -252,11 +246,13 @@ async function masraflariYukle(sayfa = 1) {
             const aciklama = utils.sanitizeHTML(masraf.aciklama) || '-';
             const tutar = parseFloat(masraf.tutar).toFixed(2);
             
+            // DÜZELTME: Mobil görünüm için HTML'deki sınıflarla eşleşen sınıflar
+            // text-nowrap KESİNLİKLE KALDIRILDI.
             tabloBody.innerHTML += `
                 <tr id="masraf-satir-${masraf.id}">
                     <td>${tarih}</td>
                     <td>${kategori}</td>
-                    <td>${aciklama}</td>
+                    <td class="d-none d-sm-table-cell">${aciklama}</td>
                     <td class="text-end fw-bold">${tutar} TL</td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-outline-primary py-0 px-1 me-1" onclick="masrafDuzenleAc(${masraf.id})" title="Düzenle">
@@ -270,7 +266,6 @@ async function masraflariYukle(sayfa = 1) {
             `;
         });
         
-        // Sayfalamayı (pagination) oluştur (ui.js'den)
         ui.sayfalamaNavOlustur('masraf-sayfalama', data.toplam_kayit, data.sayfa, data.limit, masraflariYukle);
 
     } catch (error) {
@@ -287,7 +282,6 @@ async function masrafEkle(event) {
     const button = document.getElementById('kaydet-masraf-btn');
     const originalButtonHTML = button.innerHTML;
     
-    // Flatpickr'dan tarihi al (utils.js'deki fonksiyonu kullanalım)
     const masrafTarihi = formatDateToYYYYMMDD(masrafTarihSecici.selectedDates[0]);
 
     const veri = {
@@ -306,11 +300,8 @@ async function masrafEkle(event) {
     button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...';
 
     try {
-        const result = await api.request('/masraf/api/ekle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
-        });
+        // api.js'deki özel fonksiyonu kullan
+        const result = await api.postMasraf(veri);
         
         gosterMesaj(result.message, 'success');
         document.getElementById('yeni-masraf-formu').reset();
@@ -328,18 +319,11 @@ async function masrafEkle(event) {
 
 /**
  * Masraf düzenleme modalını açar ve doldurur.
- * (Global scope'da olması için window. ile tanımlandı)
  */
 window.masrafDuzenleAc = async function(id) {
-    // Masraf verisini çekmek için tüm listeyi çekmek yerine
-    // tekil bir endpoint daha mantıklı olabilir.
-    // Ancak service.py'de get_paginated_expenses zaten var,
-    // o yüzden masraf listesini tekrar çekip içinden bulacağız.
-    // Bu, performansı biraz etkiler ama yeni endpoint yazmaktan kolaydır.
-    
     try {
-        // API'den mevcut sayfadaki veriyi tekrar al (veya cache'den kullan)
-        const data = await api.request(`/masraf/api/listele?sayfa=${mevcutMasrafSayfasi}&limit=${MASRAF_SAYFA_BASI}`);
+        // api.js'deki özel fonksiyonu kullan
+        const data = await api.fetchMasraflar(mevcutMasrafSayfasi, MASRAF_SAYFA_BASI);
         const masraf = data.masraflar.find(m => m.id === id);
         
         if (!masraf) {
@@ -351,11 +335,8 @@ window.masrafDuzenleAc = async function(id) {
         document.getElementById('edit-masraf-tutar-input').value = parseFloat(masraf.tutar).toFixed(2);
         document.getElementById('edit-masraf-aciklama-input').value = masraf.aciklama || '';
         
-        // Tarih seçiciyi ayarla
         editMasrafTarihSecici.setDate(masraf.masraf_tarihi, true);
-        
-        // Kategori seçiciyi ayarla
-        editKategoriSelect.setValue(masraf.kategori_id, true); // (id'si 'masraf_kategorileri' objesinde değil, 'kategori_id'dedir)
+        editKategoriSelect.setValue(masraf.kategori_id, true);
         
         masrafModal.show();
         
@@ -390,11 +371,8 @@ async function masrafGuncelle() {
     button.textContent = "Kaydediliyor...";
 
     try {
-        const result = await api.request(`/masraf/api/guncelle/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
-        });
+        // api.js'deki özel fonksiyonu kullan
+        const result = await api.updateMasraf(id, veri);
         gosterMesaj(result.message, 'success');
         masrafModal.hide();
         await masraflariYukle(mevcutMasrafSayfasi); // Mevcut sayfayı yenile
@@ -408,7 +386,6 @@ async function masrafGuncelle() {
 
 /**
  * Masraf silme onay modalını açar.
- * (Global scope'da olması için window. ile tanımlandı)
  */
 window.masrafSilOnayiAc = function(id) {
     document.getElementById('silinecek-masraf-id').value = id;
@@ -426,13 +403,12 @@ async function masrafSil() {
     button.textContent = "Siliniyor...";
     
     try {
-        const result = await api.request(`/masraf/api/sil/${id}`, { method: 'DELETE' });
+        // api.js'deki özel fonksiyonu kullan
+        const result = await api.deleteMasraf(id);
         gosterMesaj(result.message, 'success');
         
-        // Tabloyu yeniden yükle (sayfa kontrolü yaparak)
         const tabloBody = document.getElementById('masraf-tablosu');
         if (tabloBody && tabloBody.rows.length === 1 && mevcutMasrafSayfasi > 1) {
-            // Eğer silinen kayıt o sayfadaki son kayıtsa, bir önceki sayfaya git
             await masraflariYukle(mevcutMasrafSayfasi - 1);
         } else {
             await masraflariYukle(mevcutMasrafSayfasi);
@@ -448,8 +424,6 @@ async function masrafSil() {
 
 /**
  * JavaScript Date objesini 'YYYY-MM-DD' formatına çevirir.
- * (Bu fonksiyon utils.js'de varsa oradan kullanılabilir,
- * ama burada olması bağımsızlığı garantiler)
  */
 function formatDateToYYYYMMDD(date) {
     if (!date) return null;

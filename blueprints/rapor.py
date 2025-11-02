@@ -13,11 +13,12 @@ import calendar
 from weasyprint import HTML
 from decimal import Decimal, getcontext
 import logging
-# YENİ: Kârlılık fonksiyonunu ve PDF fonksiyonlarını servisten import et
+# GÜNCELLEME: Yeni fonksiyon import edildi
 from services.report_service import (
     generate_hesap_ozeti_pdf, 
     generate_mustahsil_makbuzu_pdf, 
-    get_profitability_report
+    get_profitability_report,
+    generate_aylik_rapor_pdf # <-- EKSİK OLAN BUYDU
 )
 
 rapor_bp = Blueprint('rapor', __name__, url_prefix='/api/rapor')
@@ -86,6 +87,7 @@ def get_detayli_rapor():
             'p_sirket_id': sirket_id, 'p_start_date': start_date_str, 'p_end_date': end_date_str
         }).execute()
         
+        # GÜNCELLEME: RPC'den gelen veri artık data[0] içinde değil, direkt data'dadır.
         veri = response.data
         if not veri:
              return jsonify({'chartData': {'labels': [], 'data': []}, 'summaryData': {}, 'supplierBreakdown': []})
@@ -115,7 +117,7 @@ def get_detayli_rapor():
         logger.error(f"Detaylı rapor alınırken hata: {e}", exc_info=True)
         return jsonify({"error": "Detaylı rapor oluşturulurken bir sunucu hatası oluştu."}), 500
 
-# --- YENİ KÂRLILIK RAPORU ENDPOINT'İ ---
+# --- KÂRLILIK RAPORU ENDPOINT'İ ---
 @rapor_bp.route('/karlilik', methods=['GET'])
 @login_required
 @firma_yetkilisi_required # Sadece firma yetkilisi/admin görebilir
@@ -162,13 +164,13 @@ def get_karlilik_raporu_api():
 # --- YENİ ENDPOINT SONU ---
 
 
+# --- AYLIK PDF ROTASI GÜNCELLENDİ ---
 @rapor_bp.route('/aylik_pdf')
 @login_required
 @lisans_kontrolu
 def aylik_rapor_pdf():
     """
-    Bu fonksiyon PDF servisine taşındı. Buradaki kod eski kalmış olabilir.
-    NOT: PDF oluşturma mantığı services/report_service.py içindedir.
+    Aylık genel özet raporu için PDF servisini çağırır.
     """
     try:
         sirket_id = session['user']['sirket_id']
@@ -176,12 +178,16 @@ def aylik_rapor_pdf():
         ay = int(request.args.get('ay'))
         yil = int(request.args.get('yil'))
         
-        # PDF oluşturma servisini çağır
+        # PDF oluşturma servisini çağır (Artık import edildi)
         return generate_aylik_rapor_pdf(sirket_id, sirket_adi, ay, yil)
 
+    except ValueError as ve: # Servisten gelen hataları yakala (örn: PDF oluşturma hatası)
+        logger.error(f"Aylık PDF raporu oluşturulurken (ValueError) hata: {ve}", exc_info=True)
+        return jsonify({"error": str(ve)}), 500
     except Exception as e:
-        logger.error(f"Aylık PDF raporu oluşturulurken hata: {e}", exc_info=True)
+        logger.error(f"Aylık PDF raporu oluşturulurken (Genel) hata: {e}", exc_info=True)
         return jsonify({"error": "PDF raporu oluşturulurken bir sunucu hatası oluştu."}), 500
+# --- GÜNCELLEME SONU ---
 
 @rapor_bp.route('/export_csv')
 @login_required

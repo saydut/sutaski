@@ -61,63 +61,62 @@
             </div>
         </div>
 
-        <h2 class="table-title">Süt Alımları</h2>
+        <h2 class="table-title">Süt Alımları (Fiyata Göre Toplam)</h2>
         <table>
             <thead>
                 <tr>
-                    <th style="width:15%;">Tarih</th><th>Cinsi</th>
-                    <th class="text-right">Miktar</th><th class="text-right">Birim Fiyat</th><th class="text-right">Tutarı</th>
+                    <th>Cinsi</th>
+                    <th class="text-right">Birim Fiyat</th>
+                    <th class="text-right">Toplam Miktar</th>
+                    <th class="text-right">Toplam Tutar</th>
                 </tr>
             </thead>
             <tbody>
                 {% for girdi in sut_girdileri %}
                 <tr>
-                    <td>{{ girdi.tarih }}</td><td>Soğutulmuş Çiğ İnek Sütü</td>
-                    <!-- HATA DÜZELTMESİ: | float filtresi None gelirse hata verir. | default(0) eklendi -->
-                    <td class="text-right">{{ "%.2f"|format(girdi.litre | default(0) | float) }} Lt.</td>
+                    <td>Soğutulmuş Çiğ İnek Sütü</td>
                     <td class="text-right">{{ "%.2f"|format(girdi.fiyat | default(0) | float) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(girdi.litre | default(0) | float) }} Lt.</td>
                     <td class="text-right">{{ "%.2f"|format(girdi.tutar | default(0)) }} TL</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="5" style="text-align:center;">Bu ay için süt alımı bulunmamaktadır.</td></tr>
+                <tr><td colspan="4" style="text-align:center;">Bu ay için süt alımı bulunmamaktadır.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
-
-        <h2 class="table-title">Yem Alımları</h2>
+        <h2 class="table-title">Yem Alımları (Fiyata Göre Toplam)</h2>
         <table>
             <thead>
                 <tr>
-                    <th style="width:15%;">Tarih</th><th>Ürün Adı</th>
-                    <th class="text-right">Miktar (KG)</th><th class="text-right">Birim Fiyat</th><th class="text-right">Toplam Tutar</th>
+                    <th>Ürün Adı</th>
+                    <th class="text-right">Birim Fiyat</th>
+                    <th class="text-right">Toplam Miktar (KG)</th>
+                    <th class="text-right">Toplam Tutar</th>
                 </tr>
             </thead>
             <tbody>
                 {% for islem in yem_islemleri %}
                 <tr>
-                    <td>{{ islem.islem_tarihi }}</td><td>{{ islem.yem_adi }}</td>
-                    <!-- HATA DÜZELTMESİ: None gelme ihtimaline karşı | default(0) eklendi -->
-                    <td class="text-right">{{ "%.2f"|format(islem.miktar_kg | default(0)) }}</td>
+                    <td>{{ islem.yem_adi }}</td>
                     <td class="text-right">{{ "%.2f"|format(islem.islem_anindaki_birim_fiyat | default(0)) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.miktar_kg | default(0)) }}</td>
                     <td class="text-right">{{ "%.2f"|format(islem.toplam_tutar | default(0)) }} TL</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="5" style="text-align:center;">Bu ay için yem alımı bulunmamaktadır.</td></tr>
+                <tr><td colspan="4" style="text-align:center;">Bu ay için yem alımı bulunmamaktadır.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
-
-        {# --- Finansal İşlemler Bölümü Güncellemesi --- #}
+        {# --- Finansal İşlemler Bölümü (Değişiklik Yok) --- #}
         <h3>Şirketten Yapılan Ödemeler (Avans/Hakediş)</h3>
         <table>
              <thead><tr><th style="width:15%;">Tarih</th><th>İşlem Tipi</th><th>Açıklama</th><th class="text-right">Tutar</th></tr></thead>
              <tbody>
-                {% for islem in sirket_odemeleri %} {# Yeni Liste Adı #}
+                {% for islem in sirket_odemeleri %}
                 <tr>
                     <td>{{ islem.islem_tarihi }}</td>
                     <td><span class="islem-tipi-{{ 'avans' if islem.islem_tipi == 'Avans' else 'odeme' }}">{{ islem.islem_tipi }}</span></td>
                     <td>{{ islem.aciklama or '-' }}</td>
-                    <!-- HATA DÜZELTMESİ: None gelme ihtimaline karşı | default(0) eklendi -->
                     <td class="text-right">{{ "%.2f"|format(islem.tutar | default(0)) }} TL</td>
                 </tr>
                 {% else %}
@@ -130,12 +129,11 @@
         <table>
              <thead><tr><th style="width:15%;">Tarih</th><th>İşlem Tipi</th><th>Açıklama</th><th class="text-right">Tutar</th></tr></thead>
              <tbody>
-                {% for islem in tahsilatlar %} {# Yeni Liste Adı #}
+                {% for islem in tahsilatlar %}
                 <tr>
                     <td>{{ islem.islem_tarihi }}</td>
                     <td><span class="islem-tipi-tahsilat">{{ islem.islem_tipi }}</span></td>
                     <td>{{ islem.aciklama or '-' }}</td>
-                    <!-- HATA DÜZELTMESİ: None gelme ihtimaline karşı | default(0) eklendi -->
                     <td class="text-right">{{ "%.2f"|format(islem.tutar | default(0)) }} TL</td>
                 </tr>
                 {% else %}
@@ -145,12 +143,11 @@
         </table>
         {# --- Finansal İşlemler Sonu --- #}
 
-        {# --- Özet Tablosu Güncellemesi --- #}
+        {# --- Özet Tablosu (Değişiklik Yok) --- #}
         <div class="summary-section">
             <table class="summary-table">
                 <tr>
                     <td class="label">Süt Alım Toplam Tutarı</td>
-                    <!-- HATA DÜZELTMESİ: None gelme ihtimaline karşı | default(0) eklendi -->
                     <td class="text-right">{{ "%.2f"|format(ozet.toplam_sut_tutari | default(0)) }} TL</td>
                 </tr>
                 <tr>
@@ -162,11 +159,11 @@
                     <td class="text-right">- {{ "%.2f"|format(ozet.toplam_yem_borcu | default(0)) }} TL</td>
                 </tr>
                  <tr>
-                    <td class="label">Şirketten Yapılan Ödeme Toplamı</td> {# Başlık Güncellendi #}
+                    <td class="label">Şirketten Yapılan Ödeme Toplamı</td>
                     <td class="text-right">- {{ "%.2f"|format(ozet.toplam_sirket_odemesi | default(0)) }} TL</td>
                 </tr>
                 <tr>
-                    <td class="label">Çiftçiden Alınan Tahsilat Toplamı</td> {# Yeni Satır #}
+                    <td class="label">Çiftçiden Alınan Tahsilat Toplamı</td>
                     <td class="text-right">+ {{ "%.2f"|format(ozet.toplam_tahsilat | default(0)) }} TL</td>
                 </tr>
                 <tr class="total">

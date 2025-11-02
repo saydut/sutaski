@@ -115,7 +115,7 @@ const api = {
     updateTarife(id, veri) { return this.request(`/tarife/api/guncelle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     deleteTarife(id) { return this.request(`/tarife/api/sil/${id}`, { method: 'DELETE' }); },
 
-    // --- Genel Masraf API'ları ---
+    // --- YENİ EKLENEN BÖLÜM: Genel Masraf API'ları ---
     // Kategori API'ları
     fetchMasrafKategorileri() { return this.request('/masraf/api/kategori/listele'); },
     postMasrafKategorisi(veri) { return this.request('/masraf/api/kategori/ekle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
@@ -126,6 +126,7 @@ const api = {
     postMasraf(veri) { return this.request('/masraf/api/ekle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     updateMasraf(id, veri) { return this.request(`/masraf/api/guncelle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
     deleteMasraf(id) { return this.request(`/masraf/api/sil/${id}`, { method: 'DELETE' }); },
+    // --- /YENİ EKLENEN BÖLÜM SONU ---
 
     // --- Yem Ürünü API'ları ---
     fetchYemUrunleri(sayfa) { return this.request(`/yem/api/urunler?sayfa=${sayfa}`); }, // Yem yönetimi için

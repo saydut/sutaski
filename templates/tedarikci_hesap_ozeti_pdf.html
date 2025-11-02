@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ rapor_basligi }}</title>
-    <!-- Harici CSS dosyası (artık fontu ve flex düzenini içeriyor) -->
     <link rel="stylesheet" href="static/css/pdf_style.css">
     <style>
         /*
@@ -12,7 +11,6 @@
          * Sadece renkler ve tabloya özel stiller burada kalıyor.
          */
 
-        /* --- YENİ DÜZENLEME: Kutuları sığdırmak için fontları ve boşlukları küçült --- */
         .ozet-karti {
             padding: 10px 5px; /* Üst/alt 10px, sağ/sol 5px (daha dar) */
         }
@@ -23,8 +21,6 @@
         .ozet-karti .deger {
             font-size: 15pt; /* 18pt'den 15pt'ye küçültüldü */
         }
-        /* --- YENİ DÜZENLEME SONU --- */
-
 
         /* Renk stilleri (bunlar zaten vardı, kalıyor) */
         .ozet-karti .deger.alacak { color: #5CB85C; } /* Yeşil */
@@ -56,10 +52,9 @@
             <p>{{ sirket_adi }} | {{ tedarikci_adi }} | Rapor Oluşturma Tarihi: {{ olusturma_tarihi }}</p>
         </header>
 
-        {# --- Özet Kartları Güncellemesi --- #}
+        {# --- Özet Kartları (Değişiklik Yok) --- #}
         <section class="ozet-karti-container">
             <div class="ozet-karti">
-                <!-- Başlık ve değerler değişmedi, sadece stil bloğu güncellendi -->
                 <div class="baslik">Toplam Süt Alacağı</div>
                 <div class="deger alacak">{{ "%.2f"|format(ozet.toplam_sut_alacagi | default(0)) }} TL</div>
             </div>
@@ -82,69 +77,63 @@
         </section>
         {# --- Özet Kartları Sonu --- #}
 
-        <h2>Süt Girdileri Dökümü</h2>
+        <h2>Süt Girdileri Dökümü (Fiyata Göre Toplam)</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Tarih</th>
-                    <th class="text-end">Litre</th>
                     <th class="text-end">Birim Fiyat</th>
-                    <th class="text-end">Günlük Toplam</th>
+                    <th class="text-end">Toplam Litre</th>
+                    <th class="text-end">Toplam Tutar</th>
                 </tr>
             </thead>
             <tbody>
                 {% for girdi in sut_girdileri %}
                 <tr>
-                    <td>{{ girdi.tarih }}</td>
-                    <td class="text-end">{{ "%.2f"|format(girdi.litre | default(0)) }} L</td>
                     <td class="text-end">{{ "%.2f"|format(girdi.fiyat | default(0)) }} TL</td>
+                    <td class="text-end">{{ "%.2f"|format(girdi.litre | default(0)) }} L</td>
                     <td class="text-end">{{ "%.2f"|format(girdi.tutar | default(0)) }} TL</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4" style="text-align: center;">Bu ay için süt girdisi bulunamadı.</td></tr>
+                <tr><td colspan="3" style="text-align: center;">Bu ay için süt girdisi bulunamadı.</td></tr>
                 {% endfor %}
             </tbody>
             <tfoot>
                 <tr class="toplam-satir">
-                    <td colspan="3" class="text-end">Süt Alacağı Toplamı</td>
+                    <td colspan="2" class="text-end">Süt Alacağı Toplamı</td>
                     <td class="text-end">{{ "%.2f"|format(ozet.toplam_sut_alacagi | default(0)) }} TL</td>
                 </tr>
             </tfoot>
         </table>
-
-        <h2>Yem Alımları Dökümü</h2>
+        <h2>Yem Alımları Dökümü (Fiyata Göre Toplam)</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Tarih</th>
                     <th>Ürün Adı</th>
-                    <th class="text-end">Miktar (KG)</th>
                     <th class="text-end">Birim Fiyat</th>
+                    <th class="text-end">Toplam Miktar (KG)</th>
                     <th class="text-end">Toplam Tutar</th>
                 </tr>
             </thead>
             <tbody>
                 {% for islem in yem_islemleri %}
                 <tr>
-                    <td>{{ islem.islem_tarihi }}</td>
                     <td>{{ islem.yem_adi }}</td>
-                    <td class="text-end">{{ "%.2f"|format(islem.miktar_kg | default(0)) }}</td>
                     <td class="text-end">{{ "%.2f"|format(islem.islem_anindaki_birim_fiyat | default(0)) }} TL</td>
+                    <td class="text-end">{{ "%.2f"|format(islem.miktar_kg | default(0)) }}</td>
                     <td class="text-end">{{ "%.2f"|format(islem.toplam_tutar | default(0)) }} TL</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="5" style="text-align: center;">Bu ay için yem alımı bulunamadı.</td></tr>
+                <tr><td colspan="4" style="text-align: center;">Bu ay için yem alımı bulunamadı.</td></tr>
                 {% endfor %}
             </tbody>
              <tfoot>
                 <tr class="toplam-satir">
-                    <td colspan="4" class="text-end">Yem Borcu Toplamı</td>
+                    <td colspan="3" class="text-end">Yem Borcu Toplamı</td>
                     <td class="text-end">{{ "%.2f"|format(ozet.toplam_yem_borcu | default(0)) }} TL</td>
                 </tr>
             </tfoot>
         </table>
-
-        {# --- Finansal İşlemler Bölümü Güncellemesi --- #}
+        {# --- Finansal İşlemler Bölümü (Değişiklik Yok) --- #}
         <h3>Şirketten Yapılan Ödemeler (Avans/Hakediş)</h3>
         <table>
             <thead>
@@ -214,4 +203,3 @@
     </div>
 </body>
 </html>
-

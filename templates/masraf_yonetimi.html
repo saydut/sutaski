@@ -20,8 +20,7 @@
 
     <div class="row g-3">
         <div class="col-lg-4 col-12">
-            <div class="card mb-3">
-                <div class="card-body p-3">
+            <div class="card mb-3"> <div class="card-body p-3">
                     <h5 class="card-title mb-3">Yeni Masraf Ekle</h5>
                     <form id="yeni-masraf-formu">
                         <div class="mb-2">
@@ -48,25 +47,6 @@
                     </form>
                 </div>
             </div>
-
-            <div class="card">
-                <div class="card-body p-3">
-                    <h5 class="card-title mb-3">Masraf Kategorileri</h5>
-                    <ul class="list-group" id="kategori-listesi">
-                        <li class="list-group-item text-center p-3"><div class="spinner-border spinner-border-sm"></div></li>
-                    </ul>
-                    <div id="kategori-veri-yok" class="text-center p-2 text-secondary" style="display: none;">
-                        <small>Kategori bulunamadı.</small>
-                    </div>
-                    <hr>
-                    <form id="yeni-kategori-formu" class="input-group">
-                        <input type="text" class="form-control form-control-sm" id="yeni-kategori-input" placeholder="Yeni kategori adı (örn: Yakıt)" required>
-                        <button class="btn btn-sm btn-outline-success" type="submit" id="kaydet-kategori-btn" title="Yeni Kategori Ekle">
-                            <i class="bi bi-plus"></i> Ekle
-                        </button>
-                    </form>
-                </div>
-            </div>
         </div>
 
         <div class="col-lg-8 col-12">
@@ -79,7 +59,7 @@
                                 <tr>
                                     <th>Tarih</th>
                                     <th>Kategori</th>
-                                    <th>Açıklama</th>
+                                    <th class="d-none d-sm-table-cell">Açıklama</th>
                                     <th class="text-end">Tutar (TL)</th>
                                     <th class="text-center">İşlemler</th>
                                 </tr>
@@ -95,10 +75,33 @@
                 </div>
             </div>
         </div>
-    </div>
-</div>
-
-<div class="modal fade" id="masrafDuzenleModal" tabindex="-1" aria-labelledby="masrafDuzenleModalLabel" aria-hidden="true">
+    </div> <div class="row g-3 mt-3"> <div class="col-12">
+            <div class="card">
+                <div class="card-body p-3">
+                    <h5 class="card-title mb-3">Masraf Kategorileri</h5>
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <ul class="list-group" id="kategori-listesi">
+                                <li class="list-group-item text-center p-3"><div class="spinner-border spinner-border-sm"></div></li>
+                            </ul>
+                            <div id="kategori-veri-yok" class="text-center p-2 text-secondary" style="display: none;">
+                                <small>Kategori bulunamadı.</small>
+                            </div>
+                        </div>
+                        <div class="col-md-5">
+                            <h6 class="mb-3">Yeni Kategori Ekle</h6>
+                            <form id="yeni-kategori-formu" class="input-group">
+                                <input type="text" class="form-control form-control-sm" id="yeni-kategori-input" placeholder="Yeni kategori adı (örn: Yakıt)" required>
+                                <button class="btn btn-sm btn-outline-success" type="submit" id="kaydet-kategori-btn" title="Yeni Kategori Ekle">
+                                    <i class="bi bi-plus"></i> Ekle
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div> </div> <div class="modal fade" id="masrafDuzenleModal" tabindex="-1" aria-labelledby="masrafDuzenleModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
