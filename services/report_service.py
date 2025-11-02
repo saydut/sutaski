@@ -163,7 +163,7 @@ def generate_mustahsil_makbuzu_pdf(sirket_id, tedarikci_id, ay, yil):
     veri = _get_aylik_tedarikci_verileri(sirket_id, tedarikci_id, ay, yil)
     ozet_rpc = veri["ozet"]
 
-    stopaj_orani = Decimal('0.02') # %2 Stopaj
+    stopaj_orani = Decimal('0.01') # %1 Stopaj
     stopaj_tutari = ozet_rpc["toplam_sut_tutari"] * stopaj_orani
 
     # --- GÜNCELLEME: Net ödenecek hesaplaması ---
