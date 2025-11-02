@@ -5,14 +5,15 @@ from flask import g
 from extensions import bcrypt
 from constants import UserRole
 from postgrest import APIError
-# random ve string importları artık gerekli değil (kaldırıldı)
+from utils import sanitize_input # YENİ: bleach temizleyicisini import et
+
 logger = logging.getLogger(__name__)
 
 # --- Yardımcı Fonksiyon: Benzersiz Çiftçi Kullanıcı Adı Oluştur ---
 # Bu fonksiyon aynı kalıyor
 def _generate_unique_farmer_username(base_name: str, sirket_id: int) -> str:
-    # Türkçe karakterleri ve boşlukları temizle
-    clean_name = ''.join(c for c in base_name.lower() if c.isalnum() or c == '_').replace(' ', '_')
+    # YENİ: İsim sanitize ediliyor
+    clean_name = ''.join(c for c in sanitize_input(base_name).lower() if c.isalnum() or c == '_').replace(' ', '_')
     username_base = f"{clean_name}_ciftci"
     username = username_base
     counter = 1
@@ -61,7 +62,8 @@ class FirmaService:
     def add_toplayici(self, sirket_id: int, data: dict):
         # Bu fonksiyon aynı kalıyor
         try:
-            kullanici_adi = data.get('kullanici_adi', '').strip()
+            # YENİ: Kullanıcı adı sanitize ediliyor
+            kullanici_adi = sanitize_input(data.get('kullanici_adi', ''))
             sifre = data.get('sifre')
             if not all([kullanici_adi, sifre]):
                 raise ValueError("Kullanıcı adı ve şifre zorunludur.")
@@ -78,13 +80,14 @@ class FirmaService:
                 raise ValueError("Bu kullanıcı adı zaten mevcut.")
 
             hashed_sifre = bcrypt.generate_password_hash(sifre).decode('utf-8')
+            # YENİ: Diğer alanlar da sanitize ediliyor
             yeni_kullanici_data = {
                 'kullanici_adi': kullanici_adi,
                 'sifre': hashed_sifre,
                 'sirket_id': sirket_id,
                 'rol': UserRole.TOPLAYICI.value,
-                'telefon_no': data.get('telefon_no'),
-                'adres': data.get('adres')
+                'telefon_no': sanitize_input(data.get('telefon_no')) or None,
+                'adres': sanitize_input(data.get('adres')) or None
             }
 
             response = g.supabase.table('kullanicilar').insert(yeni_kullanici_data).execute()
@@ -168,7 +171,8 @@ class FirmaService:
                  raise ValueError("Firma yetkilisinin bilgileri buradan güncellenemez.")
 
             guncellenecek_veri = {}
-            kullanici_adi_geldi = data.get('kullanici_adi', '').strip()
+            # YENİ: Kullanıcı adı sanitize ediliyor
+            kullanici_adi_geldi = sanitize_input(data.get('kullanici_adi', ''))
             if kullanici_adi_geldi:
                 mevcut_kullanici = g.supabase.table('kullanicilar').select('id').eq('kullanici_adi', kullanici_adi_geldi).neq('id', kullanici_id_to_update).execute()
                 if mevcut_kullanici.data:
@@ -177,8 +181,9 @@ class FirmaService:
             else:
                  raise ValueError("Kullanıcı adı boş bırakılamaz.")
 
-            guncellenecek_veri['telefon_no'] = data.get('telefon_no') if data.get('telefon_no') else None
-            guncellenecek_veri['adres'] = data.get('adres') if data.get('adres') else None
+            # YENİ: Diğer alanlar da sanitize ediliyor
+            guncellenecek_veri['telefon_no'] = sanitize_input(data.get('telefon_no')) or None
+            guncellenecek_veri['adres'] = sanitize_input(data.get('adres')) or None
 
             if guncellenecek_veri:
                 g.supabase.table('kullanicilar').update(guncellenecek_veri).eq('id', kullanici_id_to_update).execute()
@@ -238,8 +243,12 @@ class FirmaService:
 
             if not kullanici_res.data:
                 raise ValueError("Kullanıcı bulunamadı veya yetkiniz yok.")
-            if kullanici_res.data['rol'] != UserRole.CIFCI.value:
-                raise ValueError("Sadece çiftçi rolündeki kullanıcıların şifresi değiştirilebilir.")
+                
+            # GÜNCELLEME: Sadece çiftçi değil, toplayıcı ve muhasebeci de değiştirilebilsin.
+            # Firma yetkilisini değiştirmeyi engellemeye devam et.
+            gecerli_roller = [UserRole.CIFCI.value, UserRole.TOPLAYICI.value, UserRole.MUHASEBECI.value]
+            if kullanici_res.data['rol'] not in gecerli_roller:
+                raise ValueError("Sadece çiftçi, toplayıcı veya muhasebeci rolündeki kullanıcıların şifresi değiştirilebilir.")
 
             # 3. Yeni şifreyi hashle
             hashed_sifre = bcrypt.generate_password_hash(yeni_sifre_plain).decode('utf-8')
@@ -251,14 +260,17 @@ class FirmaService:
                 .execute()
 
             # 5. Başarılı olduğunu belirtmek için True döndür (şifreyi döndürme!)
-            logger.info(f"Çiftçi (ID: {kullanici_id_to_reset}) şifresi firma yetkilisi tarafından güncellendi.")
+            logger.info(f"Kullanıcı (ID: {kullanici_id_to_reset}) şifresi firma yetkilisi tarafından güncellendi.")
             return True
 
         except ValueError as ve:
             raise ve # ValueError'ları doğrudan yukarı ilet
         except Exception as e:
-            logger.error(f"Çiftçi şifresi ayarlanırken hata: {e}", exc_info=True)
+            logger.error(f"Kullanıcı şifresi ayarlanırken hata: {e}", exc_info=True)
             raise Exception("Şifre ayarlanırken bir sunucu hatası oluştu.")
+            
+    # set_ciftci_password fonksiyonunun adını set_user_password olarak değiştirelim
+    set_user_password = set_ciftci_password
 
 
 firma_service = FirmaService()

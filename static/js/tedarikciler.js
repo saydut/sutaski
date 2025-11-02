@@ -161,7 +161,7 @@ async function tedarikciKaydet() {
         let mesaj = result.message;
         if (!id && result.ciftci_kullanici_adi && result.ciftci_sifre) {
             mesaj += `<br><small class="mt-2">Otomatik oluşturulan çiftçi giriş bilgileri:<br>Kullanıcı Adı: <strong>${utils.sanitizeHTML(result.ciftci_kullanici_adi)}</strong><br>Şifre: <strong>${utils.sanitizeHTML(result.ciftci_sifre)}</strong></small>`;
-             gosterMesaj(mesaj, "success", 10000); // ui.js'den, 10 saniye
+             gosterMesaj(mesaj, "success", 10000, true); // YENİ: allowHTML: true
         } else {
              gosterMesaj(mesaj, "success"); // ui.js'den
         }

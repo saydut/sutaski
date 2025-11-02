@@ -19,12 +19,12 @@
 
     </div>
 
-    {##}
-    <div class="row g-3 mb-3"> {# YENİ: mb-3 eklendi, alttaki grafiklerle arayı açmak için #}
+    {# Filtreleme ve PDF Raporları (Başlık Güncellendi) #}
+    <div class="row g-3 mb-3">
         <div class="col-lg-6">
             <div class="card h-100">
                 <div class="card-body p-3">
-                    <h5 class="card-title">Günlük Raporu Filtrele</h5>
+                    <h5 class="card-title">Genel Raporları Filtrele</h5>
                     <div class="row g-2 align-items-end">
                         <div class="col-md-5 col-12">
                             <label for="baslangic-tarihi" class="form-label mb-1">Başlangıç Tarihi</label>
@@ -64,10 +64,78 @@
             </div>
         </div>
     </div>
-    {##}
+    
+    {# --- YENİ KÂRLILIK RAPORU BÖLÜMÜ --- #}
+    {% if session.get('user', {}).get('rol') in ['admin', 'firma_yetkilisi'] %}
+    <div class="card mb-3" id="karlilik-raporu-container" style="display: none;">
+        <div class="card-body p-3">
+            <h5 class="card-title mb-3">Kârlılık Analizi (<span id="karlilik-tarih-araligi">...</span>)</h5>
+            
+            <div id="karlilik-sonuc-mesaji" class="text-center p-4" style="display: none;">
+                </div>
+            
+            <div id="karlilik-kartlari" style="display: none;">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="card p-3 text-center h-100 bg-success bg-opacity-10">
+                            <div class="fs-6 text-secondary">Toplam Gelir</div>
+                            <h4 class="fw-bold mb-0 text-success" id="karlilik-toplam-gelir">- TL</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card p-3 text-center h-100 bg-danger bg-opacity-10">
+                            <div class="fs-6 text-secondary">Toplam Gider</div>
+                            <h4 class="fw-bold mb-0 text-danger" id="karlilik-toplam-gider">- TL</h4>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card p-3 text-center h-100 bg-primary bg-opacity-10">
+                            <div class="fs-6 text-secondary">NET KÂR / ZARAR</div>
+                            <h4 class="fw-bold mb-0 text-primary" id="karlilik-net-kar">- TL</h4>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row g-3">
+                    <div class="col-lg col-md-4 col-6">
+                        <div class="card p-2 text-center h-100">
+                            <div class="fs-6 text-secondary" style="font-size: 0.8rem;">Süt Geliri</div>
+                            <h6 class="fw-bold mb-0" id="karlilik-sut-geliri">- TL</h6>
+                        </div>
+                    </div>
+                    <div class="col-lg col-md-4 col-6">
+                        <div class="card p-2 text-center h-100">
+                            <div class="fs-6 text-secondary" style="font-size: 0.8rem;">Finansal Tahsilat</div>
+                            <h6 class="fw-bold mb-0" id="karlilik-tahsilat-geliri">- TL</h6>
+                        </div>
+                    </div>
+                    <div class="col-lg col-md-4 col-6">
+                        <div class="card p-2 text-center h-100">
+                            <div class="fs-6 text-secondary" style="font-size: 0.8rem;">Yem Gideri</div>
+                            <h6 class="fw-bold mb-0" id="karlilik-yem-gideri">- TL</h6>
+                        </div>
+                    </div>
+                    <div class="col-lg col-md-6 col-6">
+                        <div class="card p-2 text-center h-100">
+                            <div class="fs-6 text-secondary" style="font-size: 0.8rem;">Finansal Ödeme</div>
+                            <h6 class="fw-bold mb-0" id="karlilik-finans-gideri">- TL</h6>
+                        </div>
+                    </div>
+                    <div class="col-lg col-md-12 col-12">
+                        <div class="card p-2 text-center h-100">
+                            <div class="fs-6 text-secondary" style="font-size: 0.8rem;">Genel Masraflar</div>
+                            <h6 class="fw-bold mb-0" id="karlilik-genel-masraf">- TL</h6>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {# --- KÂRLILIK RAPORU BÖLÜMÜ SONU --- #}
 
 
-    {##}
+    {# 7/30 Günlük Grafikler (index.html'den taşındı) #}
     <div class="row mb-3 g-3">
         <div class="col-lg-7 col-12">
             <div class="card">
@@ -92,20 +160,20 @@
             </div>
         </div>
     </div>
-    {##}
+    {# 7/30 Günlük Grafikler Sonu #}
 
 
-    {##}
+    {# Detaylı Süt Raporu Özet Kartları #}
     <div class="row g-3 mb-3" id="ozet-kartlari" style="display: none;">
          <div class="col-lg-3 col-md-6 col-12"><div class="card p-3 text-center"><div class="fs-6 text-secondary">Toplam Süt</div><h4 class="fw-bold mb-0" id="ozet-toplam-litre">- L</h4></div></div>
         <div class="col-lg-3 col-md-6 col-12"><div class="card p-3 text-center"><div class="fs-6 text-secondary">Günlük Ortalama</div><h4 class="fw-bold mb-0" id="ozet-gunluk-ortalama">- L</h4></div></div>
         <div class="col-lg-3 col-md-6 col-12"><div class="card p-3 text-center"><div class="fs-6 text-secondary">Toplam Girdi</div><h4 class="fw-bold mb-0" id="ozet-girdi-sayisi">-</h4></div></div>
         <div class="col-lg-3 col-md-6 col-12"><div class="card p-3 text-center"><div class="fs-6 text-secondary">Gün Sayısı</div><h4 class="fw-bold mb-0" id="ozet-gun-sayisi">-</h4></div></div>
     </div>
-    {##}
+    {# Detaylı Süt Raporu Özet Kartları Sonu #}
 
 
-    {##}
+    {# Detaylı Süt Raporu ve Tedarikçi Dökümü #}
     <div class="row g-3">
         <div class="col-lg-8 col-12">
             <div class="card">
@@ -113,7 +181,7 @@
                     <h5 class="card-title mb-2" id="grafik-baslik">Tarih Aralığı Seçin</h5>
                     <div class="chart-container" style="height: 350px;">
                         <canvas id="detayliRaporGrafigi"></canvas>
-                        <p id="rapor-sonuc-mesaji" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--text-secondary); display: block; text-align: center;">Rapor oluşturmak için lütfen bir tarih aralığı seçin.</p> {# Stil eklendi #}
+                        <p id="rapor-sonuc-mesaji" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--text-secondary); display: block; text-align: center;">Rapor oluşturmak için lütfen bir tarih aralığı seçin.</p>
                     </div>
                 </div>
             </div>
@@ -132,7 +200,7 @@
             </div>
         </div>
     </div>
-    {##}
+    {# Detaylı Süt Raporu Sonu #}
 
 </div>
 {% endblock %}
@@ -140,6 +208,6 @@
 {% block scripts %}
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://npmcdn.com/flatpickr/dist/l10n/tr.js"></script>
-    {# charts.js zaten base.html'den geliyor, burada tekrar eklemeye gerek yok #}
+    {# charts.js zaten base.html'den geliyor #}
     <script src="{{ url_for('static', filename='js/reports.js') }}"></script>
 {% endblock %}

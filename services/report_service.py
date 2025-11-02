@@ -210,4 +210,48 @@ def generate_mustahsil_makbuzu_pdf(sirket_id, tedarikci_id, ay, yil):
     except Exception as e:
         logger.error(f"Müstahsil makbuzu PDF oluşturulurken WeasyPrint hatası: {e}", exc_info=True)
         raise Exception(f"PDF oluşturulurken bir hata oluştu: {e}")
+    
 
+# --- YENİ EKLENEN KÂRLILIK FONKSİYONU ---
+def get_profitability_report(sirket_id: int, baslangic: str, bitis: str):
+    """
+    Şirketin kârlılık raporunu yeni 'get_karlilik_raporu' RPC'sini
+    kullanarak alır ve Decimal'e çevirir.
+    """
+    try:
+        # Tarih formatlarını doğrula (Güvenlik için)
+        datetime.strptime(baslangic, '%Y-%m-%d')
+        datetime.strptime(bitis, '%Y-%m-%d')
+
+        response = g.supabase.rpc('get_karlilik_raporu', {
+            'p_sirket_id': sirket_id,
+            'p_baslangic_tarihi': baslangic,
+            'p_bitis_tarihi': bitis
+        }).execute()
+
+        if response.data:
+            # RPC'den gelen veriyi Decimal'e çevir
+            data = response.data
+            formatted_data = {
+                "toplam_sut_geliri": Decimal(str(data.get('toplam_sut_geliri', '0'))),
+                "toplam_finans_tahsilati": Decimal(str(data.get('toplam_finans_tahsilati', '0'))),
+                "toplam_yem_gideri": Decimal(str(data.get('toplam_yem_gideri', '0'))),
+                "toplam_finans_odemesi": Decimal(str(data.get('toplam_finans_odemesi', '0'))),
+                "toplam_genel_masraf": Decimal(str(data.get('toplam_genel_masraf', '0'))),
+                "toplam_gelir": Decimal(str(data.get('toplam_gelir', '0'))),
+                "toplam_gider": Decimal(str(data.get('toplam_gider', '0'))),
+                "net_kar": Decimal(str(data.get('net_kar', '0')))
+            }
+            return formatted_data
+        
+        # Hata veya boş veri durumunda
+        logger.warning("get_karlilik_raporu RPC'si boş veri döndürdü.")
+        return None # veya varsayılan bir obje döndür
+
+    except ValueError:
+        logger.warning(f"get_profitability_report: Geçersiz tarih formatı alındı.")
+        raise ValueError("Geçersiz tarih formatı. YYYY-MM-DD bekleniyor.")
+    except Exception as e:
+        logger.error(f"get_karlilik_raporu RPC hatası: {e}", exc_info=True)
+        raise Exception("Kârlılık raporu verileri alınamadı.")
+# --- YENİ FONKSİYON SONU ---

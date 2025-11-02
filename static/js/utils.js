@@ -72,7 +72,7 @@ function yeniOzellikBildirimiKontrolEt() {
             <strong>Uygulama güncellendi!</strong> Sürüm ${mevcutVersiyon}'a hoş geldiniz.
             <a href="#" class="alert-link" data-bs-toggle="modal" data-bs-target="#hakkindaModal">Yenilikleri görmek için tıklayın.</a>
         `;
-        gosterMesaj(mesaj, 'info', 10000); 
+        gosterMesaj(mesaj, 'info', 10000, true); // YENİ: allowHTML: true
         localStorage.setItem('sutaski_app_version', mevcutVersiyon);
     }
 }

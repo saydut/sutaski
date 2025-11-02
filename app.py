@@ -22,8 +22,10 @@ from blueprints.tedarikci import tedarikci_bp
 from blueprints.sut import sut_bp
 from blueprints.rapor import rapor_bp
 from blueprints.firma import firma_bp
-# YENİ: Çiftçi blueprint'ini import ediyoruz
 from blueprints.ciftci import ciftci_bp
+from blueprints.tarife import tarife_bp
+# YENİ: Masraf blueprint'ini import ediyoruz
+from blueprints.masraf import masraf_bp
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 
@@ -36,7 +38,7 @@ def create_app():
     app.config['JSON_AS_ASCII'] = False
 
     # === DEKORATÖRLER app TANIMLAMASINDAN SONRA, BURAYA TAŞINDI ===
-
+    # ... (app.before_request ve app.context_processor fonksiyonları aynı kalıyor) ...
     @app.before_request
     def setup_supabase_client():
         if 'supabase' not in g:
@@ -145,8 +147,10 @@ def create_app():
     app.register_blueprint(sut_bp)
     app.register_blueprint(rapor_bp)
     app.register_blueprint(firma_bp)
-    # YENİ: ciftci_bp'yi uygulamaya kaydediyoruz
     app.register_blueprint(ciftci_bp)
+    app.register_blueprint(tarife_bp)
+    # YENİ: masraf_bp'yi uygulamaya kaydediyoruz
+    app.register_blueprint(masraf_bp)
 
     return app
 
@@ -166,4 +170,3 @@ if __name__ == '__main__':
 #    app = create_app()
 #    app.run(debug=True)
 ##sjunucu için
-

@@ -20,9 +20,9 @@ if (typeof utils === 'undefined') {
  * @param {string} mesaj - Gösterilecek mesaj (HTML içerebilir).
  * @param {string} tip - Alert tipi ('success', 'info', 'warning', 'danger').
  * @param {number} sure - Mesajın ekranda kalma süresi (milisaniye).
+ * @param {boolean} allowHTML - Mesajın HTML olarak yorumlanıp yorumlanmayacağı.
  */
-function gosterMesaj(mesaj, tip = 'info', sure = 5000) {
-    // Bu fonksiyon aynı kalıyor.
+function gosterMesaj(mesaj, tip = 'info', sure = 5000, allowHTML = false) { // YENİ: allowHTML eklendi
     const container = document.getElementById('alert-container');
     if (!container) {
         console.error("'alert-container' ID'li element sayfada bulunamadı.");
@@ -32,7 +32,14 @@ function gosterMesaj(mesaj, tip = 'info', sure = 5000) {
     alertDiv.className = `alert alert-${tip} alert-dismissible fade show m-0`;
     alertDiv.role = 'alert';
     const messageSpan = document.createElement('span');
-    messageSpan.innerHTML = mesaj;
+    
+    // YENİ: Güvenlik kontrolü
+    if (allowHTML) {
+        messageSpan.innerHTML = mesaj; // Dikkat: Sadece güvenli HTML için kullanılmalı
+    } else {
+        messageSpan.textContent = mesaj; // Varsayılan: Güvenli
+    }
+    
     alertDiv.appendChild(messageSpan);
     alertDiv.insertAdjacentHTML('beforeend', '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>');
     container.appendChild(alertDiv);
@@ -111,9 +118,9 @@ const ui = {
             bugun.setHours(0, 0, 0, 0);
             const gunFarki = Math.ceil((lisansBitisTarihi.getTime() - bugun.getTime()) / (1000 * 3600 * 24));
             if (gunFarki < 0) {
-                gosterMesaj(`<strong>Dikkat:</strong> Şirketinizin lisans süresi ${Math.abs(gunFarki)} gün önce dolmuştur! Lütfen yöneticinizle iletişime geçin.`, 'danger', 10000);
+                gosterMesaj(`<strong>Dikkat:</strong> Şirketinizin lisans süresi ${Math.abs(gunFarki)} gün önce dolmuştur! Lütfen yöneticinizle iletişime geçin.`, 'danger', 10000, true); // YENİ: allowHTML: true
             } else if (gunFarki <= 30) {
-                gosterMesaj(`<strong>Bilgi:</strong> Şirketinizin lisans süresinin dolmasına ${gunFarki} gün kaldı.`, 'warning', 10000);
+                gosterMesaj(`<strong>Bilgi:</strong> Şirketinizin lisans süresinin dolmasına ${gunFarki} gün kaldı.`, 'warning', 10000, true); // YENİ: allowHTML: true
             }
         } catch (e) {
              console.error("Lisans tarihi kontrol hatası:", e);
@@ -426,4 +433,3 @@ const ui = {
 };
 
 // Global scope'daki gecmisiGoster fonksiyonu kaldırıldı (modal-handler.js'e taşındı).
-

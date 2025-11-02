@@ -4,6 +4,7 @@ import logging
 from flask import g
 from extensions import bcrypt
 from postgrest import APIError
+from utils import sanitize_input # YENİ: bleach temizleyicisini import et
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,21 @@ class ProfilService:
         try:
             kullanici_data = data.get('kullanici')
             if kullanici_data:
-                g.supabase.table('kullanicilar').update(kullanici_data).eq('id', user_id).execute()
+                # YENİ: Gelen veriyi sanitize et
+                guncel_kullanici_data = {
+                    'eposta': sanitize_input(kullanici_data.get('eposta')),
+                    'telefon_no': sanitize_input(kullanici_data.get('telefon_no'))
+                }
+                g.supabase.table('kullanicilar').update(guncel_kullanici_data).eq('id', user_id).execute()
 
             sirket_data = data.get('sirket')
             if sirket_data:
-                g.supabase.table('sirketler').update(sirket_data).eq('id', sirket_id).execute()
+                # YENİ: Gelen veriyi sanitize et
+                guncel_sirket_data = {
+                    'vergi_kimlik_no': sanitize_input(sirket_data.get('vergi_kimlik_no')),
+                    'adres': sanitize_input(sirket_data.get('adres'))
+                }
+                g.supabase.table('sirketler').update(guncel_sirket_data).eq('id', sirket_id).execute()
 
             sifre_data = data.get('sifreler')
             if sifre_data and sifre_data.get('yeni_sifre'):

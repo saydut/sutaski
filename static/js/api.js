@@ -80,7 +80,9 @@ const api = {
     fetchGunlukOzet(tarih) { return this.request(`/api/rapor/gunluk_ozet?tarih=${tarih}`); },
     fetchHaftalikOzet() { return this.request('/api/rapor/haftalik_ozet'); },
     fetchTedarikciDagilimi() { return this.request('/api/rapor/tedarikci_dagilimi'); },
-    fetchDetayliRapor(baslangic, bitis) { return this.request(`/api/rapor/detayli_rapor?baslangic=${baslangic}&bitis=${bitis}`); }, // Raporlar sayfası için ekledim
+    fetchDetayliRapor(baslangic, bitis) { return this.request(`/api/rapor/detayli_rapor?baslangic=${baslangic}&bitis=${bitis}`); },
+    // YENİ: Kârlılık Raporu API'si
+    fetchKarlilikRaporu(baslangic, bitis) { return this.request(`/api/rapor/karlilik?baslangic=${baslangic}&bitis=${bitis}`); },
 
     // --- Süt Girdisi API'ları ---
     fetchSutGirdileri(tarih, sayfa) { return this.request(`/api/sut_girdileri?tarih=${tarih}&sayfa=${sayfa}`); },
@@ -105,6 +107,25 @@ const api = {
     fetchTedarikciSutGirdileri(id, sayfa, limit) { return this.request(`/api/tedarikci/${id}/sut_girdileri?sayfa=${sayfa}&limit=${limit}`); },
     fetchTedarikciYemIslemleri(id, sayfa, limit) { return this.request(`/api/tedarikci/${id}/yem_islemleri?sayfa=${sayfa}&limit=${limit}`); },
     fetchTedarikciFinansIslemleri(id, sayfa, limit) { return this.request(`/api/tedarikci/${id}/finansal_islemler?sayfa=${sayfa}&limit=${limit}`); },
+
+    // --- Fiyat Tarifesi API'ları ---
+    fetchTarifeFiyat(tarih) { return this.request(`/tarife/api/get_fiyat?tarih=${tarih}`); },
+    fetchTarifeler() { return this.request('/tarife/api/listele'); },
+    postTarife(veri) { return this.request('/tarife/api/ekle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    updateTarife(id, veri) { return this.request(`/tarife/api/guncelle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    deleteTarife(id) { return this.request(`/tarife/api/sil/${id}`, { method: 'DELETE' }); },
+
+    // --- Genel Masraf API'ları ---
+    // Kategori API'ları
+    fetchMasrafKategorileri() { return this.request('/masraf/api/kategori/listele'); },
+    postMasrafKategorisi(veri) { return this.request('/masraf/api/kategori/ekle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    updateMasrafKategorisi(id, veri) { return this.request(`/masraf/api/kategori/guncelle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    deleteMasrafKategorisi(id) { return this.request(`/masraf/api/kategori/sil/${id}`, { method: 'DELETE' }); },
+    // Masraf API'ları
+    fetchMasraflar(sayfa, limit) { return this.request(`/masraf/api/listele?sayfa=${sayfa}&limit=${limit}`); },
+    postMasraf(veri) { return this.request('/masraf/api/ekle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    updateMasraf(id, veri) { return this.request(`/masraf/api/guncelle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+    deleteMasraf(id) { return this.request(`/masraf/api/sil/${id}`, { method: 'DELETE' }); },
 
     // --- Yem Ürünü API'ları ---
     fetchYemUrunleri(sayfa) { return this.request(`/yem/api/urunler?sayfa=${sayfa}`); }, // Yem yönetimi için
@@ -136,12 +157,14 @@ const api = {
     deleteKullanici(id) { return this.request(`/firma/api/kullanici_sil/${id}`, { method: 'DELETE' }); },
     fetchKullaniciDetay(id) { return this.request(`/firma/api/kullanici_detay/${id}`); },
     updateKullanici(id, veri) { return this.request(`/firma/api/kullanici_guncelle/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
-    postCiftciSifreSifirla(id) { return this.request(`/firma/api/ciftci_sifre_sifirla/${id}`, { method: 'POST'}); }, // Çiftçi şifre sıfırlama
+    postKullaniciSifreSetle(id, veri) { return this.request(`/firma/api/kullanici_sifre_setle/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) }); },
+
 
     // --- Çiftçi API'ları ---
     fetchCiftciOzet() { return this.request('/api/ciftci/ozet'); },
     fetchCiftciSutGirdileri(sayfa, limit) { return this.request(`/api/ciftci/sut_girdileri?sayfa=${sayfa}&limit=${limit}`); },
     fetchCiftciYemAlimlari(sayfa, limit) { return this.request(`/api/ciftci/yem_alimlarim?sayfa=${sayfa}&limit=${limit}`); },
+    fetchCiftciFinansIslemleri(sayfa, limit) { return this.request(`/api/ciftci/finans_islemleri?sayfa=${sayfa}&limit=${limit}`); },
 
     // --- Push Bildirim API'ları ---
     fetchVapidPublicKey() { return this.request('/api/push/vapid_public_key'); },

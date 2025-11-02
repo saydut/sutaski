@@ -5,6 +5,7 @@ from flask import g
 from decimal import Decimal, InvalidOperation
 # FinansIslemTipi constants dosyasından import ediliyor.
 from constants import FinansIslemTipi, UserRole
+from utils import sanitize_input # YENİ: bleach temizleyicisini import et
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class FinansService:
             return response.data, response.count
         except Exception as e:
             logger.error(f"Finansal işlemler listelenirken hata oluştu: {e}", exc_info=True)
-            raise Exception("İşlemler listelenirken bir sunucu hatası oluştu.")
+            raise Exception("İşlemler listelenirken bir hata oluştu.")
 
     def add_transaction(self, sirket_id: int, kullanici_id: int, data: dict):
         """Yeni bir finansal işlem ekler."""
@@ -57,7 +58,8 @@ class FinansService:
                 "kullanici_id": kullanici_id,
                 "islem_tipi": islem_tipi,
                 "tutar": str(tutar_decimal),
-                "aciklama": data.get('aciklama') or None,
+                # YENİ: Açıklama sanitize ediliyor
+                "aciklama": sanitize_input(data.get('aciklama')) or None,
                 "islem_tarihi": data.get('islem_tarihi') or None
             }
             if not yeni_islem["islem_tarihi"]:
@@ -93,9 +95,9 @@ class FinansService:
                 guncellenecek_veri['tutar'] = str(tutar_decimal)
 
             if 'aciklama' in data:
-                # Açıklamayı alırken None kontrolü yapıp boş string'e çevirelim, sonra strip edelim.
-                aciklama_str = data.get('aciklama', '') or ''
-                guncellenecek_veri['aciklama'] = aciklama_str.strip() or None
+                # YENİ: Açıklama sanitize ediliyor
+                guncellenecek_veri['aciklama'] = sanitize_input(data.get('aciklama')) or None
+
 
             if not guncellenecek_veri:
                 raise ValueError("Güncellenecek veri bulunamadı.")

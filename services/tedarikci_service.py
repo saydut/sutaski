@@ -9,13 +9,15 @@ import random
 import string
 from extensions import bcrypt
 from constants import UserRole
+from utils import sanitize_input # YENİ: bleach temizleyicisini import et
 
 logger = logging.getLogger(__name__)
 
 # --- Yardımcı Fonksiyon: Benzersiz Çiftçi Kullanıcı Adı Oluştur ---
 def _generate_unique_farmer_username(base_name: str, sirket_id: int) -> str:
     # Bu fonksiyon aynı kalıyor...
-    clean_name = ''.join(c for c in base_name.lower() if c.isalnum() or c == '_').replace(' ', '_')
+    # YENİ: Gelen base_name'i de sanitize edelim
+    clean_name = ''.join(c for c in sanitize_input(base_name).lower() if c.isalnum() or c == '_').replace(' ', '_')
     username_base = f"{clean_name}_ciftci"
     username = username_base
     counter = 1
@@ -112,18 +114,25 @@ class TedarikciService:
 
     def create(self, sirket_id: int, data: dict):
         """Yeni bir tedarikçi oluşturur ve otomatik olarak bir çiftçi hesabı açar."""
-        # Bu fonksiyon aynı kalıyor...
-        isim = data.get('isim', '').strip()
+        # YENİ: İsim sanitize ediliyor
+        isim = sanitize_input(data.get('isim', ''))
         if not isim:
             raise ValueError("Tedarikçi ismi zorunludur.")
+        
         yeni_ciftci_kullanici_adi = None
         yeni_ciftci_sifre = None
         yeni_kullanici_id = None
         try:
-            yeni_veri = {'isim': isim, 'sirket_id': sirket_id, 'kullanici_id': None}
-            if data.get('tc_no'): yeni_veri['tc_no'] = data.get('tc_no')
-            if data.get('telefon_no'): yeni_veri['telefon_no'] = data.get('telefon_no')
-            if data.get('adres'): yeni_veri['adres'] = data.get('adres')
+            # YENİ: Diğer alanlar da sanitize ediliyor
+            yeni_veri = {
+                'isim': isim, 
+                'sirket_id': sirket_id, 
+                'kullanici_id': None,
+                'tc_no': sanitize_input(data.get('tc_no')) or None,
+                'telefon_no': sanitize_input(data.get('telefon_no')) or None,
+                'adres': sanitize_input(data.get('adres')) or None
+            }
+
             tedarikci_response = g.supabase.table('tedarikciler').insert(yeni_veri).execute()
             yeni_tedarikci = tedarikci_response.data[0]
             yeni_tedarikci_id = yeni_tedarikci['id']
@@ -157,13 +166,16 @@ class TedarikciService:
         # Bu fonksiyon aynı kalıyor...
         try:
             guncellenecek_veri = {}
+            # YENİ: Alanlar sanitize ediliyor
             if 'isim' in data and data.get('isim'):
-                guncellenecek_veri['isim'] = data.get('isim')
+                guncellenecek_veri['isim'] = sanitize_input(data.get('isim'))
             else:
                 raise ValueError("Tedarikçi ismi boş bırakılamaz.")
-            if 'tc_no' in data: guncellenecek_veri['tc_no'] = data.get('tc_no')
-            if 'telefon_no' in data: guncellenecek_veri['telefon_no'] = data.get('telefon_no')
-            if 'adres' in data: guncellenecek_veri['adres'] = data.get('adres')
+            
+            guncellenecek_veri['tc_no'] = sanitize_input(data.get('tc_no')) or None
+            guncellenecek_veri['telefon_no'] = sanitize_input(data.get('telefon_no')) or None
+            guncellenecek_veri['adres'] = sanitize_input(data.get('adres')) or None
+
             response = g.supabase.table('tedarikciler').update(guncellenecek_veri).eq('id', tedarikci_id).eq('sirket_id', sirket_id).execute()
             if not response.data:
                 raise ValueError("Tedarikçi bulunamadı veya bu işlem için yetkiniz yok.")

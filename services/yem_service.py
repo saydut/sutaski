@@ -5,6 +5,7 @@ from flask import g
 from decimal import Decimal, InvalidOperation, DivisionByZero
 # YENİ: Rolleri kontrol edebilmek için UserRole'u import ediyoruz.
 from constants import UserRole
+from utils import sanitize_input # YENİ: bleach temizleyicisini import et
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,8 @@ class YemService:
     def _prepare_product_data(self, sirket_id: int, data: dict):
         """Gelen veriye göre yem ürünü verisini hazırlar."""
         fiyatlandirma_tipi = data.get('fiyatlandirma_tipi')
-        yem_adi = data.get('yem_adi')
+        # YENİ: Yem adı sanitize ediliyor
+        yem_adi = sanitize_input(data.get('yem_adi'))
 
         if not yem_adi:
             raise ValueError("Yem adı zorunludur.")
@@ -243,7 +245,8 @@ class YemService:
                 "islem_anindaki_birim_fiyat": str(islem_anindaki_birim_fiyat),
                 # --- /YENİ ---
                 "toplam_tutar": str(toplam_tutar),
-                "aciklama": data.get('aciklama')
+                # YENİ: Açıklama sanitize ediliyor
+                "aciklama": sanitize_input(data.get('aciklama')) or None
             }
             g.supabase.table('yem_islemleri').insert(yeni_islem).execute()
 
@@ -348,7 +351,8 @@ class YemService:
                 'toplam_tutar': str(yeni_toplam_tutar)
             }
             if 'aciklama' in data: # Açıklama gönderildiyse onu da ekle
-                guncellenecek_islem['aciklama'] = data.get('aciklama')
+                # YENİ: Açıklama sanitize ediliyor
+                guncellenecek_islem['aciklama'] = sanitize_input(data.get('aciklama')) or None
             g.supabase.table('yem_islemleri').update(guncellenecek_islem).eq('id', id).execute()
 
         except ValueError as ve: # Yakaladığımız ValueError'ları tekrar fırlat
@@ -359,4 +363,3 @@ class YemService:
 
 
 yem_service = YemService()
-

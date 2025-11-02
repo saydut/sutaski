@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Genel Masraf Yönetimi - Süt Takip Sistemi{% endblock %}
+
+{% block head_extra %}
+    {# Bu sayfa için tarih seçici CSS'i gerekli #}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="main-wrapper p-3 p-md-4">
+    <div id="alert-container"></div>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h1 class="fw-bold">Genel Masraf Yönetimi</h1>
+        <div class="d-flex align-items-center gap-2">
+            {% include '_hizli_islemler.html' %}
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-4 col-12">
+            <div class="card mb-3">
+                <div class="card-body p-3">
+                    <h5 class="card-title mb-3">Yeni Masraf Ekle</h5>
+                    <form id="yeni-masraf-formu">
+                        <div class="mb-2">
+                            <label for="masraf-kategori-sec" class="form-label">Masraf Kategorisi <span class="text-danger">*</span></label>
+                            <select id="masraf-kategori-sec" placeholder="Kategori seçin..." required></select>
+                        </div>
+                        <div class="mb-2">
+                            <label for="masraf-tutar-input" class="form-label">Tutar (TL) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="masraf-tutar-input" placeholder="Örn: 1250.50" required>
+                        </div>
+                        <div class="mb-2">
+                            <label for="masraf-tarihi-input" class="form-label">Masraf Tarihi <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control form-control-sm" id="masraf-tarihi-input" placeholder="Fatura/Ödeme tarihi" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="masraf-aciklama-input" class="form-label">Açıklama (Opsiyonel)</label>
+                            <input type="text" class="form-control form-control-sm" id="masraf-aciklama-input" placeholder="Masraf detayı...">
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary" id="kaydet-masraf-btn">
+                                <i class="bi bi-plus-circle me-2"></i>Masrafı Kaydet
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body p-3">
+                    <h5 class="card-title mb-3">Masraf Kategorileri</h5>
+                    <ul class="list-group" id="kategori-listesi">
+                        <li class="list-group-item text-center p-3"><div class="spinner-border spinner-border-sm"></div></li>
+                    </ul>
+                    <div id="kategori-veri-yok" class="text-center p-2 text-secondary" style="display: none;">
+                        <small>Kategori bulunamadı.</small>
+                    </div>
+                    <hr>
+                    <form id="yeni-kategori-formu" class="input-group">
+                        <input type="text" class="form-control form-control-sm" id="yeni-kategori-input" placeholder="Yeni kategori adı (örn: Yakıt)" required>
+                        <button class="btn btn-sm btn-outline-success" type="submit" id="kaydet-kategori-btn" title="Yeni Kategori Ekle">
+                            <i class="bi bi-plus"></i> Ekle
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8 col-12">
+             <div class="card">
+                <div class="card-body p-3">
+                     <h5 class="card-title mb-3">Son Masraf Kayıtları</h5>
+                     <div class="table-responsive">
+                        <table class="table table-hover table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Tarih</th>
+                                    <th>Kategori</th>
+                                    <th>Açıklama</th>
+                                    <th class="text-end">Tutar (TL)</th>
+                                    <th class="text-center">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="masraf-tablosu">
+                                </tbody>
+                        </table>
+                    </div>
+                    <div id="masraf-veri-yok" class="text-center p-4" style="display: none;">
+                        <p class="text-secondary">Kayıtlı genel masraf bulunamadı.</p>
+                    </div>
+                    <nav id="masraf-sayfalama" class="d-flex justify-content-center mt-3"></nav>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="masrafDuzenleModal" tabindex="-1" aria-labelledby="masrafDuzenleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="masrafDuzenleModalLabel">Masraf Kaydını Düzenle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="duzenle-masraf-formu">
+                    <input type="hidden" id="edit-masraf-id">
+                    <div class="mb-2">
+                        <label for="edit-masraf-kategori-sec" class="form-label">Kategori <span class="text-danger">*</span></label>
+                        <select id="edit-masraf-kategori-sec" required></select>
+                    </div>
+                    <div class="mb-2">
+                        <label for="edit-masraf-tutar-input" class="form-label">Tutar (TL) <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="edit-masraf-tutar-input" required>
+                    </div>
+                    <div class="mb-2">
+                        <label for="edit-masraf-tarihi-input" class="form-label">Masraf Tarihi <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="edit-masraf-tarihi-input" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit-masraf-aciklama-input" class="form-label">Açıklama</label>
+                        <input type="text" class="form-control form-control-sm" id="edit-masraf-aciklama-input">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary btn-sm" id="guncelle-masraf-btn">Değişiklikleri Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="masrafSilmeOnayModal" tabindex="-1" aria-labelledby="masrafSilmeOnayModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title text-danger" id="masrafSilmeOnayModalLabel">Silme Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body">
+                <p>Bu masraf kaydını kalıcı olarak silmek istediğinizden emin misiniz?</p>
+                <input type="hidden" id="silinecek-masraf-id">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-danger btn-sm" id="onayla-masraf-sil-btn">Evet, Sil</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="kategoriDuzenleModal" tabindex="-1" aria-labelledby="kategoriDuzenleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="kategoriDuzenleModalLabel">Kategoriyi Düzenle</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body">
+                <form id="duzenle-kategori-formu">
+                    <input type="hidden" id="edit-kategori-id">
+                    <label for="edit-kategori-input" class="form-label">Kategori Adı</label>
+                    <input type="text" class="form-control form-control-sm" id="edit-kategori-input" required>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary btn-sm" id="guncelle-kategori-btn">Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="kategoriSilmeOnayModal" tabindex="-1" aria-labelledby="kategoriSilmeOnayModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title text-danger" id="kategoriSilmeOnayModalLabel">Kategori Silme Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body">
+                <p>"<strong id="silinecek-kategori-adi"></strong>" kategorisini silmek istediğinizden emin misiniz?</p>
+                <p class="text-danger small">Bu kategoriye ait masraf kayıtları varsa silme işlemi başarısız olacaktır.</p>
+                <input type="hidden" id="silinecek-kategori-id">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-danger btn-sm" id="onayla-kategori-sil-btn">Evet, Sil</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/tr.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    {# Bu sayfanın JS kodunu ekleyeceğiz #}
+    <script src="{{ url_for('static', filename='js/masraf_yonetimi.js') }}"></script>
+{% endblock %}

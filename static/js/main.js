@@ -1,5 +1,5 @@
 // ====================================================================================
-// ANA UYGULAMA MANTIĞI (main.js) - SADELEŞTİRİLMİŞ ve GİRİŞ KONTROLLÜ (EN GÜVENLİ)
+// ANA UYGULAMA MANTIĞI (main.js) - GÜNCELLENDİ (FİYAT TARİFESİ)
 // Ana panelin genel işleyişini, veri akışını ve ana olayları yönetir.
 // UI güncellemeleri için ui.js'i, modal işlemleri için modal-handler.js'i,
 // veri getirme/gönderme için api.js'i ve HTML oluşturma için render-utils.js'i kullanır.
@@ -106,7 +106,7 @@ window.onload = async function() {
         else console.error("ui objesi veya ui.init() fonksiyonu bulunamadı.");
 
         // Bileşenleri BAŞLATMA (Sadece ana panelde gerekli olanlar var içinde)
-        setupDateFilter();
+        setupDateFilter(); // GÜNCELLENDİ: Artık fiyatı da tetikleyecek
         setupSupplierSelector();
 
         if(typeof ui !== 'undefined' && typeof ui.lisansUyarisiKontrolEt === 'function') ui.lisansUyarisiKontrolEt();
@@ -135,11 +135,10 @@ window.onload = async function() {
     if (typeof initializeSW === 'function') initializeSW();
 };
 
-// --- Geri kalan fonksiyonlar (setupDateFilter, setupSupplierSelector, baslangicVerileriniYukle, ozetVerileriniYukle, girdileriGoster, tedarikcileriYukle, girdileriFiltrele, filtreyiTemizle, sutGirdisiEkle, degeriDogrulaVeKaydet, gercekKaydetmeIsleminiYap, verileriDisaAktar, gorunumuDegistir, gorunumuAyarla, initializeSW) aynı kalıyor. ---
-// Önceki kod bloklarındaki gibi...
 
 /**
  * Tarih filtresi (Flatpickr) bileşenini başlatır.
+ * GÜNCELLENDİ: Artık tarih değiştiğinde fiyatı da getirir.
  */
 function setupDateFilter() {
     const tarihFiltreEl = document.getElementById('tarih-filtre');
@@ -147,6 +146,7 @@ function setupDateFilter() {
          ui.tarihFiltreleyici = flatpickr(tarihFiltreEl, {
             dateFormat: "d.m.Y", altInput: true, altFormat: "d.m.Y", locale: "tr", defaultDate: "today",
             onChange: function(selectedDates, dateStr, instance) {
+                // Tarih değiştiğinde hem girdileri filtrele hem de yeni fiyatı çek
                 girdileriFiltrele();
             }
         });
@@ -155,6 +155,7 @@ function setupDateFilter() {
 
 /**
  * Tedarikçi seçici (TomSelect) bileşenini başlatır.
+ * GÜNCELLENDİ: Artık fiyat çekme işlemi yapmıyor, sadece istatistik çekiyor.
  */
 function setupSupplierSelector() {
     const veriGirisPaneli = document.getElementById('veri-giris-paneli');
@@ -165,15 +166,13 @@ function setupSupplierSelector() {
             onChange: (value) => {
                  mevcutTedarikciIstatistikleri = null;
                  if (value && navigator.onLine && typeof api !== 'undefined') {
+                    // Sadece anormallik tespiti için istatistikleri çek
                     api.fetchTedarikciIstatistikleri(value)
                         .then(data => { mevcutTedarikciIstatistikleri = data[0] || null; })
                         .catch(err => console.warn("İstatistikler alınamadı:", err));
-                    api.fetchSonFiyat(value).then(data => {
-                       if(data && data.son_fiyat) {
-                           if (typeof ui.updateFiyatInput === 'function') { ui.updateFiyatInput(data.son_fiyat); }
-                           else { const fiyatInput = document.getElementById('fiyat-input'); if(fiyatInput) { fiyatInput.value = parseFloat(data.son_fiyat).toFixed(2); fiyatInput.classList.add('fiyat-guncellendi'); setTimeout(() => fiyatInput.classList.remove('fiyat-guncellendi'), 500); } }
-                       }
-                    }).catch(err => console.warn("Son fiyat getirilemedi:", err));
+                    
+                    // --- FİYAT GETİRME KODU BURADAN KALDIRILDI ---
+                    // Fiyat artık tarih filtresinden gelecek
                 }
             }
         });
@@ -182,6 +181,7 @@ function setupSupplierSelector() {
 
 /**
  * Uygulamanın ihtiyaç duyduğu tüm başlangıç verilerini paralel olarak yükler.
+ * GÜNCELLENDİ: Artık başlangıçta o günün fiyatını da çeker.
  */
 async function baslangicVerileriniYukle() {
     console.log("DEBUG: baslangicVerileriniYukle START");
@@ -189,11 +189,16 @@ async function baslangicVerileriniYukle() {
     if(typeof ui !== 'undefined' && typeof ui.updateGirdilerBaslik === 'function' && typeof utils !== 'undefined') {
         ui.updateGirdilerBaslik(utils.getLocalDateString());
     }
-    const promises = [ozetVerileriniYukle()];
+    
+    // YENİ: Bugünün tarihini al ve fiyatı çekme işlemini de ekle
+    const bugununTarihi = utils.getLocalDateString(new Date());
+    const promises = [ozetVerileriniYukle(), guncelFiyatiGetir(bugununTarihi)]; // guncelFiyatiGetir eklendi
+    
     if (kullaniciRolu !== 'muhasebeci') promises.push(tedarikcileriYukle());
+    
     try {
         await Promise.all(promises);
-        console.log("Özet ve Tedarikçiler (gerekiyorsa) yüklendi.");
+        console.log("Özet, Fiyat ve Tedarikçiler (gerekiyorsa) yüklendi.");
         await girdileriGoster(1);
     } catch (error) {
         console.error("Başlangıç verileri yüklenirken bir hata oluştu:", error);
@@ -254,6 +259,57 @@ async function tedarikcileriYukle() {
     catch (error) { console.error("Tedarikçiler yüklenirken hata:", error); gosterMesaj("Tedarikçiler yüklenemedi.", "danger"); }
 }
 
+/**
+ * YENİ FONKSİYON: Seçilen tarihe göre Fiyat Tarifesinden fiyatı çeker.
+ * @param {string} tarih - 'YYYY-MM-DD' formatında tarih.
+ */
+async function guncelFiyatiGetir(tarih) {
+    const fiyatInput = document.getElementById('fiyat-input');
+    if (!fiyatInput || kullaniciRolu === 'muhasebeci') return; // Fiyat inputu yoksa veya muhasebeciyse çık
+
+    // Fiyatı override etmeye izin ver (disabled=false)
+    fiyatInput.disabled = false;
+    fiyatInput.placeholder = "Fiyat yükleniyor...";
+    
+    // Çevrimdışıysak, manuel girişe izin ver
+    if (!navigator.onLine) {
+        fiyatInput.placeholder = "Çevrimdışı, fiyatı manuel girin";
+        return;
+    }
+
+    try {
+        const data = await api.fetchTarifeFiyat(tarih); // Yeni API endpoint'i
+        
+        if (data && data.fiyat) {
+            // Tarife bulundu
+            const tarifeFiyati = parseFloat(data.fiyat).toFixed(2);
+            fiyatInput.value = tarifeFiyati;
+            fiyatInput.placeholder = `Tarife fiyatı: ${tarifeFiyati} TL`;
+            // Fiyatın otomatik geldiğini göstermek için küçük bir animasyon
+            fiyatInput.classList.add('fiyat-guncellendi');
+            setTimeout(() => fiyatInput.classList.remove('fiyat-guncellendi'), 500);
+        } else {
+            // Tarife bulunamadı, son fiyatı da çekmeyi deneyebiliriz (opsiyonel)
+            // Veya sadece manuel girişe izin verebiliriz.
+            // İsteğin "eskiden olduğu gibi override edebilsinler" olduğu için
+            // tarife yoksa en mantıklısı son girilen fiyatı çekmek.
+            
+            // fetchSonFiyat'ı tekrar çağırmak yerine, setupSupplierSelector'da
+            // seçili tedarikçi değiştiğinde son fiyatı çekip bir global değişkende tutabiliriz.
+            // ŞİMDİLİK: Tarife yoksa son fiyatı çekelim (daha basit)
+            
+            // ÖZÜR: fetchSonFiyat tedarikçi ID'si istiyordu, tarihle fiyatı getiremeyiz.
+            // Bu yüzden tarife yoksa, manuel girişe zorlayalım.
+            fiyatInput.value = '';
+            fiyatInput.placeholder = "Tarife yok, fiyatı manuel girin";
+        }
+    } catch(error) {
+        console.error("Tarife fiyatı alınırken hata:", error);
+        fiyatInput.value = '';
+        fiyatInput.placeholder = "Hata! Fiyatı manuel girin";
+    }
+}
+
 
 // ====================================================================================
 // OLAY YÖNETİCİLERİ (EVENT HANDLERS)
@@ -261,14 +317,19 @@ async function tedarikcileriYukle() {
 
 /**
  * Tarih filtresi değiştiğinde çağrılır.
+ * GÜNCELLENDİ: Artık fiyatı da günceller.
  */
 function girdileriFiltrele() {
     if (typeof ui === 'undefined' || !ui.tarihFiltreleyici || typeof utils === 'undefined') return;
     const secilenTarih = ui.tarihFiltreleyici.selectedDates[0];
     const formatliTarih = secilenTarih ? utils.getLocalDateString(secilenTarih) : utils.getLocalDateString();
+    
     if(typeof ui.updateGirdilerBaslik === 'function') ui.updateGirdilerBaslik(formatliTarih);
+    
+    // İşlemleri paralel başlat
     girdileriGoster(1, formatliTarih);
     ozetVerileriniYukle(formatliTarih);
+    guncelFiyatiGetir(formatliTarih); // YENİ: Fiyatı da güncelle
 }
 
 /**
@@ -276,6 +337,7 @@ function girdileriFiltrele() {
  */
 function filtreyiTemizle() {
     if (typeof ui !== 'undefined' && ui.tarihFiltreleyici) { ui.tarihFiltreleyici.setDate(new Date(), true); }
+    // flatpickr'ın onChange olayı tetikleneceği için girdileriFiltrele() otomatik çalışır.
 }
 
 /**
@@ -283,9 +345,21 @@ function filtreyiTemizle() {
  */
 async function sutGirdisiEkle() {
     if(typeof ui === 'undefined') { console.error("ui objesi bulunamadı (sutGirdisiEkle)."); return; }
+    
+    // GÜNCELLEME: Artık fiyatın 0 olmasına izin veriyoruz (tarife yoksa ve manuel girilmezse)
+    // Ama 0'dan KÜÇÜK olamaz.
     const { tedarikciId, litre, fiyat } = ui.getGirdiFormVerisi();
-    if (!tedarikciId || !litre || parseFloat(litre) <= 0) { gosterMesaj("Lütfen tedarikçi seçin ve geçerli bir litre girin (0'dan büyük).", "warning"); return; }
-    const yeniGirdi = { tedarikci_id: parseInt(tedarikciId), litre: parseFloat(litre), fiyat: parseFloat(fiyat || 0) };
+    const parsedLitre = parseFloat(litre);
+    const parsedFiyat = parseFloat(fiyat || 0); // Fiyat boşsa 0 kabul et
+    
+    if (!tedarikciId || !litre || parsedLitre <= 0) { 
+        gosterMesaj("Lütfen tedarikçi seçin ve geçerli bir litre girin (0'dan büyük).", "warning"); return; 
+    }
+    if (parsedFiyat < 0) {
+        gosterMesaj("Fiyat negatif olamaz.", "warning"); return;
+    }
+
+    const yeniGirdi = { tedarikci_id: parseInt(tedarikciId), litre: parsedLitre, fiyat: parsedFiyat };
     await degeriDogrulaVeKaydet(yeniGirdi);
 }
 
@@ -306,7 +380,12 @@ async function degeriDogrulaVeKaydet(girdi) {
         altSinir = Math.max(0, altSinir);
         if (girilenLitre < altSinir || girilenLitre > ustSinir) {
             const mesaj = `Girdiğiniz <strong>${girilenLitre} Litre</strong> değeri, bu tedarikçinin ortalama (${ortalama_litre.toFixed(1)} L) girdisinden farklı görünüyor. Emin misiniz?`;
-            modalHandler.showVeriOnayModal(mesaj, async () => { await gercekKaydetmeIsleminiYap(girdi); }); return;
+            
+            // GÜNCELLEME: modalHandler'daki fonksiyonu çağır
+            if(typeof modalHandler.showVeriOnayModal === 'function') {
+                modalHandler.showVeriOnayModal(mesaj, async () => { await gercekKaydetmeIsleminiYap(girdi); }); 
+                return;
+            }
         }
     }
     await gercekKaydetmeIsleminiYap(girdi);
@@ -319,8 +398,23 @@ async function degeriDogrulaVeKaydet(girdi) {
 async function gercekKaydetmeIsleminiYap(yeniGirdi) {
     if(typeof ui === 'undefined' || typeof api === 'undefined' || typeof utils === 'undefined' || typeof kaydetCevrimdisi === 'undefined') { console.error("Gerekli objeler/fonksiyonlar bulunamadı (gercekKaydetmeIsleminiYap)."); return; }
     ui.toggleGirdiKaydetButton(true);
-    if (!navigator.onLine) { try { const isValid = await ui.checkOfflineUserLicense(); if (!isValid) return; const success = await kaydetCevrimdisi(yeniGirdi); if (success) { ui.resetGirdiFormu(); const today = utils.getLocalDateString(); await girdileriGoster(window.anaPanelMevcutSayfa, today); await ozetVerileriniYukle(today); } } catch(err) { gosterMesaj(err.message || 'Çevrimdışı kayıt yapılamadı.', 'danger'); } finally { ui.toggleGirdiKaydetButton(false); } return; }
-    try { const result = await api.postSutGirdisi(yeniGirdi); gosterMesaj("Süt girdisi başarıyla kaydedildi.", "success"); ui.resetGirdiFormu(); const today = utils.getLocalDateString(); ui.updateOzetPanels(result.yeni_ozet, today); await girdileriGoster(1, today); }
+    
+    // Tarih filtresinden o an seçili olan tarihi al
+    const seciliTarih = ui.tarihFiltreleyici?.selectedDates[0] ? utils.getLocalDateString(ui.tarihFiltreleyici.selectedDates[0]) : utils.getLocalDateString();
+    
+    if (!navigator.onLine) { try { const isValid = await ui.checkOfflineUserLicense(); if (!isValid) return; const success = await kaydetCevrimdisi(yeniGirdi); if (success) { ui.resetGirdiFormu(); await girdileriGoster(window.anaPanelMevcutSayfa, seciliTarih); await ozetVerileriniYukle(seciliTarih); } } catch(err) { gosterMesaj(err.message || 'Çevrimdışı kayıt yapılamadı.', 'danger'); } finally { ui.toggleGirdiKaydetButton(false); } return; }
+    try { 
+        const result = await api.postSutGirdisi(yeniGirdi); 
+        gosterMesaj("Süt girdisi başarıyla kaydedildi.", "success"); 
+        ui.resetGirdiFormu(); 
+        
+        // GÜNCELLEME: Sadece bugünün özetini değil, işlemin yapıldığı tarihin özetini güncelle
+        ui.updateOzetPanels(result.yeni_ozet, seciliTarih); 
+        await girdileriGoster(1, seciliTarih); 
+        // Başarılı kayıttan sonra fiyatı tekrar çek (belki tarife değişmiştir? - Gerekli değil, tarih aynı)
+        // await guncelFiyatiGetir(seciliTarih); // Şimdilik kapalı, resetGirdiFormu zaten temizliyor.
+        
+    }
     catch (error) { if (error.message !== 'Yetkisiz Erişim (401)') { console.error("Girdi kaydetme hatası:", error); gosterMesaj("Kayıt başarısız: " + (error.message || 'Bilinmeyen bir hata oluştu.'), "danger"); } }
     finally { ui.toggleGirdiKaydetButton(false); }
 }
@@ -363,4 +457,3 @@ async function initializeSW() {
 
 // Global scope'da olması gereken fonksiyonlar (onclick ile çağrılanlar)
 // gecmisiGoster fonksiyonu modal-handler.js içinde tanımlandı.
-
