@@ -107,12 +107,12 @@ def update_kullanici_api(kullanici_id):
         logger.error(f"Kullanıcı güncelleme API hatası: {e}", exc_info=True)
         return jsonify({"error": "Kullanıcı güncellenirken bir sunucu hatası oluştu."}), 500
 
-# --- YENİ ENDPOINT: Çiftçi Şifresini Ayarla ---
-@firma_bp.route('/api/ciftci_sifre_setle/<int:kullanici_id>', methods=['POST'])
+# --- GÜNCELLENDİ: Artık sadece çiftçi değil, kullanıcı şifresini ayarlar ---
+@firma_bp.route('/api/kullanici_sifre_setle/<int:kullanici_id>', methods=['POST']) # URL değişti
 @login_required
 @firma_yetkilisi_required
-def set_ciftci_password_api(kullanici_id):
-    """Bir çiftçi kullanıcısının şifresini firma yetkilisinin belirlediği yeni şifre ile günceller."""
+def set_user_password_api(kullanici_id): # Fonksiyon adı değişti
+    """Bir kullanıcının (çiftçi, toplayıcı, muhasebeci) şifresini firma yetkilisinin belirlediği yeni şifre ile günceller."""
     try:
         sirket_id = session['user']['sirket_id']
         data = request.get_json()
@@ -121,15 +121,15 @@ def set_ciftci_password_api(kullanici_id):
         if not yeni_sifre:
             return jsonify({"error": "Yeni şifre gönderilmedi."}), 400
 
-        # Yeni servis fonksiyonunu çağır
-        firma_service.set_ciftci_password(sirket_id, kullanici_id, yeni_sifre)
+        # Yeni, genelleştirilmiş servis fonksiyonunu çağır
+        # (Bir önceki adımda services/firma_service.py'da adını set_user_password yapmıştık)
+        firma_service.set_user_password(sirket_id, kullanici_id, yeni_sifre) 
 
-        # Başarı mesajı döndür (şifreyi DÖNDÜRME!)
-        return jsonify({"message": "Çiftçi şifresi başarıyla güncellendi."})
+        return jsonify({"message": "Kullanıcı şifresi başarıyla güncellendi."})
 
     except ValueError as ve:
         # Servisten gelen validation hatalarını döndür
         return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        logger.error(f"Çiftçi şifre ayarlama API hatası: {e}", exc_info=True)
+        logger.error(f"Kullanıcı şifre ayarlama API hatası: {e}", exc_info=True)
         return jsonify({"error": "Şifre ayarlanırken bir sunucu hatası oluştu."}), 500

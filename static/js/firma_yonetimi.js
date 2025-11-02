@@ -3,19 +3,20 @@
 let silmeOnayModal;
 let kullaniciDuzenleModal;
 let tedarikciSeciciTomSelect;
-let ciftciSifreAyarlaModal; // Yeni modal instance için global değişken
+let kullaniciSifreAyarlaModal; // GÜNCELLENDİ: İsim değişti
 
 // Sayfa yüklendiğinde çalışacak ana fonksiyon
 window.onload = function() {
     // Gerekli modalları başlat
     silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
     kullaniciDuzenleModal = new bootstrap.Modal(document.getElementById('kullaniciDuzenleModal'));
-    // Yeni modalı başlat (ID'nin _firma_modals.html dosyasındakiyle eşleştiğinden emin ol)
-    const ciftciModalElement = document.getElementById('ciftciSifreAyarlaModal');
-    if (ciftciModalElement) {
-        ciftciSifreAyarlaModal = new bootstrap.Modal(ciftciModalElement);
+    
+    // GÜNCELLENDİ: Yeni modal ID'sini başlat
+    const kullaniciModalElement = document.getElementById('kullaniciSifreAyarlaModal');
+    if (kullaniciModalElement) {
+        kullaniciSifreAyarlaModal = new bootstrap.Modal(kullaniciModalElement);
     } else {
-        console.warn("Çiftçi şifre ayarlama modal elementi (ciftciSifreAyarlaModal) bulunamadı.");
+        console.warn("Kullanıcı şifre ayarlama modal elementi (kullaniciSifreAyarlaModal) bulunamadı.");
     }
 
 
@@ -70,90 +71,6 @@ async function verileriYukle() {
         lisansBilgisiElementi.innerText = 'Hata';
     }
 }
-
-/**
- * Kullanıcı listesini tabloya render eder. (Çiftçi şifre butonu eklendi)
- * @param {Array} kullanicilar - Sunucudan gelen kullanıcı objeleri dizisi.
- */
-function kullaniciTablosunuDoldur(kullanicilar) {
-    const tabloBody = document.getElementById('kullanicilar-tablosu');
-    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    if (!tabloBody || !veriYokMesaji) return; // Elementler yoksa çık
-
-    tabloBody.innerHTML = ''; // Temizle
-
-    if (!kullanicilar || kullanicilar.length === 0) {
-        veriYokMesaji.style.display = 'block';
-        return;
-    }
-
-    veriYokMesaji.style.display = 'none';
-
-    kullanicilar.forEach(kullanici => {
-        let olusturulmaTarihi = "Bilinmiyor";
-        try {
-            olusturulmaTarihi = new Date(kullanici.created_at).toLocaleDateString('tr-TR');
-        } catch(e) { /* Hata olursa varsayılan kalır */ }
-
-        // Rol metnini daha kullanıcı dostu yapalım
-        let rolText = (kullanici.rol || '').replace('_', ' '); // Önce alt çizgiyi boşlukla değiştir
-        rolText = rolText.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '); // Her kelimenin baş harfini büyüt
-        if (rolText === 'Ciftci') rolText = 'Çiftçi'; // Türkçe karakter düzeltmesi
-        else if (rolText === 'Firma Yetkilisi') rolText = 'Yetkili';
-
-
-        // Role göre rozet rengi
-        let rolBadgeClass = 'bg-secondary'; // Varsayılan
-        if (kullanici.rol === 'firma_yetkilisi') rolBadgeClass = 'bg-primary';
-        else if (kullanici.rol === 'toplayici') rolBadgeClass = 'bg-info text-dark';
-        else if (kullanici.rol === 'muhasebeci') rolBadgeClass = 'bg-warning text-dark';
-        else if (kullanici.rol === 'ciftci') rolBadgeClass = 'bg-success';
-
-
-        // --- Çiftçi için Şifre Ayarla butonu ---
-        let sifreButonu = '';
-        // Sadece 'ciftci' rolü için butonu göster
-        if (kullanici.rol === 'ciftci') {
-            // Kullanıcı adındaki tırnak işaretlerini escape et
-            const guvenliKullaniciAdi = (kullanici.kullanici_adi || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            sifreButonu = `
-                <button class="btn btn-sm btn-outline-warning ms-1"
-                        onclick="ciftciSifreModaliniAc(${kullanici.id}, '${guvenliKullaniciAdi}')"
-                        title="Çiftçi Şifresini Ayarla">
-                    <i class="bi bi-key-fill"></i>
-                </button>`;
-        }
-        // --- /Çiftçi butonu ---
-
-        // Diğer roller için Düzenle ve Sil butonları
-        let duzenleSilButonlari = '';
-        if (kullanici.rol !== 'ciftci') {
-             const guvenliKullaniciAdi = (kullanici.kullanici_adi || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-             duzenleSilButonlari = `
-                    <button class="btn btn-sm btn-outline-primary me-1" onclick="duzenlemeModaliniAc(${kullanici.id})">
-                        <i class="bi bi-pencil"></i> Düzenle
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="silmeOnayiAc(${kullanici.id}, '${guvenliKullaniciAdi}')">
-                        <i class="bi bi-trash"></i> Sil
-                    </button>
-                    `;
-        }
-
-        const row = `
-            <tr id="kullanici-satir-${kullanici.id}">
-                <td><strong>${utils.sanitizeHTML(kullanici.kullanici_adi)}</strong></td>
-                <td><span class="badge ${rolBadgeClass}">${rolText}</span></td>
-                <td>${olusturulmaTarihi}</td>
-                <td class="text-center">
-                    ${duzenleSilButonlari}
-                    ${sifreButonu} {# Şifre butonunu buraya ekle #}
-                </td>
-            </tr>
-        `;
-        tabloBody.innerHTML += row;
-    });
-}
-
 
 /**
  * Lisans kullanım durumunu arayüzde gösterir.
@@ -220,6 +137,93 @@ async function yeniKullaniciEkle(event) {
         kaydetButton.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Toplayıcıyı Ekle';
     }
 }
+
+/**
+ * Kullanıcı listesini tabloya render eder. (GÜNCELLENDİ)
+ * @param {Array} kullanicilar - Sunucudan gelen kullanıcı objeleri dizisi.
+ */
+function kullaniciTablosunuDoldur(kullanicilar) {
+    const tabloBody = document.getElementById('kullanicilar-tablosu');
+    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
+    if (!tabloBody || !veriYokMesaji) return; // Elementler yoksa çık
+
+    tabloBody.innerHTML = ''; // Temizle
+
+    if (!kullanicilar || kullanicilar.length === 0) {
+        veriYokMesaji.style.display = 'block';
+        return;
+    }
+
+    veriYokMesaji.style.display = 'none';
+
+    kullanicilar.forEach(kullanici => {
+        let olusturulmaTarihi = "Bilinmiyor";
+        try {
+            olusturulmaTarihi = new Date(kullanici.created_at).toLocaleDateString('tr-TR');
+        } catch(e) { /* Hata olursa varsayılan kalır */ }
+
+        // Rol metnini daha kullanıcı dostu yapalım
+        let rolText = (kullanici.rol || '').replace('_', ' '); 
+        rolText = rolText.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '); 
+        if (rolText === 'Ciftci') rolText = 'Çiftçi'; 
+        else if (rolText === 'Firma Yetkilisi') rolText = 'Yetkili';
+
+        // Role göre rozet rengi
+        let rolBadgeClass = 'bg-secondary'; 
+        if (kullanici.rol === 'firma_yetkilisi') rolBadgeClass = 'bg-primary';
+        else if (kullanici.rol === 'toplayici') rolBadgeClass = 'bg-info text-dark';
+        else if (kullanici.rol === 'muhasebeci') rolBadgeClass = 'bg-warning text-dark';
+        else if (kullanici.rol === 'ciftci') rolBadgeClass = 'bg-success';
+
+
+        // --- GÜNCELLENDİ: Şifre ve Düzenle/Sil Butonları Mantığı ---
+        let sifreButonu = '';
+        let duzenleButonu = '';
+        let silButonu = '';
+        // GüvenliKullaniciAdi, HTML'deki onclick içine eklendiğinde ' (tek tırnak) hatası vermesin diye.
+        const guvenliKullaniciAdi = (kullanici.kullanici_adi || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        
+        // Kural: 'firma_yetkilisi' veya 'admin' rolü SİLİNEMEZ ve şifresi buradan AYARLANAMAZ.
+        if (kullanici.rol !== 'firma_yetkilisi' && kullanici.rol !== 'admin') {
+        
+            // Şifre Ayarla Butonu (Anahtar) - Artık toplayıcı, muhasebeci ve çiftçi için gösterilecek
+            sifreButonu = `
+                <button class="btn btn-sm btn-outline-warning ms-1"
+                        onclick="kullaniciSifreModaliniAc(${kullanici.id}, '${guvenliKullaniciAdi}')"
+                        title="Kullanıcı Şifresini Ayarla">
+                    <i class="bi bi-key-fill"></i>
+                </button>`;
+                
+            // Sil Butonu
+            silButonu = `
+                <button class="btn btn-sm btn-outline-danger ms-1" onclick="silmeOnayiAc(${kullanici.id}, '${guvenliKullaniciAdi}')">
+                    <i class="bi bi-trash"></i>
+                </button>`;
+
+            // Düzenle Butonu (Sadece toplayıcı ve muhasebeci için)
+            if (kullanici.rol === 'toplayici' || kullanici.rol === 'muhasebeci') {
+                 duzenleButonu = `
+                    <button class="btn btn-sm btn-outline-primary" onclick="duzenlemeModaliniAc(${kullanici.id})">
+                        <i class="bi bi-pencil"></i> Düzenle
+                    </button>
+                    `;
+            }
+        }
+        // --- /GÜNCELLENDİ ---
+
+        const row = `
+            <tr id="kullanici-satir-${kullanici.id}">
+                <td><strong>${utils.sanitizeHTML(kullanici.kullanici_adi)}</strong></td>
+                <td><span class="badge ${rolBadgeClass}">${rolText}</span></td>
+                <td>${olusturulmaTarihi}</td>
+                <td class="text-center">
+                    ${duzenleButonu}  ${sifreButonu}    ${silButonu}      </td>
+            </tr>
+        `; // DİKKAT: Hatalı {# ... #} yorumu buradan kaldırıldı.
+        tabloBody.innerHTML += row;
+    });
+}
+
 
 /**
  * Silme onay modal'ını açar.
@@ -383,39 +387,40 @@ async function kullaniciGuncelle() {
     }
 }
 
-// --- YENİ FONKSİYONLAR ---
+// --- GÜNCELLENDİ: Çiftçi fonksiyonları genel "Kullanıcı" fonksiyonlarına dönüştü ---
 
 /**
- * Çiftçi şifre ayarlama modalını açar ve kullanıcı bilgilerini doldurur.
+ * Kullanıcı şifre ayarlama modalını açar ve kullanıcı bilgilerini doldurur.
  */
-function ciftciSifreModaliniAc(kullaniciId, kullaniciAdi) {
-    const idInput = document.getElementById('ciftci-sifre-ayarla-id');
-    const nameSpan = document.getElementById('ciftci-sifre-ayarla-kullanici');
-    const passInput = document.getElementById('ciftci-yeni-sifre-input');
-    const passRepeatInput = document.getElementById('ciftci-yeni-sifre-tekrar-input');
+function kullaniciSifreModaliniAc(kullaniciId, kullaniciAdi) { // AD DEĞİŞTİ
+    const idInput = document.getElementById('kullanici-sifre-ayarla-id'); // ID DEĞİŞTİ
+    const nameSpan = document.getElementById('kullanici-sifre-ayarla-kullanici'); // ID DEĞİŞTİ
+    const passInput = document.getElementById('kullanici-yeni-sifre-input'); // ID DEĞİŞTİ
+    const passRepeatInput = document.getElementById('kullanici-yeni-sifre-tekrar-input'); // ID DEĞİŞTİ
 
     if (idInput) idInput.value = kullaniciId;
     if (nameSpan) nameSpan.innerText = kullaniciAdi;
     if (passInput) passInput.value = ''; // Alanları temizle
     if (passRepeatInput) passRepeatInput.value = '';
 
-    if (ciftciSifreAyarlaModal) {
-        ciftciSifreAyarlaModal.show();
+    if (kullaniciSifreAyarlaModal) { // AD DEĞİŞTİ
+        kullaniciSifreAyarlaModal.show(); // AD DEĞİŞTİ
     } else {
-        console.error("Çiftçi şifre ayarlama modalı başlatılamamış!");
+        console.error("Kullanıcı şifre ayarlama modalı başlatılamamış!");
     }
 }
 
 /**
- * Çiftçi şifre ayarlama modalındaki yeni şifreyi alır ve API'ye gönderir.
+ * Kullanıcı şifre ayarlama modalındaki yeni şifreyi alır ve API'ye gönderir.
  */
-async function ciftciSifreKaydet() {
-    const idInput = document.getElementById('ciftci-sifre-ayarla-id');
-    const yeniSifreInput = document.getElementById('ciftci-yeni-sifre-input');
-    const yeniSifreTekrarInput = document.getElementById('ciftci-yeni-sifre-tekrar-input');
-    const kaydetButton = document.querySelector('#ciftciSifreAyarlaModal .btn-primary');
+async function kullaniciSifreKaydet() { // AD DEĞİŞTİ
+    const idInput = document.getElementById('kullanici-sifre-ayarla-id'); // ID DEĞİŞTİ
+    const yeniSifreInput = document.getElementById('kullanici-yeni-sifre-input'); // ID DEĞİŞTİ
+    const yeniSifreTekrarInput = document.getElementById('kullanici-yeni-sifre-tekrar-input'); // ID DEĞİŞTİ
+    const kaydetButton = document.querySelector('#kullaniciSifreAyarlaModal .btn-primary'); // ID DEĞİŞTİ
+    
     if (!idInput || !yeniSifreInput || !yeniSifreTekrarInput || !kaydetButton) {
-        console.error("ciftciSifreKaydet: Gerekli DOM elementleri bulunamadı.");
+        console.error("kullaniciSifreKaydet: Gerekli DOM elementleri bulunamadı.");
         return;
     }
 
@@ -442,15 +447,15 @@ async function ciftciSifreKaydet() {
     kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
 
     try {
-        // Yeni API endpoint'ini ve metodu kullan
-        const result = await api.request(`/firma/api/ciftci_sifre_setle/${id}`, {
+        // GÜNCELLENDİ: Yeni API endpoint'ini ve metodu kullan
+        const result = await api.request(`/firma/api/kullanici_sifre_setle/${id}`, { 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ yeni_sifre: yeniSifre }) // Sadece yeni şifreyi gönder
         });
 
         gosterMesaj(result.message, 'success'); // Başarı mesajını göster
-        if (ciftciSifreAyarlaModal) ciftciSifreAyarlaModal.hide(); // Modalı kapat
+        if (kullaniciSifreAyarlaModal) kullaniciSifreAyarlaModal.hide(); // Modalı kapat
 
     } catch (error) {
         // Hata mesajını göster

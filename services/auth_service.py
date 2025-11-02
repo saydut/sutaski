@@ -14,41 +14,50 @@ class AuthService:
     """Kullanıcı kimlik doğrulama işlemleri için servis katmanı."""
 
     def register_user(self, kullanici_adi, sifre, sirket_adi):
-        """Yeni bir kullanıcı ve gerekirse yeni bir şirket kaydı yapar."""
+        """Yeni bir kullanıcı ve YENİ bir şirket kaydı yapar."""
         try:
             if not all([kullanici_adi, sifre, sirket_adi]):
                 raise ValueError("Tüm alanların doldurulması zorunludur.")
 
+            # 1. Kullanıcı adı benzersiz mi?
             kullanici_var_mi = g.supabase.table('kullanicilar').select('id', count='exact').eq('kullanici_adi', kullanici_adi).execute()
             if kullanici_var_mi.count > 0:
                 raise ValueError("Bu kullanıcı adı zaten mevcut.")
 
-            # Bu fonksiyon (sirket_id, is_yeni_sirket) döndürmeli
-            sirket_id, is_yeni_sirket = self._get_or_create_sirket(sirket_adi)
+            # 2. Şirket adı benzersiz mi? (YENİ KURAL)
+            formatted_name = sirket_adi.strip().title()
+            sirket_response = g.supabase.table('sirketler').select('id').eq('sirket_adi', formatted_name).execute()
+
+            if sirket_response.data:
+                # Şirket zaten varsa, kayıt olmasını engelle
+                raise ValueError(f"'{formatted_name}' adında bir şirket zaten kayıtlı. Lütfen giriş yapın veya yöneticinizle iletişime geçin.")
+
+            # 3. Şirket ve Kullanıcıyı oluştur (Çünkü ikisi de yeni)
             
-            # Anahtar kısım burası: is_yeni_sirket True ise rol 'firma_yetkilisi' olmalı
-            rol = UserRole.FIRMA_YETKILISI.value if is_yeni_sirket else UserRole.TOPLAYICI.value
+            # Yeni şirketi oluştur
+            yeni_sirket_response = g.supabase.table('sirketler').insert({'sirket_adi': formatted_name}).execute()
+            sirket_id = yeni_sirket_response.data[0]['id']
+            
+            # Yeni kullanıcıyı 'firma_yetkilisi' rolüyle oluştur
+            rol = UserRole.FIRMA_YETKILISI.value 
             
             hashed_sifre = bcrypt.generate_password_hash(sifre).decode('utf-8')
             
-            # Ve rol burada açıkça veritabanına eklenmeli
             g.supabase.table('kullanicilar').insert({
                 'kullanici_adi': kullanici_adi, 
                 'sifre': hashed_sifre,
                 'sirket_id': sirket_id,
-                'rol': rol  # Bu satırın varlığı kritik
+                'rol': rol
             }).execute()
 
-            return {"message": "Kayıt başarılı!"}
+            # Mesajı daha açıklayıcı hale getirdim
+            return {"message": "Şirketiniz ve yönetici hesabınız başarıyla oluşturuldu! Giriş yapabilirsiniz."}
 
         except ValueError as ve:
             raise
         except APIError as e:
-            if "violates unique constraint" in e.message:
-                raise ValueError(f"'{sirket_adi}' adında bir şirket zaten mevcut. Lütfen tam adını doğru yazdığınızdan emin olun.")
-            else:
-                logger.error(f"Kayıt sırasında API hatası: {e}", exc_info=True)
-                raise Exception("Kayıt sırasında bir veritabanı hatası oluştu.")
+            logger.error(f"Kayıt sırasında API hatası: {e}", exc_info=True)
+            raise Exception("Kayıt sırasında bir veritabanı hatası oluştu.")
         except Exception as e:
             logger.error(f"Kayıt sırasında genel hata: {e}", exc_info=True)
             raise Exception("Kayıt sırasında beklenmedik bir sunucu hatası oluştu.")
@@ -57,6 +66,8 @@ class AuthService:
         """
         Verilen isimde bir şirket arar, bulamazsa yenisini oluşturur.
         Dönüş değeri olarak (sirket_id, is_yeni_sirket_mi) şeklinde bir tuple döndürür.
+        (Bu fonksiyon artık register_user tarafından kullanılmıyor ancak başka bir yerde
+         kullanılma ihtimaline karşı yerinde bırakılabilir.)
         """
         formatted_name = sirket_adi.strip().title()
         sirket_response = g.supabase.table('sirketler').select('id').eq('sirket_adi', formatted_name).execute()

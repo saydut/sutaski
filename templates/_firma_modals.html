@@ -10,30 +10,22 @@
     <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Kullanıcı Bilgilerini Düzenle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="kullanici-duzenle-form"><input type="hidden" id="edit-kullanici-id"><div class="row g-3"><div class="col-md-6"><label for="edit-kullanici-adi-input" class="form-label">Kullanıcı Adı <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="edit-kullanici-adi-input" required></div><div class="col-md-6"><label for="edit-sifre-input" class="form-label">Yeni Şifre (İsteğe Bağlı)</label><input type="password" class="form-control form-control-sm" id="edit-sifre-input" placeholder="Değiştirmek istemiyorsanız boş bırakın"></div><div class="col-md-6"><label for="edit-telefon-input" class="form-label">Telefon No</label><input type="text" class="form-control form-control-sm" id="edit-telefon-input"></div><div class="col-md-6"><label for="edit-adres-input" class="form-label">Adres</label><textarea class="form-control form-control-sm" id="edit-adres-input" rows="1"></textarea></div><div class="col-12" id="tedarikci-atama-alani" style="display: none;"><label for="edit-tedarikci-sec" class="form-label">Atanan Tedarikçiler</label><select id="edit-tedarikci-sec" multiple placeholder="Bu toplayıcıya tedarikçi atayın..." autocomplete="off"></select><small class="form-text text-secondary">Bu toplayıcının hangi tedarikçilerden süt alabileceğini seçin.</small></div></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" id="guncelle-btn" onclick="kullaniciGuncelle()">Değişiklikleri Kaydet</button></div></div></div>
 </div>
 
-<!-- Çiftçi Şifre Ayarlama Modalı -->
-<div class="modal fade" id="ciftciSifreAyarlaModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
+<div class="modal fade" id="kullaniciSifreAyarlaModal" tabindex="-1"> <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Çiftçi Şifresini Ayarla</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title">Kullanıcı Şifresini Ayarla</h5> <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p class="small">Kullanıcı: <strong id="ciftci-sifre-ayarla-kullanici"></strong></p>
-                <input type="hidden" id="ciftci-sifre-ayarla-id">
-                <div class="mb-2">
-                    <label for="ciftci-yeni-sifre-input" class="form-label">Yeni Şifre</label>
-                    <input type="password" class="form-control form-control-sm" id="ciftci-yeni-sifre-input" placeholder="Çiftçi için yeni şifre" required>
+                <p class="small">Kullanıcı: <strong id="kullanici-sifre-ayarla-kullanici"></strong></p> <input type="hidden" id="kullanici-sifre-ayarla-id"> <div class="mb-2">
+                    <label for="kullanici-yeni-sifre-input" class="form-label">Yeni Şifre</label> <input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-input" placeholder="Kullanıcı için yeni şifre" required>
                 </div>
                 <div class="mb-2">
-                    <label for="ciftci-yeni-sifre-tekrar-input" class="form-label">Yeni Şifre (Tekrar)</label>
-                    <input type="password" class="form-control form-control-sm" id="ciftci-yeni-sifre-tekrar-input" placeholder="Yeni şifreyi tekrar girin" required>
+                    <label for="kullanici-yeni-sifre-tekrar-input" class="form-label">Yeni Şifre (Tekrar)</label> <input type="password" class="form-control form-control-sm" id="kullanici-yeni-sifre-tekrar-input" placeholder="Yeni şifreyi tekrar girin" required>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="ciftciSifreKaydet()">Şifreyi Kaydet</button>
-            </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="kullaniciSifreKaydet()">Şifreyi Kaydet</button> </div>
         </div>
     </div>
 </div>
