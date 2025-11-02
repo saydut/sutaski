@@ -97,15 +97,23 @@ function renderTable(container, suppliers) {
 }
 
 /**
- * Tedarikçi verilerini kartlar olarak render eder.
+ * Tedarikçi verilerini kartlar olarak render eder. (GÜNCELLENDİ)
  */
 function renderCards(container, suppliers) {
     suppliers.forEach(supplier => {
+        // Toplam litreyi formatlıyoruz (tıpkı liste görünümündeki gibi)
+        const toplamLitre = parseFloat(supplier.toplam_litre || 0).toFixed(2);
+
         container.innerHTML += `
             <div class="col-lg-4 col-md-6 col-12" id="tedarikci-${supplier.id}">
                 <div class="supplier-card">
                     <div class="supplier-card-header"><h5>${utils.sanitizeHTML(supplier.isim)}</h5></div>
-                    <div class="supplier-card-body"><p class="mb-2"><i class="bi bi-telephone-fill me-2"></i>${utils.sanitizeHTML(supplier.telefon_no) || 'Belirtilmemiş'}</p></div>
+                    <div class="supplier-card-body">
+                        <p class="mb-2"><i class="bi bi-telephone-fill me-2"></i>${utils.sanitizeHTML(supplier.telefon_no) || 'Belirtilmemiş'}</p>
+                        
+                        <p class="mb-0 fw-bold"><i class="bi bi-droplet-fill me-2 text-primary"></i>${toplamLitre} L</p>
+                        
+                    </div>
                     <div class="supplier-card-footer">
                         <a href="/tedarikci/${supplier.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
                         <button class="btn btn-sm btn-outline-primary ms-1" title="Düzenle" onclick="tedarikciDuzenleAc(${supplier.id}, this)"><i class="bi bi-pencil"></i></button>
@@ -259,14 +267,15 @@ function silmeOnayiAc(id, isim) {
 /**
  * Liste ve Kart görünümleri arasında geçiş yapar.
  */
-function gorunumuDegistir(yeniGorunum) {
+async function gorunumuDegistir(yeniGorunum) { // 1. "async" eklendi
     // tedarikcilerMevcutGorunum kullanılıyor
     if (tedarikcilerMevcutGorunum === yeniGorunum) return;
     tedarikcilerMevcutGorunum = yeniGorunum;
     localStorage.setItem('tedarikciGorunum', tedarikcilerMevcutGorunum);
     gorunumuAyarla(tedarikcilerMevcutGorunum); // Fonksiyona değişkeni ver
+    
     // Görünüm değişince veriyi tekrar yükle (opsiyonel)
-    // await verileriYukle(mevcutSayfa);
+    await verileriYukle(mevcutSayfa); // 2. Yorum satırı kaldırıldı ve "await" kullanıldı
 }
 
 /**
