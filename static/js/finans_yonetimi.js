@@ -154,6 +154,44 @@ async function tedarikcileriDoldur() {
     }
 }
 
+/**
+ * YENİ: Tedarikçi seçildiğinde o tedarikçinin güncel bakiyesini çeker ve
+ * tutar input'una placeholder olarak ekler.
+ */
+async function guncelBakiyeyiGetir(tedarikciId) {
+    const tutarInput = document.getElementById('tutar-input');
+    if (!tutarInput) return;
+
+    // Tedarikçi seçimi kaldırıldıysa placeholder'ı temizle
+    if (!tedarikciId) {
+        tutarInput.placeholder = "Örn: 1500.50";
+        return;
+    }
+
+    // API'den bakiyeyi çek
+    tutarInput.placeholder = "Bakiye yükleniyor...";
+    try {
+        // api.js'deki (tedarikci_detay.js'de de kullanılan) fonksiyonu çağırıyoruz
+        const ozet = await api.request(`/api/tedarikci/${tedarikciId}/ozet`);
+
+        // API'den gelen net_bakiye (string formatında)
+        const netBakiye = ozet.net_bakiye ? parseFloat(ozet.net_bakiye) : 0;
+
+        if (netBakiye > 0) {
+            // Pozitif bakiye (Çiftçinin alacağı var)
+            tutarInput.placeholder = `Mevcut Bakiye: ${netBakiye.toFixed(2)} TL (Alacaklı)`;
+        } else if (netBakiye < 0) {
+            // Negatif bakiye (Çiftçi borçlu)
+            tutarInput.placeholder = `Mevcut Bakiye: ${netBakiye.toFixed(2)} TL (Borçlu)`;
+        } else {
+            tutarInput.placeholder = "Mevcut Bakiye: 0.00 TL";
+        }
+    } catch (error) {
+        console.error("Bakiye çekilemedi:", error);
+        tutarInput.placeholder = "Bakiye alınamadı, normal tutarı girin.";
+    }
+}
+
 // Yeni işlem formu temizleme
 function formuTemizle() {
     document.getElementById('islem-tipi-sec').value = 'Ödeme';

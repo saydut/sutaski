@@ -180,7 +180,6 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    {# Hakkında modalı içeriği aynı kalabilir #}
                      <ul class="nav nav-tabs" id="hakkindaTab" role="tablist">
                         <li class="nav-item" role="presentation">
                             <button class="nav-link active" id="ozellikler-tab" data-bs-toggle="tab" data-bs-target="#ozellikler-pane" type="button" role="tab" aria-controls="ozellikler-pane" aria-selected="true">Özellikler & Kullanım</button>
@@ -193,29 +192,89 @@
                         </li>
                     </ul>
                      <div class="tab-content pt-3" id="hakkindaTabContent">
+                        
                         <div class="tab-pane fade show active" id="ozellikler-pane" role="tabpanel" aria-labelledby="ozellikler-tab" tabindex="0">
-                             <h5 class="fw-bold">Hızlı Başlangıç Rehberi</h5>
-                            <p>Uygulamayı verimli bir şekilde kullanmaya başlamak için aşağıdaki adımları izleyebilirsiniz:</p>
-                            <ol>
-                                <li><strong>Tedarikçilerinizi Ekleyin:</strong> Menüden "Tedarikçi Yönetimi"ne giderek süt aldığınız kişileri kaydedin. (Otomatik çiftçi hesabı da oluşacaktır.)</li>
-                                <li><strong>(İsteğe Bağlı) Yem Ürünlerini Tanımlayın:</strong> "Yem Yönetimi"nden sattığınız yemleri ve stokları girin.</li>
-                                <li><strong>Kullanıcıları Yönetin (Firma Yetkilisi):</strong> "Kullanıcı Yönetimi"nden toplayıcılarınızı ekleyin ve onlara tedarikçi atayın. Çiftçilerin şifresini sıfırlayabilirsiniz.</li>
-                                <li><strong>Veri Girişine Başlayın:</strong> Ana panelden günlük süt girdilerini, yem çıkışlarını ve "Finans Yönetimi"nden ödemeleri kaydedin (Toplayıcılar sadece atanmış tedarikçilere işlem yapabilir).</li>
-                                <li><strong>Raporları İnceleyin:</strong> "Raporlar" sayfasından veya tedarikçi detaylarından performansınızı takip edin, PDF çıktıları alın.</li>
-                                <li><strong>Çiftçi Portalı:</strong> Tedarikçi eklenince oluşan çiftçi hesabı ile giriş yapanlar kendi özetlerini görür.</li>
-                            </ol>
-                            <h5 class="fw-bold">Temel Özellikler</h5>
-                            <ul>
-                                <li>Kolay ve hızlı veri girişi (Süt, Yem, Finans).</li>
-                                <li>Çevrimdışı (Offline) çalışma ve otomatik senkronizasyon.</li>
-                                <li>Detaylı raporlama (Günlük, Aylık, Tedarikçi Bazlı) ve grafiksel analizler.</li>
-                                <li>Otomatik PDF Hesap Özeti ve Müstahsil Makbuzu oluşturma.</li>
-                                <li>Kullanıcı rolleri (Firma Yetkilisi, Toplayıcı, Muhasebeci, Çiftçi).</li>
-                                <li>Tedarikçi atama ve veri izolasyonu (Toplayıcılar için).</li>
-                                <li>Otomatik Çiftçi hesabı oluşturma ve şifre sıfırlama.</li>
-                                <li>Yem stok takibi.</li>
-                                <li>Mobil uyumlu modern arayüz (PWA) ve bildirimler.</li>
+                             <h5 class="fw-bold">Nasıl Kullanılır? (Adım Adım)</h5>
+                            <p>Uygulamayı verimli bir şekilde kullanmaya başlamak için:</p>
+                            
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex align-items-center bg-transparent px-0">
+                                    <i class="bi bi-1-circle-fill text-primary fs-4 me-3"></i>
+                                    <div>
+                                        <strong>Tedarikçileri Ekleyin:</strong> "Tedarikçi" menüsünden süt aldığınız çiftçileri kaydedin. (Onlar için otomatik çiftçi hesabı da oluşacaktır).
+                                    </div>
+                                </li>
+                                <li class="list-group-item d-flex align-items-center bg-transparent px-0">
+                                    <i class="bi bi-2-circle-fill text-primary fs-4 me-3"></i>
+                                    <div>
+                                        <strong>(Varsa) Ekibinizi Ekleyin:</strong> "Profil" > "Kullanıcı Yönetimi" (sadece yetkililer görür) menüsünden sahadaki ekibinizi (toplayıcı) ekleyin.
+                                    </div>
+                                </li>
+                                <li class="list-group-item d-flex align-items-center bg-transparent px-0">
+                                    <i class="bi bi-3-circle-fill text-primary fs-4 me-3"></i>
+                                    <div>
+                                        <strong>Veri Girişine Başlayın:</strong> Ana panelden günlük süt girdilerini, "Yem" menüsünden yem çıkışlarını ve "Finans" menüsünden ödemeleri/avansları girin.
+                                    </div>
+                                </li>
+                                <li class="list-group-item d-flex align-items-center bg-transparent px-0">
+                                    <i class="bi bi-4-circle-fill text-primary fs-4 me-3"></i>
+                                    <div>
+                                        <strong>Raporları İnceleyin:</strong> "Raporlar" sayfasından veya tedarikçi detaylarından performansınızı takip edin, PDF çıktıları alın.
+                                    </div>
+                                </li>
                             </ul>
+
+                            <h5 class="fw-bold mt-4">Temel Özellikler</h5>
+                            <div class="row g-3 mt-2">
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-cloud-slash-fill text-success fs-5 me-2" style="min-width: 1.5rem;"></i>
+                                        <span class="small">Çevrimdışı (Offline) Çalışma ve Otomatik Senkronizasyon</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-file-earmark-pdf-fill text-success fs-5 me-2" style="min-width: 1.5rem;"></i>
+                                        <span class="small">PDF Hesap Özeti ve Müstahsil Makbuzu</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-inboxes-fill text-success fs-5 me-2" style="min-width: 1.5rem;"></i>
+                                        <span class="small">Yem ve Stok Takibi</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-cash-coin text-success fs-5 me-2" style="min-width: 1.5rem;"></i>
+                                        <span class="small">Finans (Ödeme, Avans, Tahsilat) Yönetimi</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-people-fill text-success fs-5 me-2" style="min-width: 1.5rem;"></i>
+                                        <span class="small">Kullanıcı Rolleri (Yetkili, Toplayıcı, Muhasebeci, Çiftçi)</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-bar-chart-fill text-success fs-5 me-2" style="min-width: 1.5rem;"></i>
+                                        <span class="small">Grafiksel Raporlar ve Analizler</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-shield-check text-success fs-5 me-2" style="min-width: 1.5rem;"></i>
+                                        <span class="small">Toplayıcıya Tedarikçi Atama (Veri İzolasyonu)</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-start">
+                                        <i class="bi bi-person-check-fill text-success fs-5 me-2" style="min-width: 1.5rem;"></i>
+                                        <span class="small">Otomatik Çiftçi Portalı Erişimi</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="tab-pane fade" id="guncellemeler-pane" role="tabpanel" aria-labelledby="guncellemeler-tab" tabindex="0">
                              <div class="d-flex justify-content-between align-items-center mb-3 p-2 rounded" style="background-color: var(--bs-table-striped-bg);">
@@ -275,4 +334,3 @@
 
 </body>
 </html>
-

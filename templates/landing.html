@@ -112,50 +112,78 @@
 
 <div class="py-5 my-5" style="background-color: var(--surface);">
     <div class="container">
-        <h2 class="text-center mb-5 fw-bold">Detaylı Özellikler</h2>
-        <div class="row g-5">
-            <div class="col-lg-4">
-                <div class="nav flex-column nav-pills feature-tabs-nav" role="tablist" aria-orientation="vertical">
-                    <a class="nav-link active" id="tab-nav-rapor" data-bs-toggle="pill" data-bs-target="#tab-content-rapor" role="tab">Anlık Raporlama ve Analiz</a>
-                    <a class="nav-link" id="tab-nav-tedarikci" data-bs-toggle="pill" data-bs-target="#tab-content-tedarikci" role="tab">Hatasız Tedarikçi Yönetimi</a>
-                    <a class="nav-link" id="tab-nav-finans" data-bs-toggle="pill" data-bs-target="#tab-content-finans" role="tab">Yem, Stok ve Finans Takibi</a>
-                    <a class="nav-link" id="tab-nav-muhasebeci" data-bs-toggle="pill" data-bs-target="#tab-content-muhasebeci" role="tab">Ekip Yönetimi & Muhasebeci Modu</a>
-                    <a class="nav-link" id="tab-nav-arayuz" data-bs-toggle="pill" data-bs-target="#tab-content-arayuz" role="tab">Her Cihaza Uyumlu Modern Arayüz</a>
-                </div>
+        <h2 class="text-center mb-5 fw-bold">İşletmenizi Uçtan Uca Yönetin</h2>
+
+        <div class="row g-5 align-items-center mb-5 pb-5">
+            <div class="col-lg-6">
+                <h3 class="fw-bold">Tek Tuşla PDF Raporlama</h3>
+                <p class="text-secondary" style="font-size: 1.1rem;">
+                    Ay sonu hesapları için saatlerinizi harcamayın. Tedarikçileriniz için detaylı <strong>Hesap Özeti</strong> veya resmi <strong>Müstahsil Makbuzu</strong>'nu saniyeler içinde oluşturun, yazdırın veya paylaşın.
+                </p>
+                <ul class="list-unstyled text-secondary">
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Otomatik Bakiye Hesaplama</li>
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Stopaj ve Yem Borcu Düşümü</li>
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Profesyonel ve Hatasız Dökümler</li>
+                </ul>
             </div>
-            <div class="col-lg-8">
-                <div class="tab-content feature-tabs-content">
-                    <div class="tab-pane fade show active" id="tab-content-rapor" role="tabpanel">
-                        <h4 class="fw-bold">Veriye Dayalı Kararlar Alın</h4>
-                        <p class="text-secondary mb-4" style="font-size: 1.1rem;">Tek tuşla profesyonel PDF hesap özetleri veya resmi müstahsil makbuzları oluşturarak saatler süren evrak işinden kurtulun.</p>
-                        <img src="{{ url_for('static', filename='images/app/raporsayfasi.png') }}" class="img-fluid rounded shadow-lg">
-                    </div>
-                    <div class="tab-pane fade" id="tab-content-tedarikci" role="tabpanel">
-                        <h4 class="fw-bold">Hesaplar Hiç Karışmasın</h4>
-                        <p class="text-secondary mb-4" style="font-size: 1.1rem;">Tedarikçi hesaplarındaki karmaşaya son verin. Kimin ne kadar alacağı var, tüm detaylarıyla anında görün.</p>
-                        <video src="{{ url_for('static', filename='images/app/tedarikcidetayvideo.mp4') }}" class="img-fluid rounded shadow-lg" autoplay loop muted playsinline alt="Tedarikçi Detay Videosu"></video>
-                    </div>
-                    <div class="tab-pane fade" id="tab-content-finans" role="tabpanel">
-                        <h4 class="fw-bold">Gelir-Gider Tam Kontrol Altında</h4>
-                        <p class="text-secondary mb-4" style="font-size: 1.1rem;">Yem stoklarınızı, alış fiyatlarınızı ve tedarikçiye yaptığınız yem çıkışlarını yönetin. Yaptığınız ödemelerle alacak-verecek hesabını hatasız yapın.</p>
-                        <img src="{{ url_for('static', filename='images/app/finanssayfasi.png') }}" class="img-fluid rounded shadow-lg">
-                    </div>
-                    <div class="tab-pane fade" id="tab-content-muhasebeci" role="tabpanel">
-                        <h4 class="fw-bold">Kontrol Sizde Olsun</h4>
-                        <p class="text-secondary mb-4" style="font-size: 1.1rem;">"Muhasebeci Modu" ile kullanıcılarınız tüm finansal verileri ve raporları görebilir, ancak veri ekleme, silme veya düzenleme yapamaz.</p>
-                        <img src="{{ url_for('static', filename='images/app/profil.png') }}" class="img-fluid rounded shadow-lg">
-                    </div>
-                    <div class="tab-pane fade" id="tab-content-arayuz" role="tabpanel">
-                         <h4 class="fw-bold">Göz Yormayan, Kolay Arayüz</h4>
-                        <p class="text-secondary mb-4" style="font-size: 1.1rem;">İster aydınlık, ister koyu tema... Göz zevkinize uygun, her cihazda (bilgisayar, tablet, telefon) sorunsuz çalışan modern bir arayüzle işlerinizi keyifle yönetin.</p>
-                        <video src="{{ url_for('static', filename='images/app/temadegisimi.mp4') }}" class="img-fluid rounded shadow-lg" autoplay loop muted playsinline alt="Tema Değişimi Videosu"></video>
-                    </div>
+            <div class="col-lg-6">
+                <video src="{{ url_for('static', filename='images/app/pdf-demo.mp4') }}" class="img-fluid rounded shadow-lg" autoplay loop muted playsinline alt="PDF Raporlama Videosu"></video>
                 </div>
+        </div>
+
+        <div class="row g-5 align-items-center mb-5 pb-5 flex-lg-row-reverse">
+            <div class="col-lg-6">
+                <h3 class="fw-bold">Çiftçi Portalı ile Şeffaflık</h3>
+                <p class="text-secondary" style="font-size: 1.1rem;">
+                    Tedarikçilerinize (çiftçilere) kendi kullanıcı adı ve şifrelerini verin. Kendi panellerinden süt girdilerini, yem alımlarını ve finansal durumlarını anlık olarak takip etsinler. Bu, aranızdaki güveni artırır ve telefon trafiğini azaltır.
+                </p>
+                <ul class="list-unstyled text-secondary">
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Kendi Alacak/Borç Durumunu Görme</li>
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Geçmiş Süt ve Yem Dökümleri</li>
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Tamamen Mobil Uyumlu Arayüz</li>
+                </ul>
+            </div>
+            <div class="col-lg-6">
+                <img src="{{ url_for('static', filename='images/app/ciftci-panel-goruntusu.png') }}" class="img-fluid rounded shadow-lg" alt="Çiftçi Paneli Ekranı">
             </div>
         </div>
+        
+        <div class="row g-5 align-items-center mb-5 pb-5">
+            <div class="col-lg-6">
+                <h3 class="fw-bold">İnternet Yokken Bile Durmayın</h3>
+                <p class="text-secondary" style="font-size: 1.1rem;">
+                    Sahada internetin çekmemesi işinizi durdurmasın. Süt girdilerinizi, yem çıkışlarınızı ve ödemelerinizi internet yokken bile kaydedin. Siz internete bağlandığınız an, tüm veriler otomatik olarak senkronize edilir.
+                </p>
+                <ul class="list-unstyled text-secondary">
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Otomatik Arka Plan Senkronizasyonu</li>
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Bekleyen İşlem Göstergesi</li>
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Veri Kaybı Olmadan Güvenli Kayıt</li>
+                </ul>
+            </div>
+            <div class="col-lg-6">
+                <video src="{{ url_for('static', filename='images/app/offline-demo.mp4') }}" class="img-fluid rounded shadow-lg" autoplay loop muted playsinline alt="Çevrimdışı Çalışma Videosu"></video>
+            </div>
+        </div>
+
+        <div class="row g-5 align-items-center flex-lg-row-reverse">
+            <div class="col-lg-6">
+                <h3 class="fw-bold">Ekip ve Rol Yönetimi</h3>
+                <p class="text-secondary" style="font-size: 1.1rem;">
+                    Firma Yetkilisi, Toplayıcı, Muhasebeci ve Çiftçi gibi farklı kullanıcı rolleri tanımlayın. Toplayıcılarınıza sadece görmesi gereken tedarikçileri atayın. Muhasebeci rolü her şeyi görür ama değiştiremez.
+                </p>
+                 <ul class="list-unstyled text-secondary">
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Toplayıcı Lisans Limiti Kontrolü</li>
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Toplayıcıya Tedarikçi Atama</li>
+                    <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i>Veri Değişimini Kısıtlama (Muhasebeci)</li>
+                </ul>
+            </div>
+            <div class="col-lg-6">
+                 <img src="{{ url_for('static', filename='images/app/firma-yonetimi-goruntusu.jpg') }}" class="img-fluid rounded shadow-lg" alt="Kullanıcı Yönetim Ekranı">
+            </div>
+        </div>
+        
     </div>
 </div>
-
 <div class="container py-5" id="fiyatlandirma">
     <h2 class="text-center mb-5 fw-bold">İşletmenize En Uygun Planı Seçin</h2>
     <div class="row justify-content-center g-4">
