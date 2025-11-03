@@ -12,25 +12,47 @@ logger = logging.getLogger(__name__)
 class FinansService:
     """Finansal işlemler için servis katmanı."""
 
-    def get_paginated_transactions(self, sirket_id: int, kullanici_id: int, rol: str, sayfa: int, limit: int = 15):
-        """Finansal işlemleri sayfalayarak listeler."""
+# GÜNCELLEME: Fonksiyonun imzası aynı kaldı, sadece iç mantığı RPC'ye devrettik
+    def get_paginated_transactions(self, sirket_id: int, kullanici_id: int, rol: str, sayfa: int, limit: int = 5, tarih_str: str = None, tip: str = None):
+        """Finansal işlemleri sayfalayarak ve filtreleyerek listeler (RPC kullanarak)."""
         try:
             offset = (sayfa - 1) * limit
-            # Sorguya kullanıcı adını da ekleyelim (frontend'de göstermek için)
-            query = g.supabase.table('finansal_islemler').select(
-                '*, tedarikciler(isim), kullanicilar(kullanici_adi)', count='exact' # kullanicilar(kullanici_adi) eklendi
-            ).eq('sirket_id', sirket_id)
+            
+            # Yeni RPC'yi çağırmak için parametreleri hazırla
+            params = {
+                'p_sirket_id': sirket_id,
+                'p_kullanici_id': kullanici_id,
+                'p_rol': rol,
+                'p_tarih_str': tarih_str,
+                'p_tip': tip,
+                'p_limit': limit,
+                'p_offset': offset
+            }
+            
+            # RPC'yi çağır
+            response = g.supabase.rpc('get_paginated_finansal_islemleri', params).execute()
 
-            # Rol bazlı filtreleme (Aynı kalıyor)
-            if rol == UserRole.TOPLAYICI.value:
-                query = query.eq('kullanici_id', kullanici_id)
+            if not response.data:
+                logger.warning(f"get_paginated_finansal_islemleri RPC'si veri döndürmedi. Parametreler: {params}")
+                return [], 0
 
-            query = query.order('islem_tarihi', desc=True).range(offset, offset + limit - 1)
-            response = query.execute()
-            return response.data, response.count
+            # RPC'den gelen JSON'ı ayrıştır
+            result_data = response.data
+            islemler = result_data.get('data', [])
+            toplam_kayit = result_data.get('count', 0)
+
+            # Frontend'in (finans_yonetimi.js) beklediği formata çevir
+            for islem in islemler:
+                if 'tedarikci_isim' in islem:
+                    islem['tedarikciler'] = {'isim': islem['tedarikci_isim']}
+                if 'kullanici_adi' in islem:
+                    islem['kullanicilar'] = {'kullanici_adi': islem['kullanici_adi']}
+
+            return islemler, toplam_kayit
+            
         except Exception as e:
-            logger.error(f"Finansal işlemler listelenirken hata oluştu: {e}", exc_info=True)
-            raise Exception("İşlemler listelenirken bir hata oluştu.")
+            logger.error(f"Finansal işlemler listelenirken (RPC) hata: {e}", exc_info=True)
+            raise Exception("Finansal işlemler listelenemedi.")
 
     def add_transaction(self, sirket_id: int, kullanici_id: int, data: dict):
         """Yeni bir finansal işlem ekler."""

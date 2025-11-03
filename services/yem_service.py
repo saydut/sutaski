@@ -171,22 +171,42 @@ class YemService:
 
     # GÜNCELLEME: Fonksiyonun imzasına 'kullanici_id' ve 'rol' parametrelerini ekledik.
     def get_paginated_transactions(self, sirket_id: int, kullanici_id: int, rol: str, sayfa: int, limit: int = 5):
-        """Yem çıkış işlemlerini sayfalayarak listeler."""
+        """Yem çıkış işlemlerini sayfalayarak listeler (RPC kullanarak)."""
         try:
             offset = (sayfa - 1) * limit
-            query = g.supabase.table('yem_islemleri').select('*, tedarikciler(isim), yem_urunleri(yem_adi)', count='exact').eq('sirket_id', sirket_id)
+            
+            # Yeni RPC'yi çağırmak için parametreleri hazırla
+            params = {
+                'p_sirket_id': sirket_id,
+                'p_kullanici_id': kullanici_id,
+                'p_rol': rol,
+                'p_limit': limit,
+                'p_offset': offset
+            }
+            
+            # RPC'yi çağır
+            response = g.supabase.rpc('get_paginated_yem_islemleri', params).execute()
 
-            # --- YENİ EKLENEN VERİ İZOLASYON MANTIĞI ---
-            # Eğer rol 'toplayici' ise, sadece kendi eklediği işlemleri görmesi için sorguyu filtrele.
-            if rol == UserRole.TOPLAYICI.value:
-                query = query.eq('kullanici_id', kullanici_id)
-            # --- YENİ MANTIK SONU ---
+            if not response.data:
+                logger.warning(f"get_paginated_yem_islemleri RPC'si veri döndürmedi. Parametreler: {params}")
+                return [], 0
 
-            query = query.order('islem_tarihi', desc=True).range(offset, offset + limit - 1)
-            response = query.execute()
-            return response.data, response.count
+            # RPC'den gelen JSON'ı ayrıştır
+            result_data = response.data
+            islemler = result_data.get('data', [])
+            toplam_kayit = result_data.get('count', 0)
+
+            # Frontend'in (yem_yonetimi.js) beklediği formata çevir
+            for islem in islemler:
+                if 'tedarikci_isim' in islem:
+                    islem['tedarikciler'] = {'isim': islem['tedarikci_isim']}
+                if 'yem_adi' in islem:
+                    islem['yem_urunleri'] = {'yem_adi': islem['yem_adi']}
+
+            return islemler, toplam_kayit
+            
         except Exception as e:
-            logger.error(f"Yem işlemleri listelenirken hata: {e}", exc_info=True)
+            logger.error(f"Yem işlemleri listelenirken (RPC) hata: {e}", exc_info=True)
             raise Exception("Yem işlemleri listelenemedi.")
 
     # --- add_transaction FONKSİYONU GÜNCELLENDİ ---

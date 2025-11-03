@@ -1,6 +1,6 @@
 # blueprints/sut.py (SERVİS KATMANINI KULLANACAK ŞEKİLDE GÜNCELLENDİ)
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request, session, g
 from decorators import login_required, lisans_kontrolu, modification_allowed
 from extensions import turkey_tz
 import logging
