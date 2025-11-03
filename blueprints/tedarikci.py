@@ -7,6 +7,7 @@ from services.report_service import generate_hesap_ozeti_pdf, generate_mustahsil
 from services.tedarikci_service import tedarikci_service, paged_data_service
 import logging
 
+
 logger = logging.getLogger(__name__)
 
 tedarikci_bp = Blueprint('tedarikci', __name__, url_prefix='/api')
@@ -69,7 +70,38 @@ def get_tedarikci_ozet(tedarikci_id):
     except Exception as e:
         logger.error(f"/tedarikci/{tedarikci_id}/ozet hatası: {e}", exc_info=True)
         return jsonify({"error": "Tedarikçi özeti hesaplanırken bir sunucu hatası oluştu."}), 500
+    
+@tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/detay_sayfasi_data')
+@login_required
+def get_tedarikci_detay_page_data(tedarikci_id):
+    """
+    Tedarikçi detay sayfası için ÖZET ve İLK SAYFA SÜT GİRDİLERİNİ 
+    tek bir API çağrısında getirir.
+    """
+    try:
+        sirket_id = session['user']['sirket_id']
+        sayfa = int(request.args.get('sayfa', 1))
+        limit = int(request.args.get('limit', 10)) # JS'deki KAYIT_SAYISI ile aynı olmalı
 
+        # Tedarikçi adını al (Başlık için hala gerekli)
+        tedarikci_data = tedarikci_service.get_by_id(sirket_id, tedarikci_id)
+        if not tedarikci_data:
+            return jsonify({"error": "Tedarikçi bulunamadı."}), 404
+
+        # Yeni birleşik servis fonksiyonunu çağır
+        # (NOT: paged_data_service'e eklediğimizi varsayarak)
+        ozet, girdiler, toplam_kayit = paged_data_service.get_detay_page_data(sirket_id, tedarikci_id, sayfa, limit)
+
+        return jsonify({
+            "isim": tedarikci_data.get('isim', 'Bilinmeyen'),
+            "ozet": ozet,
+            "girdiler": girdiler,
+            "toplam_kayit": toplam_kayit
+        })
+    except Exception as e:
+        logger.error(f"/detay_sayfasi_data hatası: {e}", exc_info=True)
+        return jsonify({"error": "Sayfa verileri alınırken bir sunucu hatası oluştu."}), 500
+    
 @tedarikci_bp.route('/tedarikci/<int:tedarikci_id>/sut_girdileri')
 @login_required
 def get_sut_girdileri_sayfali(tedarikci_id):

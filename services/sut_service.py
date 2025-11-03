@@ -37,33 +37,45 @@ class SutService:
 
 
     def get_paginated_list(self, sirket_id: int, kullanici_id: int, rol: str, tarih_str: str, sayfa: int, limit: int = 6):
-        """Süt girdilerini sayfalama ve tarihe göre filtreleme yaparak listeler."""
+        """Süt girdilerini sayfalama ve filtreleme yaparak listeler (RPC kullanarak)."""
         try:
             offset = (sayfa - 1) * limit
-            query = g.supabase.table('sut_girdileri').select(
-                'id, litre, fiyat, taplanma_tarihi, duzenlendi_mi, kullanici_id, kullanicilar(kullanici_adi), tedarikciler(isim)',
-                count='exact'
-            ).eq('sirket_id', sirket_id)
+            
+            # Yeni RPC'yi çağırmak için parametreleri hazırla
+            params = {
+                'p_sirket_id': sirket_id,
+                'p_kullanici_id': kullanici_id,
+                'p_rol': rol,
+                'p_tarih_str': tarih_str,
+                'p_limit': limit,
+                'p_offset': offset
+            }
+            
+            # RPC'yi çağır
+            response = g.supabase.rpc('get_paginated_sut_girdileri', params).execute()
 
-            # --- ROL BAZLI FİLTRELEME ---
-            if rol == UserRole.TOPLAYICI.value:
-                query = query.eq('kullanici_id', kullanici_id)
-            # --- ROL BAZLI FİLTRELEME SONU ---
+            if not response.data:
+                logger.warning(f"get_paginated_sut_girdileri RPC'si veri döndürmedi. Parametreler: {params}")
+                return [], 0
+            
+            # RPC'den gelen JSON'ı ayrıştır
+            result_data = response.data
+            girdiler = result_data.get('data', [])
+            toplam_kayit = result_data.get('count', 0)
+            
+            # Gerekli: RPC'den gelen 'kullanici_adi' ve 'tedarikci_isim' alanlarını
+            # eski kodun beklediği iç içe yapıya dönüştür.
+            for girdi in girdiler:
+                if 'kullanici_adi' in girdi:
+                    girdi['kullanicilar'] = {'kullanici_adi': girdi['kullanici_adi']}
+                if 'tedarikci_isim' in girdi:
+                    girdi['tedarikciler'] = {'isim': girdi['tedarikci_isim']}
 
-            if tarih_str:
-                target_date = datetime.strptime(tarih_str, '%Y-%m-%d').date()
-                start_dt = datetime.combine(target_date, datetime.min.time())
-                end_dt = datetime.combine(target_date, datetime.max.time())
-                start_utc = turkey_tz.localize(start_dt).astimezone(pytz.utc).isoformat()
-                end_utc = turkey_tz.localize(end_dt).astimezone(pytz.utc).isoformat()
-                logger.debug(f"Tarih filtresi UTC: {start_utc} - {end_utc}")
-                query = query.gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc)
-
-            response = query.order('id', desc=True).range(offset, offset + limit - 1).execute()
-            logger.info(f"Süt girdileri listelendi: Sayfa {sayfa}, Limit {limit}, Tarih: {tarih_str}, Toplam: {response.count}")
-            return response.data, response.count
+            logger.info(f"Süt girdileri listelendi (RPC): Sayfa {sayfa}, Limit {limit}, Tarih: {tarih_str}, Toplam: {toplam_kayit}")
+            return girdiler, toplam_kayit
+            
         except Exception as e:
-            logger.error(f"Süt girdileri listelenirken hata: {e}", exc_info=True)
+            logger.error(f"Süt girdileri listelenirken (RPC) hata: {e}", exc_info=True)
             return [], 0
 
     def add_entry(self, sirket_id: int, kullanici_id: int, yeni_girdi: dict):

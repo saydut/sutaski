@@ -240,5 +240,50 @@ class PagedDataService:
             'islem_tarihi', desc=True
         ).range(offset, offset + limit - 1).execute()
 
-tedarikci_service = TedarikciService()
+# ... (PagedDataService sınıfının bittiği yer) ...
+
+    # YENİ FONKSİYON: Tedarikçi detay sayfası için RPC'yi çağıran servis
+    def get_detay_page_data(self, sirket_id: int, tedarikci_id: int, sayfa: int, limit: int = 10):
+        """Tedarikçi detay sayfası için özet ve ilk sayfa girdilerini tek RPC ile çeker."""
+        try:
+            offset = (sayfa - 1) * limit
+            params = {
+                'p_sirket_id': sirket_id,
+                'p_tedarikci_id': tedarikci_id,
+                'p_limit': limit,
+                'p_offset': offset
+            }
+            response = g.supabase.rpc('get_tedarikci_detay_page_data', params).execute()
+            
+            if not response.data:
+                raise Exception("Tedarikçi detay verisi alınamadı.")
+            
+            # RPC'den gelen JSON içindeki verileri ayrıştıralım
+            data = response.data
+            ozet_verisi = data.get('ozet', {})
+            girdiler_verisi = data.get('girdiler', [])
+            toplam_kayit = data.get('toplam_kayit', 0)
+
+            # Özeti formatlayalım (get_summary_by_id'deki gibi)
+            formatted_ozet = {
+                "toplam_sut_alacagi": f"{Decimal(ozet_verisi.get('toplam_sut_alacagi', 0)):.2f}",
+                "toplam_yem_borcu": f"{Decimal(ozet_verisi.get('toplam_yem_borcu', 0)):.2f}",
+                "toplam_sirket_odemesi": f"{Decimal(ozet_verisi.get('toplam_sirket_odemesi', 0)):.2f}",
+                "toplam_tahsilat": f"{Decimal(ozet_verisi.get('toplam_tahsilat', 0)):.2f}",
+                "net_bakiye": f"{Decimal(ozet_verisi.get('net_bakiye', 0)):.2f}"
+            }
+
+            return formatted_ozet, girdiler_verisi, toplam_kayit
+        except Exception as e:
+            logger.error(f"get_detay_page_data hatası (Tedarikçi ID: {tedarikci_id}): {e}", exc_info=True)
+            raise Exception("Tedarikçi detay verileri alınırken bir hata oluştu.")
+
+
+# PagedDataService sınıfından SONRA ve tedarikci_service = TedarikciService() satırından ÖNCE
 paged_data_service = PagedDataService()
+
+# YENİ: paged_data_service'e yeni fonksiyonumuzu ekleyelim
+# Bu, paged_data_service = PagedDataService() satırından SONRA olmalı.
+paged_data_service.get_detay_page_data = PagedDataService.get_detay_page_data.__get__(paged_data_service, PagedDataService)
+
+tedarikci_service = TedarikciService()

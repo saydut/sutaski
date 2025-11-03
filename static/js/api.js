@@ -107,7 +107,8 @@ const api = {
     fetchTedarikciSutGirdileri(id, sayfa, limit) { return this.request(`/api/tedarikci/${id}/sut_girdileri?sayfa=${sayfa}&limit=${limit}`); },
     fetchTedarikciYemIslemleri(id, sayfa, limit) { return this.request(`/api/tedarikci/${id}/yem_islemleri?sayfa=${sayfa}&limit=${limit}`); },
     fetchTedarikciFinansIslemleri(id, sayfa, limit) { return this.request(`/api/tedarikci/${id}/finansal_islemler?sayfa=${sayfa}&limit=${limit}`); },
-
+    fetchTedarikciDetayPageData(id, sayfa, limit) { return this.request(`/api/tedarikci/${id}/detay_sayfasi_data?sayfa=${sayfa}&limit=${limit}`); },
+    
     // --- Fiyat Tarifesi API'ları ---
     fetchTarifeFiyat(tarih) { return this.request(`/tarife/api/get_fiyat?tarih=${tarih}`); },
     fetchTarifeler() { return this.request('/tarife/api/listele'); },
