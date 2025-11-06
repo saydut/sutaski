@@ -1,4 +1,5 @@
 # services/tanker_service.py
+# YENİ ÖZELLİK: Tanker silme servisi eklendi.
 
 import logging
 from flask import g, session
@@ -31,7 +32,7 @@ class TankerService:
                 "firma_id": firma_id,
                 "tanker_adi": tanker_adi,
                 "kapasite_litre": str(kapasite),
-                "meveut_doluluk": 0 
+                "mevcut_doluluk": 0 
             }
             
             response = g.supabase.table('tankerler').insert(yeni_tanker).execute()
@@ -76,17 +77,15 @@ class TankerService:
             logger.error(f"Tankerler listelenirken hata: {e}", exc_info=True)
             raise Exception("Tankerler listelenirken bir sunucu hatası oluştu.")
 
-    # --- YENİ FONKSİYONLAR ---
-
     def get_collectors_for_assignment(self, firma_id: int):
         """
         Firmanın tüm 'toplayici' rolündeki kullanıcılarını,
-        mevcut tanker atamalarıyla birlikte listeler.
+        mevcut tanker atamalarıyla (sadece ID olarak) birlikte listeler.
         """
         try:
             # 1. Firmadaki tüm toplayıcıları çek
             users_response = g.supabase.table('kullanicilar') \
-                .select('id, kullanici_adi, ad_soyad') \
+                .select('id, kullanici_adi') \
                 .eq('sirket_id', firma_id) \
                 .eq('rol', UserRole.TOPLAYICI.value) \
                 .order('kullanici_adi') \
@@ -97,26 +96,25 @@ class TankerService:
             if not toplayicilar:
                 return []
 
-            # 2. Mevcut atamaları çek (tanker adı ile birlikte)
+            # 2. Mevcut atamaları çek (SADECE ID'LERİ ÇEK)
             atama_response = g.supabase.table('toplayici_tanker_atama') \
-                .select('toplayici_user_id, tankerler(id, tanker_adi)') \
+                .select('toplayici_user_id, tanker_id') \
                 .eq('firma_id', firma_id) \
                 .execute()
 
-            # 3. Atamaları bir sözlüğe (dictionary) çevir (daha hızlı erişim için)
-            # { 'toplayici_id': {'id': 1, 'tanker_adi': 'Tanker A'}, ... }
+            # 3. Atamaları bir sözlüğe (dictionary) çevir
             atama_map = {
-                atama['toplayici_user_id']: atama['tankerler']
+                atama['toplayici_user_id']: atama['tanker_id']
                 for atama in atama_response.data
-                if atama.get('tankerler') # Eğer atanan tanker silindiyse (mümkün olmamalı)
+                if atama.get('tanker_id') and atama.get('tanker_id') > 0
             }
 
             # 4. İki listeyi birleştir
             for toplayici in toplayicilar:
                 if toplayici['id'] in atama_map:
-                    toplayici['atanan_tanker'] = atama_map[toplayici['id']]
+                    toplayici['atanan_tanker_id'] = atama_map[toplayici['id']]
                 else:
-                    toplayici['atanan_tanker'] = None
+                    toplayici['atanan_tanker_id'] = 0
             
             return toplayicilar
 
@@ -127,37 +125,113 @@ class TankerService:
     def assign_tanker(self, firma_id: int, toplayici_id: int, tanker_id: int):
         """Bir toplayıcıya bir tanker atar."""
         try:
-            # Önce bu toplayıcının eski atamasını (varsa) kaldır
-            g.supabase.table('toplayici_tanker_atama') \
-                .delete() \
-                .eq('firma_id', firma_id) \
-                .eq('toplayici_user_id', toplayici_id) \
+            # Güvenlik Kontrolü: Toplayıcı bu firmaya mı ait?
+            user_check = g.supabase.table('kullanicilar') \
+                .select('id') \
+                .eq('id', toplayici_id) \
+                .eq('sirket_id', firma_id) \
+                .single() \
                 .execute()
+            if not user_check.data:
+                raise PermissionError("Başka bir firmaya ait toplayıcıya atama yapılamaz.")
 
-            # Eğer tanker_id 0 veya None geldiyse (atama kaldırma işlemiyse)
-            if not tanker_id or tanker_id == 0:
-                return {"message": "Toplayıcının tanker ataması kaldırıldı."}
+            # Güvenlik Kontrolü: Tanker bu firmaya mı ait?
+            if tanker_id != 0:
+                tanker_check = g.supabase.table('tankerler') \
+                    .select('id') \
+                    .eq('id', tanker_id) \
+                    .eq('firma_id', firma_id) \
+                    .single() \
+                    .execute()
+                if not tanker_check.data:
+                    raise PermissionError("Başka bir firmaya ait tankere atama yapılamaz.")
 
-            # Yeni atamayı ekle
-            yeni_atama = {
+            # UPSERT (Update or Insert) - Atomik işlem
+            # 1. Kaydı 'toplayici_user_id' üzerinden bulmaya çalış
+            # 2. Bulursa 'tanker_id'yi güncelle, bulamazsa yeni kayıt ekle
+            
+            atama_data = {
                 "firma_id": firma_id,
                 "toplayici_user_id": toplayici_id,
                 "tanker_id": tanker_id
             }
             
-            response = g.supabase.table('toplayici_tanker_atama').insert(yeni_atama).execute()
+            # Eğer tanker_id 0 ise, atamayı kaldır (DELETE)
+            if tanker_id == 0:
+                 g.supabase.table('toplayici_tanker_atama') \
+                    .delete() \
+                    .eq('firma_id', firma_id) \
+                    .eq('toplayici_user_id', toplayici_id) \
+                    .execute()
+                 return {"message": "Toplayıcının tanker ataması kaldırıldı."}
             
+            # Tanker ID 0 değilse, Upsert yap
+            response = g.supabase.table('toplayici_tanker_atama') \
+                .upsert(atama_data, on_conflict='toplayici_user_id') \
+                .execute()
+
             if not response.data:
                  raise Exception("Atama yapılırken veritabanı hatası oluştu.")
-
+            
             return {"message": "Tanker başarıyla atandı.", "atama": response.data[0]}
 
+        except PermissionError as pe:
+            raise pe
         except Exception as e:
-            # unique constraint hatası (çok olası değil ama)
             if 'duplicate key value violates unique constraint' in str(e).lower():
-                 raise ValueError("Bu toplayıcıya zaten bir tanker atanmış.")
+                 raise ValueError("Bu toplayıcıya zaten bir tanker atanmış veya tanker başka birine atanmış.")
             logger.error(f"Tanker ataması yapılırken hata: {e}", exc_info=True)
             raise Exception("Tanker ataması sırasında bir hata oluştu.")
+
+
+    # --- YENİ ÖZELLİK: TANKER SİLME ---
+    def delete_tanker(self, firma_id: int, tanker_id: int):
+        """
+        Bir tankeri siler. Sadece boşsa ve ataması yoksa siler.
+        """
+        try:
+            # 1. Tankeri bul ve firmayla eşleştir
+            tanker_response = g.supabase.table('tankerler') \
+                .select('id, tanker_adi, mevcut_doluluk') \
+                .eq('id', tanker_id) \
+                .eq('firma_id', firma_id) \
+                .maybe_single() \
+                .execute()
+
+            tanker = tanker_response.data
+            if not tanker:
+                raise ValueError("Tanker bulunamadı veya bu firmaya ait değil.")
+
+            # 2. Tankerin boş olup olmadığını kontrol et
+            if Decimal(tanker['mevcut_doluluk']) > 0:
+                raise ValueError(f"'{tanker['tanker_adi']}' adlı tanker dolu (Mevcut: {tanker['mevcut_doluluk']} L). Dolu tanker silinemez.")
+
+            # 3. Tankerin bir toplayıcıya atanıp atanmadığını kontrol et
+            atama_response = g.supabase.table('toplayici_tanker_atama') \
+                .select('toplayici_user_id') \
+                .eq('tanker_id', tanker_id) \
+                .eq('firma_id', firma_id) \
+                .execute()
+            
+            if atama_response.data:
+                raise ValueError(f"'{tanker['tanker_adi']}' adlı tanker bir toplayıcıya atanmış. Silmeden önce atamayı kaldırın.")
+
+            # 4. Tankeri sil
+            g.supabase.table('tankerler') \
+                .delete() \
+                .eq('id', tanker_id) \
+                .eq('firma_id', firma_id) \
+                .execute()
+            
+            return {"message": f"'{tanker['tanker_adi']}' adlı tanker başarıyla silindi."}
+
+        except ValueError as ve:
+            raise ve
+        except PermissionError as pe:
+            raise pe
+        except Exception as e:
+            logger.error(f"Tanker silinirken hata: {e}", exc_info=True)
+            raise Exception("Tanker silinirken bir sunucu hatası oluştu.")
 
 
 # Servisin bir örneğini (instance) oluştur

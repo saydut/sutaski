@@ -4,12 +4,43 @@
 // Çevrimiçi ise veriyi API'den çeker ve yerel veritabanını (IndexedDB) günceller.
 // Çevrimdışı ise veriyi yerel veritabanından okur.
 // Ekleme/silme/güncelleme sonrası anında arayüz tepkisi için bellekteki veriyi de yönetir.
+//
+// HATA DÜZELTMESİ (tanker_yonetimi): Eksik olan getCache ve setCache fonksiyonları eklendi.
 // ====================================================================================
 
 const store = {
     // Uygulama verilerini saklayacağımız alanlar (hızlı erişim için bellek önbelleği)
     tedarikciler: [],
     yemUrunleri: [],
+
+    // === YENİ EKLENEN CACHE MEKANİZMASI ===
+    _cache: new Map(), // Basit bir bellek içi cache
+
+    /**
+     * Bellek içi cache'e veri yazar.
+     * @param {string} key - Önbellek anahtarı
+     * @param {*} value - Önbelleğe alınacak veri
+     */
+    setCache(key, value) {
+        console.log(`Cache'e yazılıyor: ${key}`);
+        this._cache.set(key, value);
+    },
+
+    /**
+     * Bellek içi cache'ten veri okur.
+     * @param {string} key - Önbellek anahtarı
+     * @returns {*} - Önbellekteki veri veya null
+     */
+    getCache(key) {
+        const value = this._cache.get(key);
+        if (value) {
+            console.log(`Cache'ten okundu: ${key}`);
+            return value;
+        }
+        return null;
+    },
+    // === CACHE MEKANİZMASI SONU ===
+
 
     /**
      * Tedarikçi listesini getirir.
@@ -89,17 +120,18 @@ const store = {
 
     /**
      * Tanker listesini çeker ve cache'ler.
+     * HATA DÜZELTMESİ: this.getCache ve this.setCache artık store objesinde tanımlı.
      */
     async getTankers(forceRefresh = false) {
         const cacheKey = 'tankers';
         if (!forceRefresh) {
-            const cached = this.getCache(cacheKey);
+            const cached = this.getCache(cacheKey); // ARTIK ÇALIŞACAK
             if (cached) return cached;
         }
         // api.js'de fetchTankers yok, o yüzden direkt api.request kullanıyoruz
         // (Bu, Mesaj 66'da oluşturduğumuz API'yi çağırır)
         const tankers = await api.request('/tanker/api/listele'); 
-        this.setCache(cacheKey, tankers);
+        this.setCache(cacheKey, tankers); // ARTIK ÇALIŞACAK
         return tankers;
     },
     

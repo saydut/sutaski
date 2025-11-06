@@ -1,5 +1,6 @@
 # blueprints/tanker.py
 # HATA DÜZELTMESİ: Tüm 'firma_id' değişkenleri 'sirket_id' olarak düzeltildi.
+# YENİ ÖZELLİK: Tanker silme API endpoint'i eklendi.
 
 from flask import Blueprint, render_template, session, jsonify, request
 from decorators import login_required, firma_yetkilisi_required
@@ -64,7 +65,7 @@ def get_collectors_for_assignment_api():
         return jsonify(toplayicilar)
     except Exception as e:
         logger.error(f"Toplayıcı listeleme (atama için) API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Toplayıcı listesi alınırken bir hata oluştu."}), 500
+        return jsonify({"error": "Toplayıcı listesi alınamadı."}), 500
 
 @tanker_bp.route('/api/ata', methods=['POST'])
 @login_required
@@ -90,3 +91,23 @@ def assign_tanker_api():
     except Exception as e:
         logger.error(f"Tanker atama API hatası: {e}", exc_info=True)
         return jsonify({"error": "Atama sırasında bir sunucu hatası oluştu."}), 500
+
+# --- YENİ ÖZELLİK: TANKER SİLME ---
+@tanker_bp.route('/api/sil/<int:tanker_id>', methods=['DELETE'])
+@login_required
+@firma_yetkilisi_required
+def sil_tanker_api(tanker_id):
+    """Bir tankeri siler."""
+    try:
+        firma_id = session['user']['sirket_id']
+        
+        result = tanker_service.delete_tanker(firma_id, tanker_id)
+        
+        return jsonify(result), 200
+    except PermissionError as pe:
+        return jsonify({"error": str(pe)}), 403 # Yetki Hatası
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400 # Mantık Hatası (dolu, ataması var vb.)
+    except Exception as e:
+        logger.error(f"Tanker silme API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Silme sırasında bir sunucu hatası oluştu."}), 500

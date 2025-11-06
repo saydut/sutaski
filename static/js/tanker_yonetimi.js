@@ -1,10 +1,14 @@
 // static/js/tanker_yonetimi.js
+// HATA DÜZELTMESİ 1: "Doluluk Oranı"nın güncellenmemesi sorunu için 'durum-tab' sekmesine listener eklendi.
+// HATA DÜZELTMESİ 2: "Atama" bug'ı için lokal state güncellemesi eklendi.
+// YENİ ÖZELLİK: Tanker silme fonksiyonları eklendi.
 
 // === GLOBAL DEĞİŞKENLER ===
 let yeniTankerModal;
 let tankerAtamaSecici; // TomSelect için
 let tumTankerler = []; // Tanker listesini cache'lemek için
 let tumToplayicilar = []; // Toplayıcı listesini cache'lemek için
+let tankerMap = new Map(); // Hızlı erişim için Tanker ID -> Tanker Objesi
 let seciliToplayiciId = null; // Atama için seçilen kullanıcı
 
 // === SAYFA YÜKLENİNCE ÇALIŞAN KOD ===
@@ -37,7 +41,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Sekme değiştiğinde veriyi yükle
+    // --- SEKME DINLEYICILERI ---
+    
+    // HATA DÜZELTMESİ 1: 'Tanker Durumu' sekmesi her gösterildiğinde veriyi yenile.
+    // Bu, başka bir yerde süt toplandığında doluluk oranlarının güncel kalmasını sağlar.
+    const durumSekmesi = document.getElementById('durum-tab');
+    if (durumSekmesi) {
+        durumSekmesi.addEventListener('shown.bs.tab', (event) => {
+            tankerleriYukle(); // Her gösterildiğinde listeyi yenile
+        });
+    }
+
+    // 'Atama' sekmesi değiştiğinde veriyi yükle
     const atamaSekmesi = document.getElementById('atama-tab');
     if (atamaSekmesi) {
         atamaSekmesi.addEventListener('shown.bs.tab', (event) => {
@@ -47,7 +62,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-    // --- Atama Sekmesi Sonu ---
+    // --- Sekme Dinleyicileri Sonu ---
 
     // Sekme 1: Tanker listesini yükle (Sayfa açılır açılmaz)
     tankerleriYukle();
@@ -67,6 +82,7 @@ async function tankerleriYukle() {
 
     try {
         // Global listeyi doldur (Aynı anda store'u da güncelleyelim)
+        // forceRefresh = true ile store'daki cache'i es geçip taze veri çekiyoruz.
         tumTankerler = await store.getTankers(true); 
 
         if (!tumTankerler || tumTankerler.length === 0) {
@@ -85,6 +101,7 @@ async function tankerleriYukle() {
 
 /**
  * Gelen tanker verisine göre HTML kartlarını oluşturur (Sekme 1).
+ * HATA DÜZELTMESİ 2: Silme butonu aktifleştirildi ve onclick eklendi.
  */
 function renderTankerListesi(tankerler) {
     const container = document.getElementById('tanker-listesi-container');
@@ -94,6 +111,7 @@ function renderTankerListesi(tankerler) {
         const kapasite = parseFloat(tanker.kapasite_litre);
         const doluluk = parseFloat(tanker.mevcut_doluluk);
         const yuzde = parseInt(tanker.doluluk_yuzdesi, 10);
+        const safeTankerAdi = utils.sanitizeHTML(tanker.tanker_adi);
 
         let progressBarClass = 'bg-success';
         if (yuzde > 75) progressBarClass = 'bg-warning';
@@ -104,12 +122,14 @@ function renderTankerListesi(tankerler) {
                 <div class="card shadow-sm h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="card-title mb-0">${utils.sanitizeHTML(tanker.tanker_adi)}</h5>
+                            <h5 class="card-title mb-0">${safeTankerAdi}</h5>
                             <div class="btn-group btn-group-sm">
                                 <button class="btn btn-success" disabled>
                                     <i class="bi bi-box-arrow-in-down me-1"></i> Sat/Boşalt
                                 </button>
-                                <button class="btn btn-outline-danger" disabled>
+                                
+                                <button class="btn btn-outline-danger" 
+                                        onclick="tankerSilmeyiOnayla(${tanker.id}, '${safeTankerAdi.replace(/'/g, "\\'")}')">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>
@@ -174,7 +194,12 @@ async function tankerEkle() {
         
         gosterMesaj(result.message, 'success');
         yeniTankerModal.hide();
-        await tankerleriYukle(); // Listeyi yenile
+        
+        // Listeyi yenile (ve store'u da tazele)
+        await store.getTankers(true); // store'daki cache'i temizle
+        await tankerleriYukle(); // Sekme 1'i yenile
+        
+        tumToplayicilar = []; // Sekme 2'yi bir sonraki açılışta yenilenmeye zorla
 
     } catch (error) {
         gosterMesaj(error.message, 'danger');
@@ -184,8 +209,9 @@ async function tankerEkle() {
     }
 }
 
+
 // ==========================================================
-// YENİ FONKSİYONLAR: Toplayıcı Atama Sekmesi (Sekme 2)
+// SEÇENEK 2: Toplayıcı Atama Sekmesi
 // ==========================================================
 
 /**
@@ -201,13 +227,27 @@ async function loadAtamaSekmesi() {
     try {
         // İki API isteğini aynı anda yap
         const [toplayicilar, tankerler] = await Promise.all([
-            api.request('/tanker/api/toplayici-listesi'), // Az önce Python'da yazdığımız API
-            store.getTankers(true) // Tankerleri store'dan taze olarak çek
+            api.request('/tanker/api/toplayici-listesi'), 
+            store.getTankers(true) // Tankerleri taze çek
         ]);
 
         tumToplayicilar = toplayicilar || []; // Global listeyi doldur
         tumTankerler = tankerler || []; // Global tanker listesini doldur
         
+        // === CLIENT-SIDE JOIN ===
+        tankerMap.clear(); // Global haritayı temizle
+        tumTankerler.forEach(t => tankerMap.set(t.id, t));
+
+        tumToplayicilar.forEach(toplayici => {
+            const tankerId = toplayici.atanan_tanker_id; 
+            if (tankerId && tankerMap.has(tankerId)) {
+                toplayici.atanan_tanker = tankerMap.get(tankerId);
+            } else {
+                toplayici.atanan_tanker = null;
+            }
+        });
+        // === JOIN SONU ===
+
         if (tumToplayicilar.length === 0) {
             listeContainer.innerHTML = '';
             veriYokMesaji.style.display = 'block';
@@ -216,7 +256,6 @@ async function loadAtamaSekmesi() {
             renderToplayiciListesi(tumToplayicilar);
         }
         
-        // Sağdaki tanker seçme menüsünü doldur
         renderTankerSecici(tumTankerler);
 
     } catch (error) {
@@ -236,34 +275,33 @@ function renderToplayiciListesi(toplayicilar, filtre = '') {
     let gosterilenSayisi = 0;
 
     toplayicilar.forEach(toplayici => {
-        const adSoyad = toplayici.ad_soyad || '';
         const kullaniciAdi = toplayici.kullanici_adi || '';
         
-        // Arama filtresi
         if (aramaMetni && 
-            !adSoyad.toLowerCase().includes(aramaMetni) && 
             !kullaniciAdi.toLowerCase().includes(aramaMetni)) {
-            return; // Eşleşmezse bu toplayıcıyı atla
+            return;
         }
 
         gosterilenSayisi++;
-        const atananTanker = toplayici.atanan_tanker;
+        const atananTanker = toplayici.atanan_tanker; 
         const tankerAdi = atananTanker ? utils.sanitizeHTML(atananTanker.tanker_adi) : 'Atanmamış';
         const tankerId = atananTanker ? atananTanker.id : 0;
         
         const badgeClass = atananTanker ? 'text-bg-success' : 'text-bg-secondary';
-        const safeAdSoyad = utils.sanitizeHTML(adSoyad) || 'İsimsiz';
+        const safeKullaniciAdi = utils.sanitizeHTML(kullaniciAdi) || 'İsimsiz';
         
-        // onclick içine ID'yi, Adı ve mevcut atanan tanker ID'sini gönderiyoruz
         const itemHtml = `
             <a href="#" class="list-group-item list-group-item-action" 
                id="toplayici-item-${toplayici.id}"
-               onclick="atamaIcinToplayiciSec(${toplayici.id}, '${safeAdSoyad.replace(/'/g, "\\'")}', ${tankerId})">
+               data-toplayici-id="${toplayici.id}"
+               data-ad-soyad="${safeKullaniciAdi}" 
+               data-tanker-id="${tankerId}"
+               onclick="atamaIcinToplayiciSec(this)">
                 <div class="d-flex w-100 justify-content-between">
-                    <h6 class="mb-1">${safeAdSoyad}</h6>
+                    <h6 class="mb-1">${safeKullaniciAdi}</h6>
                     <span class="badge ${badgeClass} rounded-pill">${tankerAdi}</span>
                 </div>
-                <small class="text-secondary">${utils.sanitizeHTML(kullaniciAdi)}</small>
+                <small class="text-secondary">Toplayıcı Kullanıcı</small>
             </a>
         `;
         listeContainer.innerHTML += itemHtml;
@@ -281,13 +319,11 @@ function renderTankerSecici(tankerler) {
     tankerAtamaSecici.clear();
     tankerAtamaSecici.clearOptions();
     
-    // "Atama Yok" seçeneği
     tankerAtamaSecici.addOption({
         value: 0,
         text: "--- Tanker Atanmamış ---"
     });
     
-    // Tankerleri ekle
     tankerler.forEach(tanker => {
         tankerAtamaSecici.addOption({
             value: tanker.id,
@@ -299,43 +335,45 @@ function renderTankerSecici(tankerler) {
 /**
  * Soldaki listeden bir toplayıcı seçildiğinde sağ paneli açar ve doldurur.
  */
-function atamaIcinToplayiciSec(id, adSoyad, atananTankerId) {
-    seciliToplayiciId = id; // Hangi toplayıcıya atama yapacağımızı sakla
+function atamaIcinToplayiciSec(element) {
+    const id = element.dataset.toplayiciId;
+    const adSoyad = element.dataset.adSoyad; 
+    const atananTankerId = parseInt(element.dataset.tankerId, 10);
 
-    // Aktif olanı vurgula
+    seciliToplayiciId = id; 
+
     document.querySelectorAll('#toplayici-atama-listesi .list-group-item').forEach(item => {
         item.classList.remove('active');
     });
-    document.getElementById(`toplayici-item-${id}`).classList.add('active');
+    element.classList.add('active'); 
 
-    // Panelleri göster/gizle
     document.getElementById('atama-paneli-secim-bekliyor').style.display = 'none';
     document.getElementById('atama-paneli-sag').style.display = 'block';
 
-    // Verileri doldur
     document.getElementById('atama-toplayici-adi').textContent = adSoyad;
     document.getElementById('atanacak-toplayici-id').value = id;
-    tankerAtamaSecici.setValue(atananTankerId); // Mevcut atamayı seç
+    tankerAtamaSecici.setValue(atananTankerId); 
 }
 
 /**
  * "Kaydet" butonuna basıldığında atamayı API'ye gönderir.
+ * (HATA DÜZELTMESİ 2: Lokal state güncellemesi)
  */
 async function tankerAta() {
-    const secilenToplayiciId = document.getElementById('atanacak-toplayici-id').value;
+    const toplayiciId = parseInt(document.getElementById('atanacak-toplayici-id').value, 10);
     
-    if (!secilenToplayiciId) {
+    if (!toplayiciId) {
         gosterMesaj("Lütfen önce bir toplayıcı seçin.", "warning");
         return;
     }
     
-    const secilenTankerId = tankerAtamaSecici.getValue();
+    const tankerId = parseInt(tankerAtamaSecici.getValue(), 10);
     const kaydetButton = document.getElementById('atama-kaydet-btn');
     const originalButtonText = kaydetButton.innerHTML;
 
     const veri = {
-        toplayici_id: secilenToplayiciId,
-        tanker_id: secilenTankerId
+        toplayici_id: toplayiciId,
+        tanker_id: tankerId
     };
 
     kaydetButton.disabled = true;
@@ -350,12 +388,23 @@ async function tankerAta() {
         
         gosterMesaj(result.message, 'success');
         
-        // Paneli gizle ve listeyi yenile
         document.getElementById('atama-paneli-secim-bekliyor').style.display = 'block';
         document.getElementById('atama-paneli-sag').style.display = 'none';
         seciliToplayiciId = null;
         
-        await loadAtamaSekmesi(); // Atama listesini yenile
+        // === LOKAL LİSTEYİ GÜNCELLE ===
+        const toplayiciIndex = tumToplayicilar.findIndex(t => t.id === toplayiciId);
+        if (toplayiciIndex !== -1) {
+            if (tankerId === 0) {
+                tumToplayicilar[toplayiciIndex].atanan_tanker_id = 0;
+                tumToplayicilar[toplayiciIndex].atanan_tanker = null;
+            } else {
+                tumToplayicilar[toplayiciIndex].atanan_tanker_id = tankerId;
+                tumToplayicilar[toplayiciIndex].atanan_tanker = tankerMap.get(tankerId) || null;
+            }
+        }
+        renderToplayiciListesi(tumToplayicilar);
+        // === GÜNCELLEME SONU ===
 
     } catch (error) {
         gosterMesaj(error.message, 'danger');
@@ -369,6 +418,68 @@ async function tankerAta() {
  * "Atamayı Kaldır" butonuna basıldığında '0' ID'si ile atama yapar.
  */
 function atamaKaldir() {
-    tankerAtamaSecici.setValue(0); // Dropdown'u "Atanmamış"a çek
-    tankerAta(); // Kaydet fonksiyonunu çağır
+    tankerAtamaSecici.setValue(0);
+    tankerAta(); 
+}
+
+
+// --- YENİ ÖZELLİK: TANKER SİLME FONKSİYONLARI ---
+
+/**
+ * Kullanıcıya silme onayı gösterir. (gosterOnayMesaji'nın ui.js'de olduğunu varsayar)
+ */
+function tankerSilmeyiOnayla(id, tankerAdi) {
+    // gosterOnayMesaji'nın (veya benzer bir fonksiyonun) ui.js veya main.js içinde 
+    // global olarak tanımlandığını varsayıyoruz.
+    // Eğer böyle bir fonksiyon yoksa, basit bir confirm kullanabilirsiniz:
+    // if (confirm(`'${tankerAdi}' adlı tankeri silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`)) {
+    //     tankerSil(id);
+    // }
+    
+    gosterOnayMesaji(
+        `'${tankerAdi}' adlı tankeri silmek istediğinizden emin misiniz?`,
+        "Bu işlem geri alınamaz. Tanker sadece boşsa ve bir toplayıcıya atanmamışsa silinebilir.",
+        () => { // Onay fonksiyonu
+            tankerSil(id);
+        }
+    );
+}
+
+/**
+ * Silme API isteğini yapar ve arayüzü günceller.
+ */
+async function tankerSil(id) {
+    const kartElementi = document.getElementById(`tanker-kart-${id}`);
+    const silmeButonu = kartElementi ? kartElementi.querySelector('.btn-outline-danger') : null;
+
+    if (silmeButonu) {
+        silmeButonu.disabled = true;
+        silmeButonu.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+    }
+
+    try {
+        const result = await api.request(`/tanker/api/sil/${id}`, {
+            method: 'DELETE'
+        });
+
+        gosterMesaj(result.message, 'success');
+        
+        // Kartı arayüzden kaldır
+        if (kartElementi) {
+            kartElementi.remove();
+        }
+        
+        // Store'daki cache'i temizle
+        await store.getTankers(true); 
+        
+        // Atama sekmesindeki listeyi yenilemeye zorla
+        tumToplayicilar = [];
+
+    } catch (error) {
+        gosterMesaj(error.message, 'danger');
+        if (silmeButonu) {
+            silmeButonu.disabled = false;
+            silmeButonu.innerHTML = `<i class="bi bi-trash"></i>`;
+        }
+    }
 }
