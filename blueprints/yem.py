@@ -90,6 +90,25 @@ def add_yem_islemi():
     except Exception:
         return jsonify({"error": "Yem çıkışı yapılırken bir sunucu hatası oluştu."}), 500
 
+@yem_bp.route('/api/giris/ekle', methods=['POST'])
+@login_required
+@modification_allowed # Muhasebeci ekleyemez
+def add_yem_girisi_api():
+    """Yeni bir yem GİRİŞ işlemi (Stok Alımı) yapar."""
+    try:
+        sirket_id = session['user']['sirket_id']
+        kullanici_id = session['user']['id']
+        data = request.get_json()
+        
+        yeni_giris = yem_service.add_yem_girisi(sirket_id, kullanici_id, data)
+        
+        return jsonify({"message": "Yem stoğu girişi ve gider kaydı başarıyla oluşturuldu.", "giris": yeni_giris}), 201
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        logger.error(f"Yem girişi API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Yem girişi eklenirken bir sunucu hatası oluştu."}), 500
+
 @yem_bp.route('/api/islemler/liste', methods=['GET'])
 @login_required
 def get_yem_islemleri():

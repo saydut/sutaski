@@ -24,7 +24,7 @@ from blueprints.rapor import rapor_bp
 from blueprints.firma import firma_bp
 from blueprints.ciftci import ciftci_bp
 from blueprints.tarife import tarife_bp
-# YENİ: Masraf blueprint'ini import ediyoruz
+from blueprints.tanker import tanker_bp
 from blueprints.masraf import masraf_bp
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -149,7 +149,7 @@ def create_app():
     app.register_blueprint(firma_bp)
     app.register_blueprint(ciftci_bp)
     app.register_blueprint(tarife_bp)
-    # YENİ: masraf_bp'yi uygulamaya kaydediyoruz
+    app.register_blueprint(tanker_bp)
     app.register_blueprint(masraf_bp)
 
     return app

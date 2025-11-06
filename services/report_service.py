@@ -298,7 +298,10 @@ def generate_mustahsil_makbuzu_pdf(sirket_id, tedarikci_id, ay, yil):
         raise Exception(f"PDF oluşturulurken bir hata oluştu: {e}")
     
 
-# --- get_profitability_report (Değişiklik Yok) ---
+
+
+# services/report_service.py içindeki bu fonksiyonu GÜNCELLE
+
 def get_profitability_report(sirket_id: int, baslangic: str, bitis: str):
     """
     Şirketin kârlılık raporunu yeni 'get_karlilik_raporu' RPC'sini
@@ -308,20 +311,32 @@ def get_profitability_report(sirket_id: int, baslangic: str, bitis: str):
         datetime.strptime(baslangic, '%Y-%m-%d')
         datetime.strptime(bitis, '%Y-%m-%d')
 
+        # DÜZELTME BURADA: Parametre adları SQL fonksiyonuyla eşleşmeli
         response = g.supabase.rpc('get_karlilik_raporu', {
             'p_sirket_id': sirket_id,
-            'p_baslangic_tarihi': baslangic,
-            'p_bitis_tarihi': bitis
+            'p_start_date': baslangic, # p_baslangic_tarihi idi
+            'p_end_date': bitis         # p_bitis_tarihi idi
         }).execute()
 
         if response.data:
-            data = response.data 
+            # GÜNCELLEME: RPC'den dönen veri artık tek bir JSON objesi
+            # (Eğer liste dönerse ilk elemanı al, değilse direkt veriyi al)
+            data = response.data[0] if isinstance(response.data, list) and len(response.data) > 0 else response.data
+            
+            if not isinstance(data, dict):
+                 logger.warning("get_karlilik_raporu RPC'si beklenen formatta (dict) veri döndürmedi.")
+                 return None
+
+            # GÜNCELLEME: Rapor SQL'inden (Mesaj 46) gelen yeni anahtarlar
             formatted_data = {
-                "toplam_sut_geliri": Decimal(str(data.get('toplam_sut_geliri', '0'))),
-                "toplam_finans_tahsilati": Decimal(str(data.get('toplam_finans_tahsilati', '0'))),
-                "toplam_yem_gideri": Decimal(str(data.get('toplam_yem_gideri', '0'))),
-                "toplam_finans_odemesi": Decimal(str(data.get('toplam_finans_odemesi', '0'))),
-                "toplam_genel_masraf": Decimal(str(data.get('toplam_genel_masraf', '0'))),
+                "sut_geliri": Decimal(str(data.get('sut_geliri', '0'))),
+                "sut_maliyeti": Decimal(str(data.get('sut_maliyeti', '0'))),
+                "sut_kari": Decimal(str(data.get('sut_kari', '0'))),
+                "yem_geliri": Decimal(str(data.get('yem_geliri', '0'))),
+                "yem_maliyeti": Decimal(str(data.get('yem_maliyeti', '0'))),
+                "yem_kari": Decimal(str(data.get('yem_kari', '0'))),
+                "diger_gelirler": Decimal(str(data.get('diger_gelirler', '0'))),
+                "diger_giderler": Decimal(str(data.get('diger_giderler', '0'))),
                 "toplam_gelir": Decimal(str(data.get('toplam_gelir', '0'))),
                 "toplam_gider": Decimal(str(data.get('toplam_gider', '0'))),
                 "net_kar": Decimal(str(data.get('net_kar', '0')))

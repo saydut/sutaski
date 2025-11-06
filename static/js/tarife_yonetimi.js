@@ -77,7 +77,7 @@ async function tarifeleriYukle() {
     const veriYokMesaji = document.getElementById('tarife-veri-yok');
     if (!tabloBody || !veriYokMesaji) return;
 
-    tabloBody.innerHTML = '<tr><td colspan="4" class="text-center"><div class="spinner-border spinner-border-sm"></div> Yükleniyor...</td></tr>';
+    tabloBody.innerHTML = '<tr><td colspan="5" class="text-center"><div class="spinner-border spinner-border-sm"></div> Yükleniyor...</td></tr>';
     veriYokMesaji.style.display = 'none';
 
     try {
@@ -96,14 +96,18 @@ async function tarifeleriYukle() {
             // Gelen tarih YYYY-MM-DD formatında, timezone sorunu yaşamamak için 'T00:00:00' ekleyerek parse et
             const baslangic = new Date(tarife.baslangic_tarihi + 'T00:00:00').toLocaleDateString('tr-TR', {timeZone: 'UTC'});
             const bitis = tarife.bitis_tarihi ? new Date(tarife.bitis_tarihi + 'T00:00:00').toLocaleDateString('tr-TR', {timeZone: 'UTC'}) : 'Süresiz';
-            const fiyat = parseFloat(tarife.fiyat).toFixed(2);
+            
+            // YENİ: alis_fiyati ve satis_fiyati alanlarını kullan
+            const alis_fiyat = parseFloat(tarife.alis_fiyati).toFixed(2);
+            const satis_fiyat = parseFloat(tarife.satis_fiyati).toFixed(2);
             
             // Satırı oluştur
             const row = `
                 <tr id="tarife-satir-${tarife.id}">
                     <td><strong>${baslangic}</strong></td>
                     <td>${bitis}</td>
-                    <td class="text-end fw-bold">${fiyat} TL</td>
+                    <td class="text-end fw-bold">${alis_fiyat} TL</td>
+                    <td class="text-end fw-bold">${satis_fiyat} TL</td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-outline-primary me-1" onclick="duzenlemeModaliniAc(${tarife.id})" title="Düzenle">
                             <i class="bi bi-pencil"></i>
@@ -137,14 +141,16 @@ async function tarifeEkle(event) {
     const baslangicTarihi = formatDateToYYYYMMDD(yeniBaslangicTarihi.selectedDates[0]);
     const bitisTarihi = formatDateToYYYYMMDD(yeniBitisTarihi.selectedDates[0]);
 
+    // YENİ: alis_fiyati ve satis_fiyati alanlarını al
     const veri = {
         baslangic_tarihi: baslangicTarihi,
         bitis_tarihi: bitisTarihi, // null olabilir, backend bunu handle ediyor
-        fiyat: document.getElementById('fiyat-input').value
+        alis_fiyati: document.getElementById('alis-fiyat-input').value,
+        satis_fiyati: document.getElementById('satis-fiyat-input').value
     };
 
-    if (!veri.baslangic_tarihi || !veri.fiyat) {
-        gosterMesaj("Başlangıç tarihi ve fiyat alanları zorunludur.", "warning");
+    if (!veri.baslangic_tarihi || !veri.alis_fiyati || !veri.satis_fiyati) {
+        gosterMesaj("Başlangıç tarihi, alış fiyatı ve satış fiyatı alanları zorunludur.", "warning");
         return;
     }
 
@@ -242,7 +248,10 @@ function duzenlemeModaliniAc(id) {
 
     // Modaldaki formları doldur
     document.getElementById('edit-tarife-id').value = tarife.id;
-    document.getElementById('edit-fiyat-input').value = parseFloat(tarife.fiyat).toFixed(2);
+    
+    // YENİ: alis_fiyati ve satis_fiyati alanlarını doldur
+    document.getElementById('edit-alis-fiyat-input').value = parseFloat(tarife.alis_fiyati).toFixed(2);
+    document.getElementById('edit-satis-fiyat-input').value = parseFloat(tarife.satis_fiyati).toFixed(2);
     
     // Tarih seçicileri ayarla (timezone UTC varsayarak)
     duzenleBaslangicTarihi.setDate(tarife.baslangic_tarihi, true);
@@ -265,14 +274,16 @@ async function tarifeGuncelle() {
     const baslangicTarihi = formatDateToYYYYMMDD(duzenleBaslangicTarihi.selectedDates[0]);
     const bitisTarihi = formatDateToYYYYMMDD(duzenleBitisTarihi.selectedDates[0]);
 
+    // YENİ: alis_fiyati ve satis_fiyati alanlarını al
     const veri = {
         baslangic_tarihi: baslangicTarihi,
         bitis_tarihi: bitisTarihi, // null olabilir
-        fiyat: document.getElementById('edit-fiyat-input').value
+        alis_fiyati: document.getElementById('edit-alis-fiyat-input').value,
+        satis_fiyati: document.getElementById('edit-satis-fiyat-input').value
     };
 
-    if (!veri.baslangic_tarihi || !veri.fiyat) {
-        gosterMesaj("Başlangıç tarihi ve fiyat alanları zorunludur.", "warning");
+    if (!veri.baslangic_tarihi || !veri.alis_fiyati || !veri.satis_fiyati) {
+        gosterMesaj("Başlangıç tarihi, alış fiyatı ve satış fiyatı alanları zorunludur.", "warning");
         return;
     }
 

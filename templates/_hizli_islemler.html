@@ -18,7 +18,8 @@
         {% if session.get('user', {}).get('rol') in ['admin', 'firma_yetkilisi'] %}
         <li><a class="dropdown-item" href="{{ url_for('firma.firma_yonetim_sayfasi') }}"><i class="bi bi-person-badge me-2"></i>Kullanıcı Yönetimi</a></li>
         <li><a class="dropdown-item" href="{{ url_for('tarife.tarife_yonetim_sayfasi') }}"><i class="bi bi-tags-fill me-2"></i>Süt Fiyat Tarifesi</a></li>
-        {# --- YENİ EKLENEN SATIR --- #}
+        
+        <li><a class="dropdown-item" href="{{ url_for('tanker.tanker_yonetimi_sayfasi') }}"><i class="bi bi-fuel-pump-fill me-2"></i>Tanker Yönetimi</a></li>
         <li><a class="dropdown-item" href="{{ url_for('masraf.masraf_yonetim_sayfasi') }}"><i class="bi bi-wallet-fill me-2"></i>Genel Masraf Yönetimi</a></li>
         {% endif %}
         <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#hakkindaModal"><i class="bi bi-info-circle-fill me-2"></i>Uygulama Hakkında</a></li>

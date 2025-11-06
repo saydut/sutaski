@@ -88,6 +88,22 @@ const store = {
     },
 
     /**
+     * Tanker listesini çeker ve cache'ler.
+     */
+    async getTankers(forceRefresh = false) {
+        const cacheKey = 'tankers';
+        if (!forceRefresh) {
+            const cached = this.getCache(cacheKey);
+            if (cached) return cached;
+        }
+        // api.js'de fetchTankers yok, o yüzden direkt api.request kullanıyoruz
+        // (Bu, Mesaj 66'da oluşturduğumuz API'yi çağırır)
+        const tankers = await api.request('/tanker/api/listele'); 
+        this.setCache(cacheKey, tankers);
+        return tankers;
+    },
+    
+    /**
      * Bellekten ve yerel veritabanından bir tedarikçiyi siler.
      * @param {number} id - Silinecek tedarikçinin ID'si.
      */
@@ -128,6 +144,8 @@ const store = {
         await db.yem_urunleri.delete(id); // await eklendi
     }
 };
+
+
 
 // api.js'in bu fonksiyona erişebilmesi için `api` objesine yeni bir fonksiyon ekliyoruz.
 // Bu fonksiyon, yem yönetimi sayfasındaki sol menüyü doldurmak için

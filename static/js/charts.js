@@ -19,9 +19,9 @@ const charts = {
             const ctx = canvas.getContext('2d');
             
             if (this.haftalikChart) {
-                unregisterChart(this.haftalikChart); // YENİ: Grafiği yok etmeden önce kaydını sil.
+                unregisterChart(this.haftalikChart);
                 this.haftalikChart.destroy();
-                this.haftalikChart = null; // Referansı temizle
+                this.haftalikChart = null; 
             }
 
             this.haftalikChart = new Chart(ctx, {
@@ -49,7 +49,7 @@ const charts = {
                 }
             });
 
-            registerChart(this.haftalikChart); // YENİ: Yeni grafiği kaydet.
+            registerChart(this.haftalikChart); 
             if (typeof updateAllChartThemes === 'function') {
                 updateAllChartThemes();
             }
@@ -61,29 +61,38 @@ const charts = {
 
 
     /**
-     * Son 30 günlük tedarikçi dağılımı grafiğini (doughnut) oluşturur.
+     * Tedarikçi dağılımı grafiğini (doughnut) oluşturur.
+     * YENİ: Opsiyonel 'period' parametresi alır.
      */
-    async tedarikciGrafigiOlustur() {
+    async tedarikciGrafigiOlustur(period = 'monthly') { // Varsayılan 'monthly'
         const veriYokMesaji = document.getElementById('tedarikci-veri-yok');
         const canvas = document.getElementById('tedarikciDagilimGrafigi');
-        if (!canvas) return; // Canvas elementi yoksa işlemi durdur
+        if (!canvas) return;
         const ctx = canvas.getContext('2d');
 
         if (this.tedarikciChart) {
-            unregisterChart(this.tedarikciChart); // YENİ: Grafiği yok etmeden önce kaydını sil.
+            unregisterChart(this.tedarikciChart);
             this.tedarikciChart.destroy();
-            this.tedarikciChart = null; // Referansı temizle
+            this.tedarikciChart = null;
         }
         
         canvas.style.display = 'none';
-        veriYokMesaji.style.display = 'block';
-        veriYokMesaji.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>';
+        if (veriYokMesaji) {
+            veriYokMesaji.style.display = 'block';
+            veriYokMesaji.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>';
+        }
 
         try {
-            const veri = await api.fetchTedarikciDagilimi();
+            // YENİ: API'yi 'period' parametresi ile çağır
+            const veri = await api.fetchTedarikciDagilimi(period);
             
             if (veri.labels.length === 0) {
-                veriYokMesaji.textContent = 'Son 30 günde veri bulunamadı.';
+                let mesaj = 'Veri bulunamadı.';
+                if(period === 'daily') mesaj = 'Son 24 saatte veri yok.';
+                else if(period === 'weekly') mesaj = 'Son 7 günde veri yok.';
+                else if(period === 'monthly') mesaj = 'Son 30 günde veri yok.';
+                
+                if (veriYokMesaji) veriYokMesaji.textContent = mesaj;
                 return;
             }
 
@@ -98,7 +107,7 @@ const charts = {
                 islenmisVeri.data.push(digerleriToplami);
             }
             
-            veriYokMesaji.style.display = 'none';
+            if (veriYokMesaji) veriYokMesaji.style.display = 'none';
             canvas.style.display = 'block';
 
             this.tedarikciChart = new Chart(ctx, {
@@ -127,14 +136,30 @@ const charts = {
                 }
             });
 
-            registerChart(this.tedarikciChart); // YENİ: Yeni grafiği kaydet.
+            registerChart(this.tedarikciChart); 
             if (typeof updateAllChartThemes === 'function') {
                 updateAllChartThemes();
             }
 
         } catch (error) {
             console.error("Tedarikçi grafiği oluşturulurken hata:", error.message);
-            veriYokMesaji.textContent = 'Grafik yüklenemedi.';
+            if (veriYokMesaji) veriYokMesaji.textContent = 'Grafik yüklenemedi.';
         }
     }
 };
+
+// YENİ: Butonları dinlemek için DOMContentLoaded olayı
+// Bu kod, 'charts' objesini global yaptığı için 'reports.js' içinden de erişilebilir.
+document.addEventListener('DOMContentLoaded', function() {
+    const filtreGrubu = document.getElementById('tedarikci-filtre-grup');
+    
+    if (filtreGrubu) {
+        // Butonlara tıklama olayı ekle
+        filtreGrubu.addEventListener('change', (event) => {
+            if (event.target.name === 'tedarikci-periyot') {
+                const secilenPeriyot = event.target.value; // 'daily', 'weekly', 'monthly'
+                charts.tedarikciGrafigiOlustur(secilenPeriyot);
+            }
+        });
+    }
+});

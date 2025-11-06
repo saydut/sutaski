@@ -1,29 +1,48 @@
-CREATE OR REPLACE FUNCTION get_supplier_distribution(p_sirket_id integer)
-RETURNS json
+-- Tedarikçi dağılımını (pasta grafik) hesaplar
+-- YENİ: p_period parametresi eklendi ('daily', 'weekly', 'monthly', 'all')
+CREATE OR REPLACE FUNCTION public.get_supplier_distribution (
+  p_sirket_id integer,
+  p_period text DEFAULT 'monthly' -- Varsayılan 'monthly' (Son 30 gün)
+)
+RETURNS TABLE (
+  name text,
+  litre numeric
+)
 LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = public
 AS $$
 DECLARE
-    start_date timestamptz;
+  v_start_date timestamptz;
 BEGIN
-    -- Son 30 günün başlangıç tarihini hesapla
-    start_date := (now() AT TIME ZONE 'Europe/Istanbul') - interval '30 days';
+  -- Döneme göre başlangıç tarihini belirle
+  IF p_period = 'daily' THEN
+    -- Son 24 saat
+    v_start_date := now() - interval '1 day';
+  ELSIF p_period = 'weekly' THEN
+    -- Son 7 gün
+    v_start_date := now() - interval '7 days';
+  ELSIF p_period = 'all' THEN
+    -- Tüm zamanlar (çok eski bir tarih)
+    v_start_date := '2000-01-01'::timestamptz;
+  ELSE -- 'monthly' veya tanımsız bir değer gelirse (varsayılan)
+    -- Son 30 gün
+    v_start_date := now() - interval '30 days';
+  END IF;
 
-    -- Veriyi grupla, topla, sırala ve JSON olarak döndür
-    RETURN (
-        SELECT COALESCE(json_agg(t), '[]'::json)
-        FROM (
-            SELECT
-                ted.isim AS name,
-                SUM(sut.litre)::numeric(10, 2) AS litre -- Sonucu 2 ondalık basamakla sınırla
-            FROM sut_girdileri AS sut
-            JOIN tedarikciler AS ted ON sut.tedarikci_id = ted.id
-            WHERE sut.sirket_id = p_sirket_id
-              AND sut.taplanma_tarihi >= start_date
-            GROUP BY ted.isim
-            ORDER BY litre DESC
-        ) t
-    );
+  -- Veriyi gruplayarak döndür
+  RETURN QUERY
+  SELECT
+    t.isim AS name,
+    SUM(sg.litre) AS litre
+  FROM
+    public.sut_girdileri AS sg
+  JOIN
+    public.tedarikciler AS t ON sg.tedarikci_id = t.id
+  WHERE
+    sg.sirket_id = p_sirket_id
+    AND sg.taplanma_tarihi >= v_start_date -- Filtreyi uygula
+  GROUP BY
+    t.isim
+  ORDER BY
+    litre DESC;
 END;
 $$;

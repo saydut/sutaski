@@ -33,9 +33,15 @@
                             <input type="text" class="form-control form-control-sm" id="bitis-tarihi-input" placeholder="Bu tarihe kadar geçerli">
                             <small class="form-text text-secondary">Boş bırakılırsa, bu fiyat süresiz geçerli olur.</small>
                         </div>
-                        <div class="mb-3">
-                            <label for="fiyat-input" class="form-label">Litre Fiyatı (TL) <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control form-control-sm" id="fiyat-input" placeholder="Örn: 18.50" required>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label for="alis-fiyat-input" class="form-label">Alış Fiyatı (TL) <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" id="alis-fiyat-input" placeholder="Örn: 18.50" required>
+                            </div>
+                            <div class="col-6">
+                                <label for="satis-fiyat-input" class="form-label">Satış Fiyatı (TL) <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" class="form-control form-control-sm" id="satis-fiyat-input" placeholder="Örn: 20.00" required>
+                            </div>
                         </div>
                         <div class="d-grid">
                             <button type="submit" class="btn btn-primary" id="kaydet-tarife-btn">
@@ -57,7 +63,8 @@
                                 <tr>
                                     <th>Başlangıç Tarihi</th>
                                     <th>Bitiş Tarihi</th>
-                                    <th class="text-end">Fiyat (TL)</th>
+                                    <th class="text-end">Alış Fiyatı (TL)</th>
+                                    <th class="text-end">Satış Fiyatı (TL)</th>
                                     <th class="text-center">İşlemler</th>
                                 </tr>
                             </thead>
@@ -92,9 +99,15 @@
                         <label for="edit-bitis-tarihi-input" class="form-label">Bitiş Tarihi (Opsiyonel)</label>
                         <input type="text" class="form-control form-control-sm" id="edit-bitis-tarihi-input">
                     </div>
-                    <div class="mb-3">
-                        <label for="edit-fiyat-input" class="form-label">Litre Fiyatı (TL) <span class="text-danger">*</span></label>
-                        <input type="number" step="0.01" class="form-control form-control-sm" id="edit-fiyat-input" required>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label for="edit-alis-fiyat-input" class="form-label">Alış Fiyatı (TL) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="edit-alis-fiyat-input" required>
+                        </div>
+                        <div class="col-6">
+                            <label for="edit-satis-fiyat-input" class="form-label">Satış Fiyatı (TL) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" class="form-control form-control-sm" id="edit-satis-fiyat-input" required>
+                        </div>
                     </div>
                 </form>
             </div>

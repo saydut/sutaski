@@ -55,12 +55,24 @@ def get_haftalik_ozet():
         logger.error(f"Haftalık özet (RPC) alınırken hata: {e}", exc_info=True)
         return jsonify({"error": "Haftalık özet alınırken bir sunucu hatası oluştu."}), 500
 
+
+
 @rapor_bp.route('/tedarikci_dagilimi')
 @login_required
 def get_tedarikci_dagilimi():
     try:
         sirket_id = session['user']['sirket_id']
-        response = g.supabase.rpc('get_supplier_distribution', {'p_sirket_id': sirket_id}).execute()
+        
+        # YENİ: URL'den 'period' parametresini al (örn: ?period=daily)
+        # Varsayılan olarak 'monthly' (eski davranış) ayarla
+        period = request.args.get('period', 'monthly') 
+        
+        # RPC'yi yeni parametreyle çağır
+        response = g.supabase.rpc('get_supplier_distribution', {
+            'p_sirket_id': sirket_id,
+            'p_period': period  # Parametreyi SQL'e ilet
+        }).execute()
+        
         dagilim_verisi = response.data
         labels = [item['name'] for item in dagilim_verisi]
         data = [float(item['litre']) for item in dagilim_verisi]

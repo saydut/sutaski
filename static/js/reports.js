@@ -94,7 +94,7 @@ function tedarikciTablosunuDoldur(breakdownData) {
 // --- Süt Raporu Yardımcı Fonksiyonları Sonu ---
 
 
-// --- YENİ: Kârlılık Raporu Yardımcı Fonksiyonları ---
+// static/js/reports.js içindeki BU FONKSİYONU DEĞİŞTİR
 
 /**
  * Kârlılık kartlarındaki sayıları (TL) formatlar ve doldurur.
@@ -103,6 +103,7 @@ function tedarikciTablosunuDoldur(breakdownData) {
 function karlilikKartlariniDoldur(data) {
     const formatla = (val) => `${parseFloat(val).toFixed(2)} TL`;
     
+    // Ana Kartlar (Bunlar zaten doğru çalışıyordu)
     document.getElementById('karlilik-toplam-gelir').textContent = formatla(data.toplam_gelir);
     document.getElementById('karlilik-toplam-gider').textContent = formatla(data.toplam_gider);
     document.getElementById('karlilik-net-kar').textContent = formatla(data.net_kar);
@@ -119,12 +120,23 @@ function karlilikKartlariniDoldur(data) {
         netKarElementi.classList.add('text-primary'); // Nötr
     }
 
-    // Detay kartları
-    document.getElementById('karlilik-sut-geliri').textContent = formatla(data.toplam_sut_geliri);
-    document.getElementById('karlilik-tahsilat-geliri').textContent = formatla(data.toplam_finans_tahsilati);
-    document.getElementById('karlilik-yem-gideri').textContent = formatla(data.toplam_yem_gideri);
-    document.getElementById('karlilik-finans-gideri').textContent = formatla(data.toplam_finans_odemesi);
-    document.getElementById('karlilik-genel-masraf').textContent = formatla(data.toplam_genel_masraf);
+    // === DÜZELTME BURADA ===
+    // Detay kartları (Eski anahtarlar yerine yeni anahtarları kullan)
+    
+    // 'toplam_sut_geliri' -> 'sut_geliri'
+    document.getElementById('karlilik-sut-geliri').textContent = formatla(data.sut_geliri); 
+    
+    // 'toplam_finans_tahsilati' -> 'diger_gelirler'
+    document.getElementById('karlilik-tahsilat-geliri').textContent = formatla(data.diger_gelirler);
+    
+    // 'toplam_yem_gideri' -> 'yem_maliyeti'
+    document.getElementById('karlilik-yem-gideri').textContent = formatla(data.yem_maliyeti);
+    
+    // 'toplam_finans_odemesi' -> 'sut_maliyeti' (Süt Alımı maliyettir)
+    document.getElementById('karlilik-finans-gideri').textContent = formatla(data.sut_maliyeti);
+    
+    // 'toplam_genel_masraf' -> 'diger_giderler' (Masraflar + Primler)
+    document.getElementById('karlilik-genel-masraf').textContent = formatla(data.diger_giderler);
 }
 
 /**

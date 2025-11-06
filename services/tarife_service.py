@@ -15,6 +15,10 @@ class TarifeService:
         """
         Belirli bir tarih için geçerli süt fiyatını Supabase RPC
         (get_sut_fiyati_for_date) fonksiyonunu çağırarak alır.
+        
+        NOT: Bu fonksiyon, RPC'den 'fiyat' adında bir sütun bekler.
+        RPC (get_sut_fiyati_for_date.sql) dosyası, bu sütunu 'alis_fiyati' olarak
+        döndürecek şekilde güncellenmelidir.
         """
         try:
             # 'YYYY-MM-DD' formatında bir tarih bekliyoruz
@@ -26,14 +30,18 @@ class TarifeService:
                 'p_target_date': tarih_str
             }).execute()
             
-            if response.data:
-                return response.data.get('fiyat') # Fiyatı (örn: 15.50) veya None döndür
+            # RPC'den dönüş '[{'fiyat': 15.50}]' formatında olabilir
+            if response.data and len(response.data) > 0:
+                # Log hatasındaki 'Could not choose...' hatası burada değil, SQL'dedir.
+                # SQL'i düzelttikten sonra bu kod çalışacaktır.
+                return response.data[0].get('fiyat') # Fiyatı (örn: 15.50) veya None döndür
             return None # Veri gelmezse None döndür
 
         except ValueError:
             logger.warning(f"get_fiyat_for_date: Geçersiz tarih formatı alındı: {tarih_str}")
             raise ValueError("Geçersiz tarih formatı.")
         except Exception as e:
+            # Loglardaki hata buraya düşüyor
             logger.error(f"RPC 'get_sut_fiyati_for_date' çağrılırken hata: {e}", exc_info=True)
             raise Exception("Fiyat bilgisi alınırken sunucu hatası oluştu.")
 
@@ -53,19 +61,28 @@ class TarifeService:
     def add_tariff(self, sirket_id: int, data: dict):
         """Yeni bir fiyat tarifesi ekler."""
         try:
-            fiyat_str = data.get('fiyat')
+            # JS'den 'alis_fiyati' ve 'satis_fiyati' bekliyoruz
+            alis_fiyat_str = data.get('alis_fiyati')
+            satis_fiyat_str = data.get('satis_fiyati') # Yeni alan
             baslangic_tarihi = data.get('baslangic_tarihi')
             bitis_tarihi = data.get('bitis_tarihi') or None # Bitiş tarihi opsiyonel
 
-            if not fiyat_str or not baslangic_tarihi:
-                raise ValueError("Başlangıç tarihi ve fiyat zorunludur.")
+            if not alis_fiyat_str or not satis_fiyat_str or not baslangic_tarihi:
+                raise ValueError("Başlangıç tarihi, alış fiyatı ve satış fiyatı zorunludur.")
 
             try:
-                fiyat = Decimal(fiyat_str)
-                if fiyat <= 0:
-                    raise ValueError("Fiyat pozitif bir değer olmalıdır.")
+                alis_fiyat = Decimal(alis_fiyat_str)
+                if alis_fiyat <= 0:
+                    raise ValueError("Alış fiyatı pozitif bir değer olmalıdır.")
             except (InvalidOperation, TypeError):
-                raise ValueError("Geçersiz fiyat formatı.")
+                raise ValueError("Geçersiz alış fiyatı formatı.")
+            
+            try:
+                satis_fiyat = Decimal(satis_fiyat_str)
+                if satis_fiyat < 0: # Satış fiyatı 0 olabilir
+                    raise ValueError("Satış fiyatı negatif olamaz.")
+            except (InvalidOperation, TypeError):
+                raise ValueError("Geçersiz satış fiyatı formatı.")
 
             # Tarih format kontrolü
             baslangic_dt = datetime.strptime(baslangic_tarihi, '%Y-%m-%d')
@@ -74,14 +91,12 @@ class TarifeService:
                 if bitis_dt < baslangic_dt:
                     raise ValueError("Bitiş tarihi, başlangıç tarihinden önce olamaz.")
 
-            # Tarih çakışmasını Supabase'deki UNIQUE constraint (sirket_id, baslangic_tarihi)
-            # bizim için büyük ölçüde halledecek.
-
             yeni_tarife = {
                 "sirket_id": sirket_id,
                 "baslangic_tarihi": baslangic_tarihi,
                 "bitis_tarihi": bitis_tarihi,
-                "fiyat": str(fiyat)
+                "alis_fiyati": str(alis_fiyat),
+                "satis_fiyati": str(satis_fiyat)
             }
             
             response = g.supabase.table('sut_fiyat_tarifesi').insert(yeni_tarife).execute()
@@ -101,10 +116,15 @@ class TarifeService:
         try:
             guncellenecek_veri = {}
             
-            if 'fiyat' in data:
-                fiyat = Decimal(data['fiyat'])
-                if fiyat <= 0: raise ValueError("Fiyat pozitif olmalıdır.")
-                guncellenecek_veri['fiyat'] = str(fiyat)
+            if 'alis_fiyati' in data:
+                alis_fiyat = Decimal(data['alis_fiyati'])
+                if alis_fiyat <= 0: raise ValueError("Alış fiyatı pozitif olmalıdır.")
+                guncellenecek_veri['alis_fiyati'] = str(alis_fiyat)
+            
+            if 'satis_fiyati' in data:
+                satis_fiyat = Decimal(data['satis_fiyati'])
+                if satis_fiyat < 0: raise ValueError("Satış fiyatı negatif olamaz.")
+                guncellenecek_veri['satis_fiyati'] = str(satis_fiyat)
                 
             if 'baslangic_tarihi' in data:
                 guncellenecek_veri['baslangic_tarihi'] = data['baslangic_tarihi']
@@ -143,6 +163,7 @@ class TarifeService:
                 .eq('sirket_id', sirket_id) \
                 .execute()
             
+            # Loglarda bu işlemin başarılı olduğu (200 OK) görünüyor.
             if not response.data:
                 raise ValueError("Tarife bulunamadı veya silme yetkiniz yok.")
             return True
