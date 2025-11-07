@@ -1,4 +1,6 @@
 // static/js/tanker_yonetimi.js
+// HATA DÜZELTMESİ: 'gosterOnayMesaji is not defined' hatasını çözmek için
+// standart 'confirm()' fonksiyonu kullanıldı.
 // HATA DÜZELTMESİ 1: "Doluluk Oranı"nın güncellenmemesi sorunu için 'durum-tab' sekmesine listener eklendi.
 // HATA DÜZELTMESİ 2: "Atama" bug'ı için lokal state güncellemesi eklendi.
 // YENİ ÖZELLİK: Tanker silme fonksiyonları eklendi.
@@ -44,7 +46,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- SEKME DINLEYICILERI ---
     
     // HATA DÜZELTMESİ 1: 'Tanker Durumu' sekmesi her gösterildiğinde veriyi yenile.
-    // Bu, başka bir yerde süt toplandığında doluluk oranlarının güncel kalmasını sağlar.
     const durumSekmesi = document.getElementById('durum-tab');
     if (durumSekmesi) {
         durumSekmesi.addEventListener('shown.bs.tab', (event) => {
@@ -56,7 +57,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const atamaSekmesi = document.getElementById('atama-tab');
     if (atamaSekmesi) {
         atamaSekmesi.addEventListener('shown.bs.tab', (event) => {
-            // Sadece ilk açılışta veya ihtiyaç duyuldukça yükle
             if (tumToplayicilar.length === 0) {
                 loadAtamaSekmesi();
             }
@@ -81,8 +81,6 @@ async function tankerleriYukle() {
     veriYokMesaji.style.display = 'none';
 
     try {
-        // Global listeyi doldur (Aynı anda store'u da güncelleyelim)
-        // forceRefresh = true ile store'daki cache'i es geçip taze veri çekiyoruz.
         tumTankerler = await store.getTankers(true); 
 
         if (!tumTankerler || tumTankerler.length === 0) {
@@ -101,7 +99,6 @@ async function tankerleriYukle() {
 
 /**
  * Gelen tanker verisine göre HTML kartlarını oluşturur (Sekme 1).
- * HATA DÜZELTMESİ 2: Silme butonu aktifleştirildi ve onclick eklendi.
  */
 function renderTankerListesi(tankerler) {
     const container = document.getElementById('tanker-listesi-container');
@@ -117,6 +114,9 @@ function renderTankerListesi(tankerler) {
         if (yuzde > 75) progressBarClass = 'bg-warning';
         if (yuzde > 95) progressBarClass = 'bg-danger';
 
+        // XSS'e karşı ' (tek tırnak) karakterini güvenli hale getiriyoruz
+        const safeTankerAdiOnclick = safeTankerAdi.replace(/'/g, "\\'");
+
         const cardHtml = `
             <div class="col-lg-6 col-md-12" id="tanker-kart-${tanker.id}">
                 <div class="card shadow-sm h-100">
@@ -129,7 +129,7 @@ function renderTankerListesi(tankerler) {
                                 </button>
                                 
                                 <button class="btn btn-outline-danger" 
-                                        onclick="tankerSilmeyiOnayla(${tanker.id}, '${safeTankerAdi.replace(/'/g, "\\'")}')">
+                                        onclick="tankerSilmeyiOnayla(${tanker.id}, '${safeTankerAdiOnclick}')">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>
@@ -195,9 +195,8 @@ async function tankerEkle() {
         gosterMesaj(result.message, 'success');
         yeniTankerModal.hide();
         
-        // Listeyi yenile (ve store'u da tazele)
-        await store.getTankers(true); // store'daki cache'i temizle
-        await tankerleriYukle(); // Sekme 1'i yenile
+        await store.getTankers(true); 
+        await tankerleriYukle(); 
         
         tumToplayicilar = []; // Sekme 2'yi bir sonraki açılışta yenilenmeye zorla
 
@@ -225,17 +224,16 @@ async function loadAtamaSekmesi() {
     veriYokMesaji.style.display = 'none';
 
     try {
-        // İki API isteğini aynı anda yap
         const [toplayicilar, tankerler] = await Promise.all([
             api.request('/tanker/api/toplayici-listesi'), 
             store.getTankers(true) // Tankerleri taze çek
         ]);
 
-        tumToplayicilar = toplayicilar || []; // Global listeyi doldur
-        tumTankerler = tankerler || []; // Global tanker listesini doldur
+        tumToplayicilar = toplayicilar || []; 
+        tumTankerler = tankerler || []; 
         
         // === CLIENT-SIDE JOIN ===
-        tankerMap.clear(); // Global haritayı temizle
+        tankerMap.clear(); 
         tumTankerler.forEach(t => tankerMap.set(t.id, t));
 
         tumToplayicilar.forEach(toplayici => {
@@ -357,7 +355,6 @@ function atamaIcinToplayiciSec(element) {
 
 /**
  * "Kaydet" butonuna basıldığında atamayı API'ye gönderir.
- * (HATA DÜZELTMESİ 2: Lokal state güncellemesi)
  */
 async function tankerAta() {
     const toplayiciId = parseInt(document.getElementById('atanacak-toplayici-id').value, 10);
@@ -426,23 +423,15 @@ function atamaKaldir() {
 // --- YENİ ÖZELLİK: TANKER SİLME FONKSİYONLARI ---
 
 /**
- * Kullanıcıya silme onayı gösterir. (gosterOnayMesaji'nın ui.js'de olduğunu varsayar)
+ * Kullanıcıya silme onayı gösterir.
+ * HATA DÜZELTMESİ: 'gosterOnayMesaji' yerine standart 'confirm' kullanıldı.
  */
 function tankerSilmeyiOnayla(id, tankerAdi) {
-    // gosterOnayMesaji'nın (veya benzer bir fonksiyonun) ui.js veya main.js içinde 
-    // global olarak tanımlandığını varsayıyoruz.
-    // Eğer böyle bir fonksiyon yoksa, basit bir confirm kullanabilirsiniz:
-    // if (confirm(`'${tankerAdi}' adlı tankeri silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`)) {
-    //     tankerSil(id);
-    // }
+    const mesaj = `'${tankerAdi}' adlı tankeri silmek istediğinizden emin misiniz?\n\nBu işlem geri alınamaz. Tanker sadece boşsa ve bir toplayıcıya atanmamışsa silinebilir.`;
     
-    gosterOnayMesaji(
-        `'${tankerAdi}' adlı tankeri silmek istediğinizden emin misiniz?`,
-        "Bu işlem geri alınamaz. Tanker sadece boşsa ve bir toplayıcıya atanmamışsa silinebilir.",
-        () => { // Onay fonksiyonu
-            tankerSil(id);
-        }
-    );
+    if (confirm(mesaj)) {
+        tankerSil(id);
+    }
 }
 
 /**
@@ -474,6 +463,11 @@ async function tankerSil(id) {
         
         // Atama sekmesindeki listeyi yenilemeye zorla
         tumToplayicilar = [];
+        
+        // Veri yok mesajını kontrol et
+        if (document.getElementById('tanker-listesi-container').children.length === 0) {
+             document.getElementById('tanker-veri-yok').style.display = 'block';
+        }
 
     } catch (error) {
         gosterMesaj(error.message, 'danger');
