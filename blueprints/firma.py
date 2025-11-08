@@ -4,7 +4,7 @@ import logging
 from flask import Blueprint, jsonify, render_template, request, session
 # YENİ: firma_yetkilisi_required decorator'ını import ediyoruz
 from decorators import login_required, lisans_kontrolu, firma_yetkilisi_required
-from services.firma_service import firma_service
+from services import firma_service
 # YENİ: Tedarikçi servisini de import ediyoruz (kullanıcı detayında tüm tedarikçileri listelemek için)
 from services.tedarikci_service import tedarikci_service
 

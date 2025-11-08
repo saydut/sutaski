@@ -4,7 +4,7 @@
 
 from flask import Blueprint, render_template, session, jsonify, request
 from decorators import login_required, firma_yetkilisi_required
-from services.tanker_service import tanker_service
+from services import tanker_service
 import logging
 
 logger = logging.getLogger(__name__)
