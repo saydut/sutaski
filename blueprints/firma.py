@@ -29,7 +29,7 @@ def get_yonetim_data_api():
     # Bu fonksiyon aynı kalıyor
     try:
         sirket_id = session['user']['sirket_id']
-        data = firma_service.get_yonetim_data(sirket_id)
+        data = firma_service.get_kullanicilar_by_sirket_id(sirket_id)
         return jsonify(data)
     except Exception as e:
         logger.error(f"Firma yönetim verileri alınırken hata: {e}", exc_info=True)
@@ -43,7 +43,7 @@ def add_toplayici_api():
     # Bu fonksiyon aynı kalıyor
     try:
         sirket_id = session['user']['sirket_id']
-        yeni_kullanici = firma_service.add_toplayici(sirket_id, request.get_json())
+        yeni_kullanici = firma_service.add_kullanici(sirket_id, request.get_json())
         return jsonify({"message": "Toplayıcı başarıyla eklendi.", "kullanici": yeni_kullanici}), 201
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 400

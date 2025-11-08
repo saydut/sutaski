@@ -28,7 +28,7 @@ def list_tankers_api():
     try:
         # HATA BURADAYDI: 'firma_id' -> 'sirket_id'
         firma_id = session['user']['sirket_id'] 
-        tankerler = tanker_service.list_tankers(firma_id)
+        tankerler = tanker_service.get_tankerler(firma_id)
         return jsonify(tankerler)
     except Exception as e:
         logger.error(f"Tanker listeleme API hatası: {e}", exc_info=True)

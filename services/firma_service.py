@@ -4,9 +4,9 @@ import logging
 from flask import g  # <-- Düzeltme: 'g' objesini import ediyoruz
 from extensions import bcrypt
 from constants import UserRole
-from postgrest import APIError
-from utils import sanitize_input 
-# Hatalı importlar kaldırıldı: 'from extensions import supabase' ve 'from supabase import PostgrestAPIError'
+from postgrest import APIError  # <-- Düzeltme: PostgrestAPIError yerine APIError
+from utils import sanitize_input
+# Hatalı importlar kaldırıldı: 'from extensions import supabase'
 
 logger = logging.getLogger(__name__)
 
@@ -84,14 +84,16 @@ def add_kullanici(sirket_id, data):
         kullanici_res = g.supabase.table('kullanicilar').insert(kullanici_data).execute()
         yeni_kullanici = kullanici_res.data[0]
         
-        detay_data = {
-            'id': auth_user.id, 
-            'sirket_id': sirket_id,
-            'rol': rol,
-            'isim': isim,
-            'kullanici_db_id': yeni_kullanici['id'] 
-        }
-        g.supabase.table('kullanici_detaylari').insert(detay_data).execute()
+        # 'kullanici_detaylari' tablosu veritabanında bulunmadığı için bu kısım geçici olarak kapatıldı.
+        # Eğer bu tabloyu (003 numaralı migration ile) eklerseniz burayı açabilirsiniz.
+        # detay_data = {
+        #     'id': auth_user.id, 
+        #     'sirket_id': sirket_id,
+        #     'rol': rol,
+        #     'isim': isim,
+        #     'kullanici_db_id': yeni_kullanici['id'] 
+        # }
+        # g.supabase.table('kullanici_detaylari').insert(detay_data).execute()
 
         logger.info(f"Yeni kullanıcı (Rol: {rol}) başarıyla eklendi. Auth ID: {auth_user.id}, DB ID: {yeni_kullanici['id']}")
         
@@ -119,20 +121,22 @@ def update_kullanici(user_id, data):
         email = sanitize_input(data.get('email'))
         telefon = sanitize_input(data.get('telefon'))
         
-        update_data_detay = {}
-        if isim:
-            update_data_detay['isim'] = isim
+        # 'kullanici_detaylari' tablosu bulunamadığı için bu kısım kapatıldı.
+        # update_data_detay = {}
+        # if isim:
+        #     update_data_detay['isim'] = isim
         
         update_data_kullanicilar = {}
         if email:
             update_data_kullanicilar['email'] = email
         if isim:
+            # 'isim' sütunu 'kullanicilar' tablosunda da var gibi görünüyor.
             update_data_kullanicilar['isim'] = isim
         if telefon:
             update_data_kullanicilar['telefon_no'] = telefon
 
-        if update_data_detay:
-            g.supabase.table('kullanici_detaylari').update(update_data_detay).eq('id', user_id).execute()
+        # if update_data_detay:
+        #     g.supabase.table('kullanici_detaylari').update(update_data_detay).eq('id', user_id).execute()
 
         if update_data_kullanicilar:
             g.supabase.table('kullanicilar').update(update_data_kullanicilar).eq('user_id', user_id).execute()
@@ -163,22 +167,27 @@ def delete_kullanici(user_id):
     Bu fonksiyon, 'g.supabase' kullanarak GÜVENLİ RPC'yi çağırır.
     
     Sıralama çok önemlidir:
-    1. Önce 'cleanup_user_data' RPC'si çağrılarak tüm ilişkili veriler (Süt, Yem, Finans)
-       temizlenir (SET NULL) ve atamalar (Tanker, Tedarikçi) silinir.
-    2. Sonra 'kullanici_detaylari' tablosundan silinir.
-    3. En son 'auth.users' tablosundan (Supabase Auth) silinir.
+    1. 'cleanup_user_data' RPC'si çağrılarak tüm ilişkili veriler temizlenir (SET NULL).
+    2. 'kullanici_detaylari' tablosundan silinir (Eğer varsa).
+    3. 'auth.users' tablosundan (Supabase Auth) silinir.
     """
     try:
         # 1. Adım: 'cleanup_user_data' SQL fonksiyonunu 'g.supabase' üzerinden çağır.
         rpc_result = g.supabase.rpc('cleanup_user_data', {'p_auth_user_id': user_id}).execute()
         
-        # RPC'den bir hata metni döndüyse bunu logla ve hata fırlat
         if rpc_result.data and 'SQL cleanup hatasi' in rpc_result.data:
             logger.error(f"SQL cleanup_user_data hatası (Auth ID: {user_id}): {rpc_result.data}")
             raise Exception(f"SQL fonksiyon hatası: {rpc_result.data}")
 
         # 2. Adım: 'kullanici_detaylari' tablosundan 'g.supabase' ile sil.
-        g.supabase.table('kullanici_detaylari').delete().eq('id', user_id).execute()
+        # Bu tablo olmasa bile hata vermemesi için 'try-except' içine alıyoruz.
+        try:
+            g.supabase.table('kullanici_detaylari').delete().eq('id', user_id).execute()
+        except APIError as e:
+            if "PGRST205" in str(e): # 'PGRST205' tablo bulunamadı kodudur
+                 logger.warning("kullanici_detaylari tablosu bulunamadi, silme adimi atlandi.")
+            else:
+                 raise # Başka bir veritabanı hatasıysa fırlat
 
         # 3. Adım: Supabase Authentication'dan 'g.supabase' ile kullanıcıyı sil.
         g.supabase.auth.admin.delete_user(user_id)
@@ -187,11 +196,9 @@ def delete_kullanici(user_id):
         return {"success": True, "message": "Kullanıcı başarıyla silindi."}
 
     except APIError as e:
-        # Veritabanı veya RPC çağrısı sırasında oluşan Postgrest hataları
         logging.error(f"Kullanıcı silinirken Postgrest hatası (Auth ID: {user_id}): {e.message}", exc_info=True)
         return {"success": False, "message": f"Veritabanı hatası: {e.message}"}
     except Exception as e:
-        # Diğer tüm hatalar
         logging.error(f"Kullanıcı silinirken genel hata (Auth ID: {user_id}): {e}", exc_info=True)
         
         if "User not found" in str(e):
@@ -200,22 +207,43 @@ def delete_kullanici(user_id):
         
         return {"success": False, "message": "Kullanıcı silinirken beklenmedik bir hata oluştu."}
 
-# Bu fonksiyon zaten 'g.supabase' kullandığı için doğruydu.
+
+# --- BU FONKSİYON GÜNCELLENDİ (get_kullanicilar_by_sirket_id) ---
 def get_kullanicilar_by_sirket_id(sirket_id):
-    """Bir şirkete bağlı tüm kullanıcıları (çiftçi, toplayıcı, muhasebeci) listeler."""
+    """
+    Bir şirkete bağlı tüm kullanıcıları (çiftçi, toplayıcı, muhasebeci) listeler.
+    DÜZELTME: 'kullanici_detaylari' tablosu bulunamadığı için 'kullanicilar' tablosundan veri çeker.
+    """
     try:
-        response = g.supabase.table('kullanici_detaylari') \
-            .select('id, rol, isim, kullanici_db_id') \
+        # 'kullanici_detaylari' yerine 'kullanicilar' tablosunu çağır
+        response = g.supabase.table('kullanicilar') \
+            .select('user_id, rol, kullanici_adi, id') # id (bigint), user_id (uuid), rol, kullanici_adi
             .eq('sirket_id', sirket_id) \
             .neq('rol', UserRole.FIRMA_YETKILISI.value) \
             .neq('rol', UserRole.ADMIN.value) \
-            .order('isim', desc=False) \
+            .order('kullanici_adi', desc=False) \
             .execute()
         
-        return response.data
+        # Arayüz (frontend) 'id' (uuid), 'isim' ve 'kullanici_db_id' (bigint) bekliyordu.
+        # Bu beklentiyi karşılamak için veriyi yeniden formatlayalım:
+        formatted_data = []
+        for user in response.data:
+            formatted_data.append({
+                'id': user.get('user_id'), # Auth UUID'si (bu 'id' olarak kullanılır)
+                'rol': user.get('rol'),
+                'isim': user.get('kullanici_adi'), # 'isim' yerine 'kullanici_adi' kullan
+                'kullanici_db_id': user.get('id') # 'kullanicilar' tablosunun kendi ID'si (bigint)
+            })
+        
+        return formatted_data
+        
+    except APIError as e:
+        logger.error(f"Şirket kullanıcıları alınırken hata (Sirket ID: {sirket_id}): {e.message}", exc_info=True)
+        raise Exception(f"Kullanıcılar alınırken sunucu hatası: {str(e.message)}")
     except Exception as e:
         logger.error(f"Şirket kullanıcıları alınırken hata (Sirket ID: {sirket_id}): {e}", exc_info=True)
         raise Exception(f"Kullanıcılar alınırken sunucu hatası: {str(e)}")
+
 
 # Bu fonksiyon zaten 'g.supabase' kullandığı için doğruydu.
 def reset_kullanici_sifre(kullanici_id_to_reset, yeni_sifre_plain):

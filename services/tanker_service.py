@@ -1,8 +1,8 @@
 # services/tanker_service.py
 
-from flask import g  # 'supabase' yerine 'g' import edildi
+from flask import g  # <-- Düzeltme: 'supabase' yerine 'g' import edildi
 from constants import UserRole
-from postgrest import APIError  # PostgrestAPIError yerine standart APIError kullanıldı
+from postgrest import APIError  # <-- Düzeltme: PostgrestAPIError yerine standart APIError
 import logging
 
 logger = logging.getLogger(__name__) # Logger eklendi
@@ -108,7 +108,7 @@ def get_tanker_assignments(sirket_id):
     try:
         # 'supabase' -> 'g.supabase' olarak değiştirildi
         response = g.supabase.table('toplayici_tanker_atama') \
-            .select('id, toplayici_user_id, tanker_id, kullanicilar(isim), tankerler(tanker_adi)') \
+            .select('id, toplayici_user_id, tanker_id, kullanicilar(kullanici_adi), tankerler(tanker_adi)') \
             .eq('firma_id', sirket_id) \
             .execute()
         return response.data
@@ -147,9 +147,29 @@ def unassign_toplayici_from_tanker(assignment_id):
         g.supabase.table('toplayici_tanker_atama') \
             .delete() \
             .eq('id', assignment_id) \
-            .eq('firma_id', g.user.sirket_id) \
+            .eq('firma_id', g.user.ssirket_id) \
             .execute()
         return True
     except Exception as e:
         logger.error(f"Tanker ataması kaldırılırken hata: {e}", exc_info=True)
+        raise
+
+# --- BU FONKSİYON YENİ EKLENDİ VE DÜZELTİLDİ ---
+def get_collectors_for_assignment(sirket_id):
+    """
+    Tanker ataması modalı için sadece 'toplayici' rolündeki
+    kullanıcıları listeler.
+    DÜZELTME: 'isim' sütunu yerine 'kullanici_adi' sütununu kullanır.
+    """
+    try:
+        # 'kullanicilar' tablosundan rolü 'toplayici' olanları seç
+        response = g.supabase.table('kullanicilar') \
+            .select('id, kullanici_adi') \  
+            .eq('sirket_id', sirket_id) \
+            .eq('rol', UserRole.TOPLAYICI.value) \
+            .order('kullanici_adi', desc=False) \ 
+            .execute()
+        return response.data
+    except Exception as e:
+        logger.error(f"Atama için toplayıcılar alınırken hata: {e}", exc_info=True)
         raise
