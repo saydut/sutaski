@@ -155,18 +155,29 @@ def unassign_toplayici_from_tanker(assignment_id):
         raise
 
 # EKLENECEK YENİ FONKSİYON
+# services/tanker_service.py
+
+# ... diğer importlar ve fonksiyonlar ...
+
+# services/tanker_service.py
+
+# ... diğer importlar ve fonksiyonlar ...
+
+# EKLENECEK YENİ FONKSİYON (GÜNCELLENDİ)
+# EKLENECEK YENİ FONKSİYON (DÜZELTİLDİ)
 def get_collectors_for_assignment(sirket_id):
     """
     Tanker ataması modalı için sadece 'toplayici' rolündeki
     kullanıcıları listeler.
     """
     try:
-        # 'kullanicilar' tablosundan rolü 'toplayici' olanları seç
+        # DÜZELTME: .order('isim', ...) -> .order('kullanici_adi', ...)
+        # Şemada 'isim' sütunu yok, 'kullanici_adi' var.
         response = g.supabase.table('kullanicilar') \
             .select('id, kullanici_adi') \
             .eq('sirket_id', sirket_id) \
             .eq('rol', UserRole.TOPLAYICI.value) \
-            .order('isim', desc=False) \
+            .order('kullanici_adi', desc=False) \
             .execute()
         return response.data
     except Exception as e:

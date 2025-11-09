@@ -99,42 +99,63 @@ function lisansBilgisiniGoster(kullanicilar, limit) {
  * Yeni kullanıcı ekleme formunu yönetir.
  */
 async function yeniKullaniciEkle(event) {
-    // Bu fonksiyon aynı kalıyor
     event.preventDefault();
-    const kaydetButton = document.getElementById('kaydet-btn');
-    if (!kaydetButton) return; // Buton yoksa çık
-    const originalButtonText = kaydetButton.innerHTML;
-    const veri = {
-        kullanici_adi: document.getElementById('kullanici-adi-input').value.trim(),
-        sifre: document.getElementById('sifre-input').value,
-        telefon_no: document.getElementById('telefon-input').value.trim(),
-        adres: document.getElementById('adres-input').value.trim()
-    };
+    const form = event.target;
+    const submitButton = form.querySelector('button[type="submit"]');
+    const originalButtonText = submitButton.innerHTML;
 
-    if (!veri.kullanici_adi || !veri.sifre) {
-        gosterMesaj('Kullanıcı adı ve şifre alanları zorunludur.', 'warning');
-        return;
-    }
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries()); // Bu satır zaten doğruydu
 
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Ekleniyor...`;
+    submitButton.disabled = true;
+    submitButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Ekleniyor...`;
 
     try {
-        const result = await api.request('/firma/api/toplayici_ekle', {
+        // Rol'e göre doğru API endpoint'ine yönlendir
+        const endpoint = data.rol === 'ciftci' ? '/firma/api/ciftci_ekle' : '/firma/api/kullanici_ekle';
+        
+        // --- DÜZELTME BURADA ---
+        // Veriyi 'FormData' olarak değil, 'JSON' olarak gönderiyoruz.
+        // Python (Flask) 'request.get_json()' beklediği için bu gereklidir.
+        const result = await api.request(endpoint, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
+            headers: {
+                'Content-Type': 'application/json' // 1. Ne gönderdiğimizi sunucuya söylüyoruz
+            },
+            body: JSON.stringify(data) // 2. JavaScript objesini JSON metnine çeviriyoruz
         });
+        // --- DÜZELTME SONU ---
 
         gosterMesaj(result.message, 'success');
-        document.getElementById('yeni-kullanici-form').reset();
-        await verileriYukle();
+        form.reset();
+        
+        // Yeni kullanıcıyı listeye dinamik olarak ekle
+        const yeniKullanici = result.data; // Backend'den dönen yeni kullanıcı verisi
+        
+        // Python'dan dönen veriyi (kullanici_adi, eposta) frontend'in beklediği
+        // (isim, email) formata çeviriyoruz.
+        const formattedKullanici = {
+            id: yeniKullanici.id,
+            rol: yeniKullanici.rol,
+            isim: yeniKullanici.kullanici_adi, // Eşleştirme
+            email: yeniKullanici.eposta,      // Eşleştirme
+            telefon: yeniKullanici.telefon_no // Eşleştirme
+        };
+        
+        // Kullanıcıyı listeye ekle
+        const kullaniciListesi = document.getElementById('kullanici-listesi');
+        if (kullaniciListesi) {
+            const row = document.createElement('tr');
+            row.id = `kullanici-row-${formattedKullanici.id}`;
+            row.innerHTML = renderKullaniciSatiri(formattedKullanici);
+            kullaniciListesi.prepend(row); // Yeni kullanıcıyı listenin başına ekle
+        }
 
     } catch (error) {
         gosterMesaj(error.message, 'danger');
     } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Toplayıcıyı Ekle';
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalButtonText;
     }
 }
 

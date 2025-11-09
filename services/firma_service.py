@@ -1,256 +1,289 @@
 # services/firma_service.py
 
 import logging
-from flask import g  # <-- Düzeltme: 'g' objesini import ediyoruz
+# DÜZELTME: 'from flask import g' satırı Döngüsel İçe Aktarma (Circular Import)
+# hatasına neden olduğu için kaldırıldı.
 from extensions import bcrypt
 from constants import UserRole
 from postgrest import APIError
 from utils import sanitize_input 
-# Hatalı importlar kaldırıldı: 'from extensions import supabase' ve 'from supabase import PostgrestAPIError'
 
 logger = logging.getLogger(__name__)
 
 # --- Yardımcı Fonksiyon: Benzersiz Çiftçi Kullanıcı Adı Oluştur ---
-# Bu fonksiyon zaten 'g.supabase' kullandığı için doğruydu.
-def _generate_unique_farmer_username(base_name: str, sirket_id: int) -> str:
+# DÜZELTME: 'g.supabase' yerine 'supabase_client' parametresi eklendi
+def _generate_unique_farmer_username(supabase_client, base_name: str, sirket_id: int) -> str:
     clean_name = ''.join(c for c in sanitize_input(base_name).lower() if c.isalnum() or c == '_').replace(' ', '_')
     username_base = f"{clean_name}_ciftci"
     username = username_base
     counter = 1
     while True:
-        exists_res = g.supabase.table('kullanicilar') \
+        # DÜZELTME: 'g.supabase' -> 'supabase_client'
+        exists_res = supabase_client.table('kullanicilar') \
             .select('id', count='exact') \
             .eq('kullanici_adi', username) \
             .eq('sirket_id', sirket_id) \
             .execute()
         if exists_res.count == 0:
-            return username
+            return username 
         username = f"{username_base}_{counter}"
         counter += 1
+        if counter > 100: 
+             raise Exception("Benzersiz çiftçi kullanıcı adı üretilemedi.")
 
-# --- Ana Servis Fonksiyonları ---
+class FirmaService:
+    """Firma yetkilisi işlemleri için servis katmanı."""
 
-# Bu fonksiyon zaten 'g.supabase' kullandığı için doğruydu.
-def add_kullanici(sirket_id, data):
-    """Yeni bir çiftçi/toplayıcı/muhasebeci oluşturur ve auth'a kaydeder."""
-    try:
-        email = sanitize_input(data.get('email'))
-        sifre = data.get('sifre') 
-        rol = sanitize_input(data.get('rol'))
-        isim = sanitize_input(data.get('isim'))
-        telefon = sanitize_input(data.get('telefon'))
-        
-        if not email or not sifre or not rol or not isim:
-            raise ValueError("Email, şifre, rol ve isim alanları zorunludur.")
-            
-        gecerli_roller = [UserRole.CIFCI.value, UserRole.TOPLAYICI.value, UserRole.MUHASEBECI.value]
-        if rol not in gecerli_roller:
-            raise ValueError(f"Geçersiz rol. Rol '{UserRole.CIFCI.value}', '{UserRole.TOPLAYICI.value}' veya '{UserRole.MUHASEBECI.value}' olmalı.")
-
+    # DÜZELTME: 'g.supabase' yerine 'supabase_client' parametresi eklendi
+    def get_yonetim_data(self, supabase_client, sirket_id: int):
         try:
-            auth_res = g.supabase.auth.admin.create_user({
-                "email": email,
-                "password": sifre,
-                "email_confirm": True
-            })
-            auth_user = auth_res.user
+            # DÜZELTME: 'g.supabase' -> 'supabase_client'
+            sirket_res = supabase_client.table('sirketler').select('max_toplayici_sayisi').eq('id', sirket_id).single().execute()
+            if not sirket_res.data:
+                raise ValueError("Şirket bilgileri bulunamadı.")
+
+            limit = sirket_res.data.get('max_toplayici_sayisi', 3)
+
+            roles_to_fetch = [UserRole.TOPLAYICI.value, UserRole.MUHASEBECI.value, UserRole.CIFCI.value] 
             
-        except APIError as auth_error:
-            logger.error(f"Auth kullanıcısı oluşturulurken hata: {auth_error.message}")
-            if "already registered" in auth_error.message:
-                raise ValueError("Bu e-posta adresi zaten kayıtlı.")
-            if "weak password" in auth_error.message:
-                raise ValueError("Şifre çok zayıf. Lütfen daha güçlü bir şifre seçin.")
-            raise 
+            # --- ANA DÜZELTME: RLS GÜVENLİĞİ İÇİN 'select(*)' KALDIRILDI ---
+            # 'sifre' sütununu çekmemek için sadece ihtiyacımız olan sütunları seçiyoruz.
+            # Frontend'in (firma_yonetimi.js) bu alanlara ihtiyacı var.
+            select_query = 'id, kullanici_adi, rol, eposta, telefon_no, adres'
+            
+            kullanicilar_res = supabase_client.table('kullanicilar') \
+                .select(select_query) \
+                .eq('sirket_id', sirket_id) \
+                .in_('rol', roles_to_fetch) \
+                .order('id', desc=True) \
+                .execute()
+            # --- DÜZELTME SONU ---
 
-        if rol == UserRole.CIFCI.value:
-            kullanici_adi = _generate_unique_farmer_username(isim, sirket_id)
-        else:
-            kullanici_adi = email
+            return {
+                "kullanicilar": kullanicilar_res.data,
+                "limit": limit
+            }
+        except Exception as e:
+            logger.error(f"Şirket yönetim verileri alınırken hata: {e}", exc_info=True)
+            # Hatayı daha net görmek için 'e'yi de yazdıralım
+            raise Exception(f"Yönetim verileri alınırken bir hata oluştu: {str(e)}")
 
-        hashed_sifre = bcrypt.generate_password_hash(sifre).decode('utf-8')
+    # DÜZELTME: 'g.supabase' yerine 'supabase_client' parametresi eklendi
+    def add_toplayici(self, supabase_client, sirket_id: int, data: dict):
+        try:
+            kullanici_adi = sanitize_input(data.get('kullanici_adi', ''))
+            sifre = data.get('sifre')
+            if not all([kullanici_adi, sifre]):
+                raise ValueError("Kullanıcı adı ve şifre zorunludur.")
 
-        kullanici_data = {
-            'user_id': auth_user.id, 
-            'sirket_id': sirket_id,
-            'rol': rol,
-            'kullanici_adi': kullanici_adi,
-            'sifre': hashed_sifre, 
-            'email': email,
-            'isim': isim,
-            'telefon_no': telefon
-        }
-        
-        kullanici_res = g.supabase.table('kullanicilar').insert(kullanici_data).execute()
-        yeni_kullanici = kullanici_res.data[0]
-        
-        detay_data = {
-            'id': auth_user.id, 
-            'sirket_id': sirket_id,
-            'rol': rol,
-            'isim': isim,
-            'kullanici_db_id': yeni_kullanici['id'] 
-        }
-        g.supabase.table('kullanici_detaylari').insert(detay_data).execute()
+            # DÜZELTME: 'get_yonetim_data' artık 'supabase_client' bekliyor
+            yonetim_data = self.get_yonetim_data(supabase_client, sirket_id)
+            limit = yonetim_data['limit']
+            mevcut_toplayici_sayisi = len([k for k in yonetim_data['kullanicilar'] if k['rol'] == UserRole.TOPLAYICI.value])
 
-        logger.info(f"Yeni kullanıcı (Rol: {rol}) başarıyla eklendi. Auth ID: {auth_user.id}, DB ID: {yeni_kullanici['id']}")
-        
-        yeni_kullanici.pop('sifre', None)
-        return yeni_kullanici
+            if mevcut_toplayici_sayisi >= limit:
+                raise ValueError(f"Lisans limitinize ulaştınız. Mevcut lisansınız en fazla {limit} toplayıcıya izin vermektedir.")
 
-    except (ValueError, APIError) as e:
-        logger.warning(f"Kullanıcı eklenirken doğrulama hatası: {str(e)}")
-        raise e
-    except Exception as e:
-        logger.error(f"Kullanıcı eklenirken beklenmedik hata: {e}", exc_info=True)
-        if 'auth_user' in locals() and auth_user:
-            try:
-                g.supabase.auth.admin.delete_user(auth_user.id)
-                logger.info(f"Rollback: Auth kullanıcısı {auth_user.id} silindi.")
-            except Exception as roll_e:
-                logger.error(f"Rollback hatası: Auth kullanıcısı {auth_user.id} silinemedi: {roll_e}")
-        raise Exception(f"Kullanıcı oluşturulurken sunucu hatası: {str(e)}")
+            # DÜZELTME: 'g.supabase' -> 'supabase_client'
+            kullanici_var_mi = supabase_client.table('kullanicilar').select('id', count='exact').eq('kullanici_adi', kullanici_adi).execute()
+            if kullanici_var_mi.count > 0:
+                raise ValueError("Bu kullanıcı adı zaten mevcut.")
 
-# Bu fonksiyon zaten 'g.supabase' kullandığı için doğruydu.
-def update_kullanici(user_id, data):
-    """Mevcut bir kullanıcının bilgilerini günceller."""
-    try:
-        isim = sanitize_input(data.get('isim'))
-        email = sanitize_input(data.get('email'))
-        telefon = sanitize_input(data.get('telefon'))
-        
-        update_data_detay = {}
-        if isim:
-            update_data_detay['isim'] = isim
-        
-        update_data_kullanicilar = {}
-        if email:
-            update_data_kullanicilar['email'] = email
-        if isim:
-            update_data_kullanicilar['isim'] = isim
-        if telefon:
-            update_data_kullanicilar['telefon_no'] = telefon
+            hashed_sifre = bcrypt.generate_password_hash(sifre).decode('utf-8')
+            
+            yeni_kullanici_data = {
+                'kullanici_adi': kullanici_adi,
+                'sifre': hashed_sifre,
+                'sirket_id': sirket_id,
+                'rol': UserRole.TOPLAYICI.value,
+                'telefon_no': sanitize_input(data.get('telefon_no')) or None,
+                'adres': sanitize_input(data.get('adres')) or None,
+                'eposta': sanitize_input(data.get('eposta')) or None
+            }
 
-        if update_data_detay:
-            g.supabase.table('kullanici_detaylari').update(update_data_detay).eq('id', user_id).execute()
+            # DÜZELTME: 'g.supabase' -> 'supabase_client'
+            response = supabase_client.table('kullanicilar').insert(yeni_kullanici_data).execute()
+            return response.data[0]
 
-        if update_data_kullanicilar:
-            g.supabase.table('kullanicilar').update(update_data_kullanicilar).eq('user_id', user_id).execute()
+        except ValueError as ve:
+            raise ve
+        except APIError as e:
+            logger.error(f"Toplayıcı eklenirken API hatası: {e.message}", exc_info=True)
+            if 'unique constraint "kullanicilar_kullanici_adi_key"' in e.message:
+                raise ValueError("Bu kullanıcı adı zaten başka bir kullanıcı tarafından kullanılıyor.")
+            raise Exception("Veritabanı hatası oluştu.")
+        except Exception as e:
+            logger.error(f"Toplayıcı eklenirken genel hata: {e}", exc_info=True)
+            raise Exception("Toplayıcı eklenirken bir sunucu hatası oluştu.")
 
-        if email:
-            try:
-                g.supabase.auth.admin.update_user_by_id(user_id, {"email": email})
-            except APIError as auth_error:
-                logger.warning(f"Auth e-postası güncellenirken hata (ID: {user_id}): {auth_error.message}")
-                if "already registered" in auth_error.message:
-                    raise ValueError("Bu e-posta adresi zaten başka bir kullanıcı tarafından kullanılıyor.")
-        
-        logger.info(f"Kullanıcı (ID: {user_id}) bilgileri güncellendi.")
-        
-        return {"success": True, "message": "Kullanıcı güncellendi."}
+    # DÜZELTME: 'g.supabase' yerine 'supabase_client' parametresi eklendi
+    def delete_kullanici(self, supabase_client, sirket_id: int, kullanici_id_to_delete: int):
+        try:
+            # DÜZELTME: 'g.supabase' -> 'supabase_client'
+            kullanici_res = supabase_client.table('kullanicilar').select('id, rol') \
+                .eq('id', kullanici_id_to_delete) \
+                .eq('sirket_id', sirket_id) \
+                .single().execute()
 
-    except ValueError as ve:
-        raise ve 
-    except Exception as e:
-        logger.error(f"Kullanıcı (ID: {user_id}) güncellenirken hata: {e}", exc_info=True)
-        raise Exception(f"Kullanıcı güncellenirken sunucu hatası: {str(e)}")
+            if not kullanici_res.data:
+                raise ValueError("Kullanıcı bulunamadı veya bu işlem için yetkiniz yok.")
+
+            if kullanici_res.data['rol'] == UserRole.FIRMA_YETKILISI.value:
+                raise ValueError("Firma yetkilisi silinemez.")
+
+            # DÜZELTME: 'g.supabase' -> 'supabase_client'
+            supabase_client.table('kullanicilar').delete().eq('id', kullanici_id_to_delete).execute()
+            return True
+
+        except ValueError as ve:
+            raise ve
+        except Exception as e:
+            logger.error(f"Kullanıcı silinirken hata: {e}", exc_info=True)
+            raise Exception("Kullanıcı silinirken bir sunucu hatası oluştu.")
+
+    # DÜZELTME: 'g.supabase' yerine 'supabase_client' parametresi eklendi
+    def get_kullanici_detay(self, supabase_client, sirket_id: int, kullanici_id_to_get: int):
+        try:
+            # DÜZELTME: 'g.supabase' -> 'supabase_client'
+            kullanici_res = supabase_client.table('kullanicilar') \
+                .select('id, kullanici_adi, telefon_no, adres, rol, eposta') \
+                .eq('id', kullanici_id_to_get) \
+                .eq('sirket_id', sirket_id) \
+                .single().execute()
+
+            if not kullanici_res.data:
+                raise ValueError("Kullanıcı bulunamadı veya bu işlem için yetkiniz yok.")
+
+            kullanici_data = kullanici_res.data
+            atanmis_tedarikci_idler = []
+            if kullanici_data['rol'] == UserRole.TOPLAYICI.value:
+                # DÜZELTME: 'g.supabase' -> 'supabase_client'
+                atama_res = supabase_client.table('toplayici_tedarikci_atananlari') \
+                    .select('tedarikci_id') \
+                    .eq('toplayici_id', kullanici_id_to_get) \
+                    .execute()
+                atanmis_tedarikci_idler = [atama['tedarikci_id'] for atama in atama_res.data]
+
+            return {
+                "kullanici": kullanici_data,
+                "atanan_tedarikciler": atanmis_tedarikci_idler
+            }
+
+        except ValueError as ve:
+            raise ve
+        except Exception as e:
+            logger.error(f"Kullanıcı detayı alınırken hata: {e}", exc_info=True)
+            raise Exception("Kullanıcı detayı alınırken bir hata oluştu.")
+
+    # DÜZELTME: 'g.supabase' yerine 'supabase_client' parametresi eklendi
+    def update_kullanici(self, supabase_client, sirket_id: int, kullanici_id_to_update: int, data: dict):
+        try:
+            # DÜZELTME: 'g.supabase' -> 'supabase_client'
+            kullanici_res = supabase_client.table('kullanicilar').select('rol').eq('id', kullanici_id_to_update).eq('sirket_id', sirket_id).single().execute()
+            if not kullanici_res.data:
+                raise ValueError("Güncellenecek kullanıcı bulunamadı veya yetkiniz yok.")
+
+            mevcut_rol = kullanici_res.data['rol']
+            if mevcut_rol == UserRole.FIRMA_YETKILISI.value:
+                 raise ValueError("Firma yetkilisinin bilgileri buradan güncellenemez.")
+
+            guncellenecek_veri = {}
+            kullanici_adi_geldi = sanitize_input(data.get('kullanici_adi', ''))
+            if kullanici_adi_geldi:
+                # DÜZELTME: 'g.supabase' -> 'supabase_client'
+                mevcut_kullanici = supabase_client.table('kullanicilar').select('id').eq('kullanici_adi', kullanici_adi_geldi).neq('id', kullanici_id_to_update).execute()
+                if mevcut_kullanici.data:
+                    raise ValueError("Bu kullanıcı adı zaten başka bir kullanıcı tarafından kullanılıyor.")
+                guncellenecek_veri['kullanici_adi'] = kullanici_adi_geldi
+            else:
+                 raise ValueError("Kullanıcı adı boş bırakılamaz.")
+
+            guncellenecek_veri['telefon_no'] = sanitize_input(data.get('telefon_no')) or None
+            guncellenecek_veri['adres'] = sanitize_input(data.get('adres')) or None
+            guncellenecek_veri['eposta'] = sanitize_input(data.get('eposta')) or None
 
 
-# --- BU FONKSİYON GÜNCELLENDİ (delete_kullanici) ---
-def delete_kullanici(user_id):
-    """
-    Bir kullanıcıyı sistemden güvenli bir şekilde siler (Toplayıcı, Çiftçi vb.).
-    Bu fonksiyon, 'g.supabase' kullanarak GÜVENLİ RPC'yi çağırır.
-    
-    Sıralama çok önemlidir:
-    1. Önce 'cleanup_user_data' RPC'si çağrılarak tüm ilişkili veriler (Süt, Yem, Finans)
-       temizlenir (SET NULL) ve atamalar (Tanker, Tedarikçi) silinir.
-    2. Sonra 'kullanici_detaylari' tablosundan silinir.
-    3. En son 'auth.users' tablosundan (Supabase Auth) silinir.
-    """
-    try:
-        # 1. Adım: 'cleanup_user_data' SQL fonksiyonunu 'g.supabase' üzerinden çağır.
-        rpc_result = g.supabase.rpc('cleanup_user_data', {'p_auth_user_id': user_id}).execute()
-        
-        # RPC'den bir hata metni döndüyse bunu logla ve hata fırlat
-        if rpc_result.data and 'SQL cleanup hatasi' in rpc_result.data:
-            logger.error(f"SQL cleanup_user_data hatası (Auth ID: {user_id}): {rpc_result.data}")
-            raise Exception(f"SQL fonksiyon hatası: {rpc_result.data}")
+            if guncellenecek_veri:
+                # DÜZELTME: 'g.supabase' -> 'supabase_client'
+                supabase_client.table('kullanicilar').update(guncellenecek_veri).eq('id', kullanici_id_to_update).execute()
 
-        # 2. Adım: 'kullanici_detaylari' tablosundan 'g.supabase' ile sil.
-        g.supabase.table('kullanici_detaylari').delete().eq('id', user_id).execute()
+            yeni_sifre = data.get('sifre')
+            if yeni_sifre:
+                hashed_sifre = bcrypt.generate_password_hash(yeni_sifre).decode('utf-8')
+                # DÜZELTME: 'g.supabase' -> 'supabase_client'
+                supabase_client.table('kullanicilar').update({'sifre': hashed_sifre}).eq('id', kullanici_id_to_update).execute()
 
-        # 3. Adım: Supabase Authentication'dan 'g.supabase' ile kullanıcıyı sil.
-        g.supabase.auth.admin.delete_user(user_id)
+            if mevcut_rol == UserRole.TOPLAYICI.value and 'atanan_tedarikciler' in data:
+                yeni_atanan_idler = [int(tid) for tid in data.get('atanan_tedarikciler', []) if tid]
+                # DÜZELTME: 'g.supabase' -> 'supabase_client'
+                supabase_client.table('toplayici_tedarikci_atananlari').delete().eq('toplayici_id', kullanici_id_to_update).execute()
 
-        logger.info(f"Kullanıcı (Auth ID: {user_id}) başarıyla silindi.")
-        return {"success": True, "message": "Kullanıcı başarıyla silindi."}
+                if yeni_atanan_idler:
+                    # DÜZELTME: 'g.supabase' -> 'supabase_client'
+                    tedarikci_kontrol = supabase_client.table('tedarikciler') \
+                        .select('id', count='exact') \
+                        .eq('sirket_id', sirket_id) \
+                        .in_('id', yeni_atanan_idler) \
+                        .execute()
+                    if tedarikci_kontrol.count != len(yeni_atanan_idler):
+                        logger.warning(f"Firma Yetkilisi {sirket_id}, başka şirketin tedarikçisini atamaya çalıştı!")
+                        raise ValueError("Geçersiz tedarikçi seçimi yapıldı.")
+                    kayitlar = [{'toplayici_id': kullanici_id_to_update, 'tedarikci_id': tid} for tid in yeni_atanan_idler]
+                    # DÜZELTME: 'g.supabase' -> 'supabase_client'
+                    supabase_client.table('toplayici_tedarikci_atananlari').insert(kayitlar).execute()
 
-    except APIError as e:
-        # Veritabanı veya RPC çağrısı sırasında oluşan Postgrest hataları
-        logging.error(f"Kullanıcı silinirken Postgrest hatası (Auth ID: {user_id}): {e.message}", exc_info=True)
-        return {"success": False, "message": f"Veritabanı hatası: {e.message}"}
-    except Exception as e:
-        # Diğer tüm hatalar
-        logging.error(f"Kullanıcı silinirken genel hata (Auth ID: {user_id}): {e}", exc_info=True)
-        
-        if "User not found" in str(e):
-             logger.warning(f"Auth kullanıcısı {user_id} bulunamadı, muhtemelen daha önce silinmiş.")
-             return {"success": True, "message": "Kullanıcı zaten silinmiş veya bulunamadı."}
-        
-        return {"success": False, "message": "Kullanıcı silinirken beklenmedik bir hata oluştu."}
+            return True
 
-# Bu fonksiyon zaten 'g.supabase' kullandığı için doğruydu.
-def get_kullanicilar_by_sirket_id(sirket_id):
-    """Bir şirkete bağlı tüm kullanıcıları (çiftçi, toplayıcı, muhasebeci) listeler."""
-    try:
-        response = g.supabase.table('kullanici_detaylari') \
-            .select('id, rol, isim, kullanici_db_id') \
-            .eq('sirket_id', sirket_id) \
-            .neq('rol', UserRole.FIRMA_YETKILISI.value) \
-            .neq('rol', UserRole.ADMIN.value) \
-            .order('isim', desc=False) \
-            .execute()
-        
-        return response.data
-    except Exception as e:
-        logger.error(f"Şirket kullanıcıları alınırken hata (Sirket ID: {sirket_id}): {e}", exc_info=True)
-        raise Exception(f"Kullanıcılar alınırken sunucu hatası: {str(e)}")
+        except ValueError as ve:
+            raise ve
+        except APIError as e:
+             logger.error(f"Kullanıcı güncellenirken API hatası: {e.message}", exc_info=True)
+             if 'unique constraint "kullanicilar_kullanici_adi_key"' in e.message:
+                 raise ValueError("Bu kullanıcı adı zaten başka bir kullanıcı tarafından kullanılıyor.")
+             raise Exception(f"Veritabanı hatası: {e.message}")
+        except Exception as e:
+            logger.error(f"Kullanıcı güncellenirken genel hata: {e}", exc_info=True)
+            raise Exception("Kullanıcı güncellenirken bir sunucu hatası oluştu.")
 
-# Bu fonksiyon zaten 'g.supabase' kullandığı için doğruydu.
-def reset_kullanici_sifre(kullanici_id_to_reset, yeni_sifre_plain):
-    """
-    Firma yetkilisinin, kendi şirketindeki bir kullanıcının şifresini sıfırlamasını sağlar.
-    """
-    try:
-        istek_yapan_sirket_id = g.user.sirket_id
-        
-        kullanici_res = g.supabase.table('kullanicilar') \
-            .select('id, sirket_id, rol') \
-            .eq('id', kullanici_id_to_reset) \
-            .eq('sirket_id', istek_yapan_sirket_id) \
-            .maybe_single() \
-            .execute()
 
-        if not kullanici_res.data:
-            raise ValueError("Kullanıcı bulunamadı veya bu kullanıcı üzerinde işlem yapma yetkiniz yok.")
+    # DÜZELTME: 'g.supabase' yerine 'supabase_client' parametresi eklendi
+    def set_ciftci_password(self, supabase_client, sirket_id: int, kullanici_id_to_reset: int, yeni_sifre_plain: str):
+        try:
+            if not yeni_sifre_plain:
+                raise ValueError("Yeni şifre boş bırakılamaz.")
 
-        gecerli_roller = [UserRole.CIFCI.value, UserRole.TOPLAYICI.value, UserRole.MUHASEBECI.value]
-        if kullanici_res.data['rol'] not in gecerli_roller:
-            raise ValueError("Sadece çiftçi, toplayıcı veya muhasebeci rolündeki kullanıcıların şifresi değiştirilebilir.")
+            # DÜZELTME: 'g.supabase' -> 'supabase_client'
+            kullanici_res = supabase_client.table('kullanicilar') \
+                .select('rol') \
+                .eq('id', kullanici_id_to_reset) \
+                .eq('sirket_id', sirket_id) \
+                .single().execute()
 
-        hashed_sifre = bcrypt.generate_password_hash(yeni_sifre_plain).decode('utf-8')
+            if not kullanici_res.data:
+                raise ValueError("Kullanıcı bulunamadı veya yetkiniz yok.")
+                
+            gecerli_roller = [UserRole.CIFCI.value, UserRole.TOPLAYICI.value, UserRole.MUHASEBECI.value]
+            if kullanici_res.data['rol'] not in gecerli_roller:
+                raise ValueError("Sadece çiftçi, toplayıcı veya muhasebeci rolündeki kullanıcıların şifresi değiştirilebilir.")
 
-        g.supabase.table('kullanicilar') \
-            .update({'sifre': hashed_sifre}) \
-            .eq('id', kullanici_id_to_reset) \
-            .execute()
+            hashed_sifre = bcrypt.generate_password_hash(yeni_sifre_plain).decode('utf-8')
 
-        logger.info(f"Kullanıcı (ID: {kullanici_id_to_reset}) şifresi firma yetkilisi tarafından güncellendi.")
-        return True
+            # DÜZELTME: 'g.supabase' -> 'supabase_client'
+            supabase_client.table('kullanicilar') \
+                .update({'sifre': hashed_sifre}) \
+                .eq('id', kullanici_id_to_reset) \
+                .execute()
 
-    except ValueError as ve:
-        raise ve
-    except Exception as e:
-        logger.error(f"Kullanıcı şifresi ayarlanırken hata: {e}", exc_info=True)
-        raise Exception(f"Kullanıcı şifresi sıfırlanırken sunucu hatası: {str(e)}")
+            logger.info(f"Kullanıcı (ID: {kullanici_id_to_reset}) şifresi firma yetkilisi tarafından güncellendi.")
+            return True
+
+        except ValueError as ve:
+            raise ve 
+        except Exception as e:
+            logger.error(f"Kullanıcı şifresi ayarlanırken hata: {e}", exc_info=True)
+            raise Exception("Şifre ayarlanırken bir sunucu hatası oluştu.")
+            
+    set_user_password = set_ciftci_password
+
+
+firma_service = FirmaService()
