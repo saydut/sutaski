@@ -1,232 +1,289 @@
 # blueprints/rapor.py
+# RLS ve yeni servis yapısına göre güncellendi.
 
-from flask import Blueprint, jsonify, request, session, send_file, current_app, render_template, g
-# YENİ: firma_yetkilisi_required eklendi
-from decorators import login_required, lisans_kontrolu, firma_yetkilisi_required
-from extensions import turkey_tz
+import logging
+from flask import (
+    Blueprint, jsonify, render_template, request, g, Response,
+    make_response, current_app, flash
+)
+# 'session' import'u kaldırıldı
+from decorators import login_required, role_required
+from extensions import turkey_tz, supabase_client # Artık g.supabase yerine supabase_client
 from utils import parse_supabase_timestamp
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import io
 import csv
 import calendar
-from weasyprint import HTML
+from weasyprint import HTML, CSS
 from decimal import Decimal, getcontext
-import logging
-# GÜNCELLEME: Yeni fonksiyon import edildi
-from services.report_service import (
-    generate_hesap_ozeti_pdf, 
-    generate_mustahsil_makbuzu_pdf, 
-    get_profitability_report,
-    generate_aylik_rapor_pdf # <-- EKSİK OLAN BUYDU
-)
 
-rapor_bp = Blueprint('rapor', __name__, url_prefix='/api/rapor')
+# Güncellenmiş RLS'e uyumlu servisleri import et
+from services.report_service import report_service 
+from services.tedarikci_service import tedarikci_service
+# Toplayıcı listesi için tanker servisini kullanmak daha mantıklı (orada vardı)
+from services.tanker_service import tanker_service 
+from constants import UserRole # Rol sabitlerini kullanmak için
+
 logger = logging.getLogger(__name__)
+rapor_bp = Blueprint('rapor', __name__, url_prefix='/rapor')
 getcontext().prec = 10 
 
-@rapor_bp.route('/gunluk_ozet')
+@rapor_bp.route('/')
 @login_required
-def get_gunluk_ozet():
+@role_required('firma_admin') # Eski decorator'lar yerine
+def rapor_sayfasi():
+    """Raporlar ana sayfasını render eder."""
     try:
-        sirket_id = session['user']['sirket_id']
-        tarih_str = request.args.get('tarih')
-        target_date_str = tarih_str if tarih_str else datetime.now(turkey_tz).date().isoformat()
-
-        response = g.supabase.rpc('get_daily_summary_rpc', {
-            'target_sirket_id': sirket_id,
-            'target_date': target_date_str
-        }).execute()
+        # Rapor filtreleri için toplayıcı ve tedarikçi listelerini RLS ile al
+        # sirket_id parametresi GEREKMEZ
+        tedarikciler, error1 = tedarikci_service.get_all_for_dropdown()
+        # 'get_collectors_for_assignment' toplayıcıları RLS ile getirir
+        toplayicilar, error2 = tanker_service.get_collectors_for_assignment() 
         
-        summary = response.data[0] if response.data else {'toplam_litre': 0, 'girdi_sayisi': 0}
-        return jsonify(summary)
+        if error1 or error2:
+             flash(f"Filtre verileri yüklenemedi: {error1 or ''} {error2 or ''}", "danger")
+
+        return render_template(
+            'raporlar.html', 
+            tedarikciler=tedarikciler or [], 
+            toplayicilar=toplayicilar or []
+        )
     except Exception as e:
-        logger.error(f"Günlük özet (RPC) alınırken hata: {e}", exc_info=True)
-        return jsonify({"error": "Özet hesaplanırken sunucuda bir hata oluştu."}), 500
-    
-@rapor_bp.route('/haftalik_ozet')
+        logger.error(f"Rapor sayfası (filtreler) yüklenirken hata: {e}", exc_info=True)
+        flash(f"Rapor sayfası yüklenirken hata: {str(e)}", "danger")
+        return render_template('raporlar.html', tedarikciler=[], toplayicilar=[])
+
+# --- API ENDPOINT'LERİ (JSON VERİ DÖNDÜRENLER) ---
+# Not: Ana panelde (index.html) kullanılan /gunluk_ozet, /haftalik_ozet, 
+# /tedarikci_dagilimi rotaları blueprints/main.py içinde olmalıdır.
+# Bu dosyadaki eski rotaları (bu yüzden) kaldırıyorum.
+
+@rapor_bp.route('/api/karlilik', methods=['GET'])
 @login_required
-def get_haftalik_ozet():
-    try:
-        sirket_id = session['user']['sirket_id']
-        response = g.supabase.rpc('get_weekly_summary', {'p_sirket_id': sirket_id}).execute()
-        return jsonify(response.data)
-    except Exception as e:
-        logger.error(f"Haftalık özet (RPC) alınırken hata: {e}", exc_info=True)
-        return jsonify({"error": "Haftalık özet alınırken bir sunucu hatası oluştu."}), 500
-
-
-
-@rapor_bp.route('/tedarikci_dagilimi')
-@login_required
-def get_tedarikci_dagilimi():
-    try:
-        sirket_id = session['user']['sirket_id']
-        
-        # YENİ: URL'den 'period' parametresini al (örn: ?period=daily)
-        # Varsayılan olarak 'monthly' (eski davranış) ayarla
-        period = request.args.get('period', 'monthly') 
-        
-        # RPC'yi yeni parametreyle çağır
-        response = g.supabase.rpc('get_supplier_distribution', {
-            'p_sirket_id': sirket_id,
-            'p_period': period  # Parametreyi SQL'e ilet
-        }).execute()
-        
-        dagilim_verisi = response.data
-        labels = [item['name'] for item in dagilim_verisi]
-        data = [float(item['litre']) for item in dagilim_verisi]
-        return jsonify({'labels': labels, 'data': data})
-    except Exception as e:
-        logger.error(f"Tedarikçi dağılımı (RPC) alınırken hata: {e}", exc_info=True)
-        return jsonify({"error": "Tedarikçi dağılımı alınırken bir sunucu hatası oluştu."}), 500
-
-@rapor_bp.route('/detayli_rapor', methods=['GET'])
-@login_required
-def get_detayli_rapor():
-    try:
-        sirket_id = session['user']['sirket_id']
-        start_date_str = request.args.get('baslangic')
-        end_date_str = request.args.get('bitis')
-
-        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-
-        if start_date > end_date or (end_date - start_date).days > 90:
-            return jsonify({"error": "Geçersiz tarih aralığı. En fazla 90 günlük rapor alabilirsiniz."}), 400
-
-        response = g.supabase.rpc('get_detailed_report_data', {
-            'p_sirket_id': sirket_id, 'p_start_date': start_date_str, 'p_end_date': end_date_str
-        }).execute()
-        
-        # GÜNCELLEME: RPC'den gelen veri artık data[0] içinde değil, direkt data'dadır.
-        veri = response.data
-        if not veri:
-             return jsonify({'chartData': {'labels': [], 'data': []}, 'summaryData': {}, 'supplierBreakdown': []})
-
-        daily_totals = veri.get('daily_totals', [])
-        turkce_aylar = {"01":"Oca","02":"Şub","03":"Mar","04":"Nis","05":"May","06":"Haz","07":"Tem","08":"Ağu","09":"Eyl","10":"Eki","11":"Kas","12":"Ara"}
-        labels = [f"{gun['gun'][8:]} {turkce_aylar.get(gun['gun'][5:7], '')}" for gun in daily_totals]
-        data = [float(gun['toplam']) for gun in daily_totals]
-        
-        total_litre = sum(Decimal(str(item.get('toplam', '0'))) for item in daily_totals)
-        day_count = (end_date - start_date).days + 1
-        
-        summary = {
-            'totalLitre': float(total_litre), 
-            'averageDailyLitre': float(total_litre / day_count if day_count > 0 else 0), 
-            'dayCount': day_count, 
-            'entryCount': veri.get('total_entry_count', 0)
-        }
-        
-        return jsonify({
-            'chartData': {'labels': labels, 'data': data}, 
-            'summaryData': summary, 
-            'supplierBreakdown': veri.get('supplier_breakdown', [])
-        })
-        
-    except Exception as e:
-        logger.error(f"Detaylı rapor alınırken hata: {e}", exc_info=True)
-        return jsonify({"error": "Detaylı rapor oluşturulurken bir sunucu hatası oluştu."}), 500
-
-# --- KÂRLILIK RAPORU ENDPOINT'İ ---
-@rapor_bp.route('/karlilik', methods=['GET'])
-@login_required
-@firma_yetkilisi_required # Sadece firma yetkilisi/admin görebilir
+@role_required('firma_admin')
 def get_karlilik_raporu_api():
-    """
-    Belirli bir tarih aralığı için şirketin genel kârlılık durumunu
-    RPC fonksiyonu (get_profitability_report) aracılığıyla getirir.
-    """
+    """Karlılık raporu verilerini RLS kullanarak JSON olarak döndürür."""
     try:
-        sirket_id = session['user']['sirket_id']
-        start_date_str = request.args.get('baslangic')
-        end_date_str = request.args.get('bitis')
-
-        if not start_date_str or not end_date_str:
-            return jsonify({"error": "Başlangıç ve bitiş tarihleri zorunludur."}), 400
-
-        # Servis fonksiyonunu çağır (bu fonksiyon zaten RPC'yi çağırıyor)
-        report_data = get_profitability_report(sirket_id, start_date_str, end_date_str)
-
-        if not report_data:
-            # RPC'den veya servisten veri gelmezse varsayılan boş veriyi döndür
-            default_data = {
-                "toplam_sut_geliri": "0.00",
-                "toplam_finans_tahsilati": "0.00",
-                "toplam_yem_gideri": "0.00",
-                "toplam_finans_odemesi": "0.00",
-                "toplam_genel_masraf": "0.00",
-                "toplam_gelir": "0.00",
-                "toplam_gider": "0.00",
-                "net_kar": "0.00"
-            }
-            return jsonify(default_data)
-            
-        # Decimal'leri string'e çevirerek JSON'a uygun hale getir
-        json_uyumlu_data = {k: str(v) for k, v in report_data.items()}
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
         
-        return jsonify(json_uyumlu_data)
+        if not all([start_date, end_date]):
+            raise ValueError("Başlangıç ve bitiş tarihleri zorunludur.")
+            
+        # sirket_id parametresi KALDIRILDI
+        rapor_data, error = report_service.get_karlilik_raporu(start_date, end_date)
+        if error:
+            return jsonify({"error": error}), 500
+            
+        return jsonify(rapor_data)
         
     except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400 # Geçersiz tarih formatı vb.
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        logger.error(f"Kârlılık raporu alınırken hata: {e}", exc_info=True)
-        return jsonify({"error": "Kârlılık raporu oluşturulurken bir sunucu hatası oluştu."}), 500
-# --- YENİ ENDPOINT SONU ---
+        logger.error(f"Karlılık raporu API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Karlılık raporu alınamadı."}), 500
 
-
-# --- AYLIK PDF ROTASI GÜNCELLENDİ ---
-@rapor_bp.route('/aylik_pdf')
+@rapor_bp.route('/api/tedarikci_ozet', methods=['GET'])
 @login_required
-@lisans_kontrolu
-def aylik_rapor_pdf():
-    """
-    Aylık genel özet raporu için PDF servisini çağırır.
-    """
+@role_required('firma_admin')
+def get_tedarikci_ozet_raporu_api():
+    """Tedarikçi Özet Raporu (Aylık Rapor) verilerini RLS ile JSON olarak döndürür."""
     try:
-        sirket_id = session['user']['sirket_id']
-        sirket_adi = session['user'].get('sirket_adi', 'Bilinmeyen Şirket')
-        ay = int(request.args.get('ay'))
-        yil = int(request.args.get('yil'))
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
         
-        # PDF oluşturma servisini çağır (Artık import edildi)
-        return generate_aylik_rapor_pdf(sirket_id, sirket_adi, ay, yil)
-
-    except ValueError as ve: # Servisten gelen hataları yakala (örn: PDF oluşturma hatası)
-        logger.error(f"Aylık PDF raporu oluşturulurken (ValueError) hata: {ve}", exc_info=True)
-        return jsonify({"error": str(ve)}), 500
+        if not all([start_date, end_date]):
+            raise ValueError("Başlangıç ve bitiş tarihleri zorunludur.")
+            
+        # sirket_id parametresi KALDIRILDI
+        rapor_data, error = report_service.get_tedarikci_ozet_raporu(start_date, end_date)
+        if error:
+            return jsonify({"error": error}), 500
+            
+        return jsonify(rapor_data)
+        
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        logger.error(f"Aylık PDF raporu oluşturulurken (Genel) hata: {e}", exc_info=True)
-        return jsonify({"error": "PDF raporu oluşturulurken bir sunucu hatası oluştu."}), 500
-# --- GÜNCELLEME SONU ---
+        logger.error(f"Tedarikçi Özet Raporu API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Tedarikçi özet raporu alınamadı."}), 500
+
+@rapor_bp.route('/api/detayli_sut_raporu', methods=['GET'])
+@login_required
+@role_required('firma_admin')
+def get_detayli_sut_raporu_api():
+    """Detaylı Süt Raporu verilerini (filtreli) RLS ile JSON olarak döndürür."""
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        tedarikci_id = request.args.get('tedarikci_id', type=int) or None
+        toplayici_id = request.args.get('toplayici_id', type=str) or None # Artık UUID (string)
+        
+        if not all([start_date, end_date]):
+            raise ValueError("Başlangıç ve bitiş tarihleri zorunludur.")
+            
+        # sirket_id parametresi KALDIRILDI
+        rapor_data, error = report_service.get_detayli_sut_raporu(start_date, end_date, tedarikci_id, toplayici_id)
+        if error:
+             return jsonify({"error": error}), 500
+             
+        return jsonify(rapor_data)
+        
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        logger.error(f"Detaylı Süt Raporu API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Detaylı süt raporu alınamadı."}), 500
+
+
+# --- PDF İndirme Rotaları ---
+
+@rapor_bp.route('/download/tedarikci_ozet', methods=['GET'])
+@login_required
+@role_required('firma_admin')
+def download_tedarikci_ozet_pdf():
+    """Tedarikçi Özet Raporunu (Aylık Rapor) PDF olarak indirir."""
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        if not all([start_date, end_date]):
+            return "Başlangıç ve bitiş tarihleri zorunludur.", 400
+            
+        # 1. Rapor verisini al (sirket_id olmadan)
+        rapor_data, error = report_service.get_tedarikci_ozet_raporu(start_date, end_date)
+        if error:
+            return f"Rapor verisi alınamadı: {error}", 500
+        
+        # 2. Şirket adını RLS ile al (g.supabase -> supabase_client)
+        # RLS politikamız 'sirketler' tablosunda sadece 'id = g.profile['sirket_id']'
+        # olan kaydı görmeye izin veriyordu.
+        sirket_info = supabase_client.table('sirketler').select('sirket_adi').single().execute()
+        sirket_adi = sirket_info.data['sirket_adi'] if sirket_info.data else "Şirket Adı Bulunamadı"
+        
+        tarih_araligi = f"{datetime.strptime(start_date, '%Y-%m-%d').strftime('%d.%m.%Y')} - {datetime.strptime(end_date, '%Y-%m-%d').strftime('%d.%m.%Y')}"
+        
+        # 3. PDF için HTML'i render et
+        # Bu, eski 'generate_aylik_rapor_pdf' fonksiyonunun mantığıdır
+        html = render_template(
+            'aylik_rapor_pdf.html', 
+            rapor_data=rapor_data, 
+            sirket_adi=sirket_adi, 
+            tarih_araligi=tarih_araligi
+        )
+        
+        # 4. PDF oluştur
+        pdf = HTML(string=html).write_pdf(stylesheets=[CSS(string='@page { size: A4 landscape; margin: 1cm; } body { font-family: sans-serif; } table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid #ddd; padding: 8px; text-align: left; } th { background-color: #f2f2f2; }')])
+        
+        response = make_response(pdf)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename=Tedarikci_Ozet_Raporu_{start_date}_{end_date}.pdf'
+        return response
+        
+    except Exception as e:
+        logger.error(f"Tedarikçi Özet PDF indirme hatası: {e}", exc_info=True)
+        return f"PDF oluşturulurken hata: {str(e)}", 500
+
+
+@rapor_bp.route('/download/mustahsil_makbuzu/<int:tedarikci_id>', methods=['GET'])
+@login_required
+@role_required('firma_admin')
+def download_mustahsil_makbuzu(tedarikci_id):
+    """Müstahsil Makbuzunu (Detaylı Süt Raporu) PDF olarak indirir."""
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+
+        if not all([start_date, end_date]):
+            return "Başlangıç ve bitiş tarihleri zorunludur.", 400
+
+        # 1. Rapor verisini al (sirket_id olmadan)
+        rapor_data, error = report_service.get_detayli_sut_raporu(start_date, end_date, tedarikci_id, None)
+        if error:
+             return f"Rapor verisi alınamadı: {error}", 500
+        
+        # 2. Şirket ve Tedarikçi bilgilerini RLS ile al (g.supabase -> supabase_client)
+        sirket_info = supabase_client.table('sirketler').select('sirket_adi, adres, vergi_kimlik_no').single().execute()
+        sirket_data = sirket_info.data or {}
+        
+        tedarikci_info = supabase_client.table('tedarikciler').select('isim, tc_no, adres').eq('id', tedarikci_id).single().execute()
+        tedarikci_data = tedarikci_info.data or {}
+        
+        if not tedarikci_data:
+             return "Tedarikçi bilgisi bulunamadı veya görme yetkiniz yok.", 404
+
+        # 3. Tarihleri formatla
+        tarih_araligi = f"{datetime.strptime(start_date, '%Y-%m-%d').strftime('%d.%m.%Y')} - {datetime.strptime(end_date, '%Y-%m-%d').strftime('%d.%m.%Y')}"
+        
+        # 4. Toplamları hesapla (Python'da)
+        toplam_litre = sum(Decimal(item.get('litre', 0)) for item in rapor_data)
+        toplam_tutar = sum(Decimal(item.get('toplam_tutar', 0)) for item in rapor_data)
+
+        # 5. PDF için HTML'i render et
+        # Bu, eski 'generate_mustahsil_makbuzu_pdf' fonksiyonunun mantığıdır
+        html = render_template(
+            'mustahsil_makbuzu_pdf.html', 
+            rapor_data=rapor_data, 
+            sirket=sirket_data,
+            tedarikci=tedarikci_data,
+            tarih_araligi=tarih_araligi,
+            toplam_litre=toplam_litre,
+            toplam_tutar=toplam_tutar,
+            tarih=datetime.now(turkey_tz).strftime('%d.%m.%Y')
+        )
+        
+        # 6. PDF Oluştur
+        pdf_file = HTML(string=html).write_pdf(stylesheets=[CSS(string='@page { size: A4 portrait; margin: 1cm; } body { font-family: sans-serif; }')])
+        
+        response = make_response(pdf_file)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename=Mustahsil_{tedarikci_data.get("isim", "Tedarikci")}_{start_date}.pdf'
+        return response
+
+    except Exception as e:
+        logger.error(f"Müstahsil Makbuzu PDF indirme hatası: {e}", exc_info=True)
+        return f"PDF oluşturulurken hata: {str(e)}", 500
 
 @rapor_bp.route('/export_csv')
 @login_required
+@role_required('firma_admin')
 def export_csv():
+    """Günlük süt girdilerini CSV olarak dışa aktarır."""
     try:
-        sirket_id = session['user']['sirket_id']
         secilen_tarih_str = request.args.get('tarih')
-        query = g.supabase.table('sut_girdileri').select('taplanma_tarihi,tedarikciler(isim),litre,fiyat,kullanicilar(kullanici_adi)').eq('sirket_id', sirket_id)
+        
+        # g.supabase -> supabase_client
+        # .eq('sirket_id', ...) FİLTRESİ KALDIRILDI
+        # 'kullanicilar(kullanici_adi)' -> 'profiller(kullanici_adi)'
+        query = supabase_client.table('sut_girdileri').select(
+            'taplanma_tarihi, tedarikciler(isim), litre, fiyat, profiller(kullanici_adi)'
+        )
+        
         if secilen_tarih_str:
             target_date = datetime.strptime(secilen_tarih_str, '%Y-%m-%d').date()
             start_utc = turkey_tz.localize(datetime.combine(target_date, datetime.min.time())).astimezone(pytz.utc).isoformat()
             end_utc = turkey_tz.localize(datetime.combine(target_date, datetime.max.time())).astimezone(pytz.utc).isoformat()
             query = query.gte('taplanma_tarihi', start_utc).lte('taplanma_tarihi', end_utc)
+            
         data = query.order('id', desc=True).execute().data
+        
         output = io.StringIO()
         writer = csv.writer(output, delimiter=';')
         writer.writerow(['Tarih', 'Saat', 'Tedarikçi', 'Litre', 'Birim Fiyat (TL)', 'Tutar (TL)', 'Toplayan Kişi'])
+        
         for row in data:
             parsed_date = parse_supabase_timestamp(row.get('taplanma_tarihi'))
             formatli_tarih = parsed_date.astimezone(turkey_tz).strftime('%d.%m.%Y') if parsed_date else ''
             formatli_saat = parsed_date.astimezone(turkey_tz).strftime('%H:%M') if parsed_date else ''
             tedarikci_adi = row.get('tedarikciler', {}).get('isim', 'Bilinmiyor')
-            toplayan_kisi = row.get('kullanicilar', {}).get('kullanici_adi', 'Bilinmiyor')
+            # 'kullanicilar' -> 'profiller'
+            toplayan_kisi = row.get('profiller', {}).get('kullanici_adi', 'Bilinmiyor') 
             litre = Decimal(str(row.get('litre','0')))
             fiyat = Decimal(str(row.get('fiyat','0')))
             tutar = litre * fiyat
             writer.writerow([ formatli_tarih, formatli_saat, tedarikci_adi, str(litre).replace('.',','), str(fiyat).replace('.',','), str(tutar).replace('.',','), toplayan_kisi ])
+            
         output.seek(0)
         filename = f"{secilen_tarih_str}_sut_raporu.csv" if secilen_tarih_str else "toplu_sut_raporu.csv"
         return send_file(io.BytesIO(output.getvalue().encode('utf-8-sig')), mimetype='text/csv', as_attachment=True, download_name=filename)
@@ -234,10 +291,5 @@ def export_csv():
         logger.error(f"CSV dışa aktarılırken hata: {e}", exc_info=True)
         return jsonify({"error": "CSV dosyası oluşturulurken bir sunucu hatası oluştu."}), 500
 
-# PDF fonksiyonunu `report_service.py`'den düzgün import etmek için
-# `aylik_rapor_pdf` fonksiyonunu düzenleyelim (eğer orada değilse).
-# NOT: `report_service.py` dosyanı inceledim,
-# `generate_aylik_rapor_pdf` adında bir fonksiyon yok, sadece `generate_hesap_ozeti_pdf` var.
-# `aylik_rapor_pdf` içindeki mantığı olduğu gibi bırakıyorum, çünkü `report_service.py`
-# içinde bu işlevi yapan genel bir fonksiyon yok, sadece tedarikçi bazlı var.
-# Bu yüzden yukarıdaki `get_profitability_report` import'u ana değişiklik.
+# Eski 'generate_...' PDF fonksiyonları artık servis dosyasında değil,
+# bu dosyadaki '/download/...' rotalarının içinde yer alıyor.

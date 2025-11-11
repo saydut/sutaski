@@ -1,184 +1,167 @@
 # blueprints/firma.py
 
 import logging
-# DÜZELTME: 'g' objesini ve 'session'ı kullanmak için import ediyoruz
-from flask import Blueprint, jsonify, render_template, request, session, g 
-from decorators import login_required, lisans_kontrolu, role_required
+from flask import Blueprint, jsonify, render_template, request, g, flash
+# 'session' import'u kaldırıldı
+from decorators import login_required, role_required 
 from constants import UserRole 
-
-# DÜZELTME: Artık 'FirmaService' (Class) ve 'tedarikci_service' (objesini) import ediyoruz
-# Döngüsel İçe Aktarma hatasını (ImportError) çözmek için:
-# 'FirmaService'in kendisini (Class) import ediyoruz, objesini (instance) değil.
-from services.firma_service import FirmaService 
-from services.tedarikci_service import tedarikci_service # Bunun 'g' kullanmadığını varsayıyoruz
+# Servis objelerini (instance) direkt import ediyoruz
+from services.firma_service import firma_service
+# tedarikci_service'e de ihtiyacımız olacak (atama verileri için)
+from services.tedarikci_service import tedarikci_service 
 
 logger = logging.getLogger(__name__)
 firma_bp = Blueprint('firma', __name__, url_prefix='/firma')
 
 @firma_bp.route('/yonetim')
 @login_required
-@lisans_kontrolu # Eksik olan decorator'ı (artık decorators.py'de) çağırıyoruz
-@role_required(UserRole.FIRMA_YETKILISI) # Sadece firma yetkilisi girebilir
+# Eski decorator'lar yerine 'firma_admin' rolünü kullanıyoruz
+# 'UserRole.FIRMA_YETKILISI.value' yerine SQL'de tanımladığımız 'firma_admin' rolünü kullanalım.
+@role_required('firma_admin') 
 def firma_yonetim_sayfasi():
-    """Firma yetkilisinin kullanıcıları yönettiği arayüz sayfasını render eder."""
+    """Firma yetkilisinin personeli ve atamaları yönettiği arayüz sayfasını render eder."""
+    # Sayfa yüklenirken veri çekmiyoruz, JS halledecek.
     return render_template('firma_yonetimi.html')
 
-# --- API ROTALARI ---
+# --- API ROTALARI: PERSONEL (KULLANICI) YÖNETİMİ ---
 
-@firma_bp.route('/api/yonetim_data', methods=['GET'])
+@firma_bp.route('/api/personel', methods=['GET'])
 @login_required
-@role_required(UserRole.FIRMA_YETKILISI)
-def get_yonetim_data_api():
-    """Yönetim sayfası için kullanıcı listesini getirir."""
-    # DÜZELTME: Servis objesini (instance) fonksiyon içinde oluşturuyoruz
-    firma_service_instance = FirmaService()
+@role_required('firma_admin')
+def get_personel_api():
+    """Yönetim sayfası için personel listesini (profiller) RLS kullanarak getirir."""
     try:
-        sirket_id = session['user']['sirket_id']
+        # sirket_id parametresi KALDIRILDI.
+        personel_listesi, error = firma_service.get_personel_listesi()
+        if error:
+            return jsonify({"error": error}), 500
         
-        # DÜZELTME: Servise 'g.supabase' istemcisini parametre olarak veriyoruz
-        data = firma_service_instance.get_yonetim_data(g.supabase, sirket_id)
-        
-        # --- ANA DÜZELTME (Format Hatası): ---
-        # JavaScript bir DİZİ ([...]) bekliyor. Biz 'data' objesini değil,
-        # içindeki 'kullanicilar' DİZİSİNİ yollamalıyız.
-        return jsonify(data["kullanicilar"])
-        # --- DÜZELTME SONU ---
-        
+        return jsonify(personel_listesi)
     except Exception as e:
-        logger.error(f"Firma yönetim verileri alınırken hata: {e}", exc_info=True)
-        return jsonify({"error": f"Yönetim verileri alınamadı: {str(e)}"}), 500
+        logger.error(f"Firma personel verileri alınırken hata: {e}", exc_info=True)
+        return jsonify({"error": f"Personel verileri alınamadı: {str(e)}"}), 500
 
-# --- DÜZELTME: JS DOSYASIYLA UYUM ---
-# static/js/firma_yonetimi.js dosyası 3 farklı URL'e POST isteği atıyor:
-# 1. /api/toplayici_ekle
-# 2. /api/ciftci_ekle
-# 3. /api/kullanici_ekle (muhasebeci için)
-# Bu 3 rotayı da karşılayan GENEL BİR 'add_kullanici_api' fonksiyonu oluşturuyoruz.
-
-@firma_bp.route('/api/toplayici_ekle', methods=['POST'])
-@firma_bp.route('/api/ciftci_ekle', methods=['POST'])
-@firma_bp.route('/api/kullanici_ekle', methods=['POST'])
+@firma_bp.route('/api/personel/ekle', methods=['POST'])
 @login_required
-@role_required(UserRole.FIRMA_YETKILISI)
-def add_kullanici_api(): 
-    """Yeni bir kullanıcı (toplayıcı, çiftçi, muhasebeci) ekler."""
-    
-    # DÜZELTME: Servis objesini fonksiyon içinde oluşturuyoruz
-    firma_service_instance = FirmaService()
+@role_required('firma_admin')
+def add_personel_api(): 
+    """
+    Yeni bir personel (toplayıcı veya çiftçi) ekler.
+    Bu işlem hem Auth'ta hem de profiller tablosunda kayıt oluşturur.
+    JS tarafı 'rol' ('toplayici' or 'ciftci'), 'email', 'password', 'kullanici_adi' göndermelidir.
+    """
     try:
-        sirket_id = session['user']['sirket_id']
         data = request.get_json()
         
-        # DÜZELTME: Servise 'g.supabase' istemcisini parametre olarak veriyoruz
-        # services/firma_service.py içindeki 'add_kullanici' fonksiyonu
-        # 'rol'ü 'data' içinden alacak şekilde güncellendi.
-        yeni_kullanici = firma_service_instance.add_kullanici(g.supabase, sirket_id, data)
+        # Rolü JSON'dan al, varsayılan 'toplayici'
+        rol_tipi = data.get('rol', UserRole.TOPLAYICI.value) 
         
-        # Frontend'in (firma_yonetimi.js) beklediği format (result.data)
-        return jsonify({"message": "Kullanıcı başarıyla eklendi.", "data": yeni_kullanici}), 201
+        # sirket_id ve g.supabase parametreleri KALDIRILDI
+        yeni_personel, error = firma_service.create_personel_user(data, rol_tipi)
         
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
+        if error:
+            return jsonify({"error": error}), 400
+        
+        return jsonify({"message": "Personel başarıyla eklendi.", "data": yeni_personel}), 201
+        
     except Exception as e:
-        logger.error(f"Kullanıcı ekleme API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Kullanıcı eklenirken bir sunucu hatası oluştu."}), 500
+        logger.error(f"Personel ekleme API hatası: {e}", exc_info=True)
+        return jsonify({"error": f"Personel eklenirken bir sunucu hatası oluştu: {str(e)}"}), 500
 
 
-@firma_bp.route('/api/kullanici_sil/<int:kullanici_id>', methods=['DELETE'])
+@firma_bp.route('/api/personel/sil/<string:kullanici_id_uuid>', methods=['DELETE'])
 @login_required
-@role_required(UserRole.FIRMA_YETKILISI)
-def delete_kullanici_api(kullanici_id):
-    """Bir kullanıcıyı (toplayıcı/muhasebeci/çiftçi) siler."""
-    # DÜZELTME: Servis objesini fonksiyon içinde oluşturuyoruz
-    firma_service_instance = FirmaService()
+@role_required('firma_admin')
+def delete_personel_api(kullanici_id_uuid):
+    """Bir personeli (Auth ve Profil) RLS kullanarak siler."""
     try:
-        sirket_id = session['user']['sirket_id']
+        # sirket_id ve g.supabase parametreleri KALDIRILDI
+        # ID artık integer değil, UUID (string)
+        success, error = firma_service.delete_personel_user(kullanici_id_uuid)
         
-        # DÜZELTME: Servise 'g.supabase' istemcisini parametre olarak veriyoruz
-        firma_service_instance.delete_kullanici(g.supabase, sirket_id, kullanici_id)
-        
-        return jsonify({"message": "Kullanıcı başarıyla silindi."})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 404
+        if error:
+             return jsonify({"error": error}), 400
+             
+        return jsonify({"message": "Personel başarıyla silindi."})
     except Exception as e:
-        logger.error(f"Kullanıcı silme API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Kullanıcı silinirken bir sunucu hatası oluştu."}), 500
+        logger.error(f"Personel silme API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Personel silinirken bir sunucu hatası oluştu."}), 500
 
-@firma_bp.route('/api/kullanici_detay/<int:kullanici_id>', methods=['GET'])
+# --- API ROTALARI: TOPLAYICI-TEDARİKÇİ ATAMALARI ---
+
+@firma_bp.route('/api/atamalar/veriler', methods=['GET'])
 @login_required
-@role_required(UserRole.FIRMA_YETKILISI)
-def get_kullanici_detay_api(kullanici_id):
-    """Bir kullanıcının düzenleme için detaylarını ve atanmış tedarikçilerini getirir."""
-    # DÜZELTME: Servis objesini fonksiyon içinde oluşturuyoruz
-    firma_service_instance = FirmaService()
-    
+@role_required('firma_admin')
+def get_atama_verileri_api():
+    """Atama modalı için toplayıcı ve tedarikçi listelerini RLS ile getirir."""
     try:
-        sirket_id = session['user']['sirket_id']
-        
-        # Servis fonksiyonlarını 'g.supabase' ile çağır
-        kullanici_detaylari = firma_service_instance.get_kullanici_detay(g.supabase, sirket_id, kullanici_id)
-        
-        # tedarikci_service'in 'g' kullanmadığını varsayıyoruz (eğer hata verirse onu da düzeltiriz)
-        tum_tedarikciler = tedarikci_service.get_all_for_dropdown(sirket_id) 
-        
-        # Frontend'in (firma_yonetimi.js) beklediği formatta birleştir
+        # sirket_id parametresi KALDIRILDI
+        toplayicilar, tedarikciler, error = firma_service.get_atama_icin_veriler()
+        if error:
+            return jsonify({"error": error}), 500
+            
         return jsonify({
-            "kullanici_detay": kullanici_detaylari["kullanici"],
-            "atanan_tedarikciler": kullanici_detaylari["atanan_tedarikciler"],
-            "tum_tedarikciler": tum_tedarikciler
+            "toplayicilar": toplayicilar,
+            "tedarikciler": tedarikciler
         })
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 404
     except Exception as e:
-        logger.error(f"Kullanıcı detayı API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Kullanıcı detayları alınamadı."}), 500
+        logger.error(f"Atama verileri API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Atama verileri alınamadı."}), 500
 
-@firma_bp.route('/api/kullanici_guncelle/<int:kullanici_id>', methods=['PUT'])
+@firma_bp.route('/api/atamalar', methods=['GET'])
 @login_required
-@role_required(UserRole.FIRMA_YETKILISI)
-def update_kullanici_api(kullanici_id):
-    """Bir kullanıcının bilgilerini, şifresini ve tedarikçi atamalarını günceller."""
-    # DÜZELTME: Servis objesini fonksiyon içinde oluşturuyoruz
-    firma_service_instance = FirmaService()
+@role_required('firma_admin')
+def get_atamalar_api():
+    """Mevcut tüm toplayıcı-tedarikçi atamalarını RLS ile listeler."""
     try:
-        sirket_id = session['user']['sirket_id']
-        data = request.get_json()
-        
-        # DÜZELTME: Servise 'g.supabase' istemcisini parametre olarak veriyoruz
-        success = firma_service_instance.update_kullanici(g.supabase, sirket_id, kullanici_id, data)
-        
-        if success:
-            return jsonify({"message": "Kullanıcı bilgileri başarıyla güncellendi."})
-        else:
-             raise Exception("Güncelleme işlemi başarısız oldu.")
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
+        # sirket_id parametresi ve filtresi KALDIRILDI
+        atamalar, error = firma_service.get_toplayici_tedarikci_atamalari()
+        if error:
+            return jsonify({"error": error}), 500
+        return jsonify(atamalar)
     except Exception as e:
-        logger.error(f"Kullanıcı güncelleme API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Kullanıcı güncellenirken bir sunucu hatası oluştu."}), 500
+        logger.error(f"Atama listesi API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Atamalar listelenemedi."}), 500
 
-@firma_bp.route('/api/kullanici_sifre_setle/<int:kullanici_id>', methods=['POST'])
+@firma_bp.route('/api/atamalar/ekle', methods=['POST'])
 @login_required
-@role_required(UserRole.FIRMA_YETKILISI)
-def set_user_password_api(kullanici_id):
-    """Bir kullanıcının (çiftçi, toplayıcı, muhasebeci) şifresini ayarlar."""
-    # DÜZELTME: Servis objesini fonksiyon içinde oluşturuyoruz
-    firma_service_instance = FirmaService()
+@role_required('firma_admin')
+def add_atama_api():
+    """Yeni bir toplayıcı-tedarikçi ataması yapar."""
     try:
-        sirket_id = session['user']['sirket_id']
         data = request.get_json()
-        yeni_sifre = data.get('yeni_sifre')
-
-        if not yeni_sifre:
-            return jsonify({"error": "Yeni şifre gönderilmedi."}), 400
-
-        # DÜZELTME: Servise 'g.supabase' istemcisini parametre olarak veriyoruz
-        firma_service_instance.set_user_password(g.supabase, sirket_id, kullanici_id, yeni_sifre) 
-
-        return jsonify({"message": "Kullanıcı şifresi başarıyla güncellendi."})
-
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
+        toplayici_id = data.get('toplayici_id') # Bu bir UUID (string)
+        tedarikci_id = data.get('tedarikci_id') # Bu bir int
+        
+        # sirket_id parametresi KALDIRILDI
+        # RLS (WITH CHECK), bu iki ID'nin aynı şirkette olduğunu doğrulayacak
+        yeni_atama, error = firma_service.add_toplayici_tedarikci_atama(toplayici_id, tedarikci_id)
+        if error:
+            return jsonify({"error": error}), 400
+        
+        return jsonify({"message": "Atama başarıyla yapıldı.", "atama": yeni_atama}), 201
     except Exception as e:
-        logger.error(f"Kullanıcı şifre ayarlama API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Şifre ayarlanırken bir sunucu hatası oluştu."}), 500
+        logger.error(f"Atama ekleme API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Atama yapılırken bir hata oluştu."}), 500
+
+@firma_bp.route('/api/atamalar/sil/<int:atama_id>', methods=['DELETE'])
+@login_required
+@role_required('firma_admin')
+def delete_atama_api(atama_id):
+    """Bir atamayı RLS kullanarak siler."""
+    try:
+        # sirket_id parametresi KALDIRILDI
+        # RLS, bu atama_id'nin bizim şirketimize ait olduğunu doğrulayacak
+        success, error = firma_service.delete_toplayici_tedarikci_atama(atama_id)
+        if error:
+            return jsonify({"error": error}), 404
+            
+        return jsonify({"message": "Atama başarıyla silindi."})
+    except Exception as e:
+        logger.error(f"Atama silme API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Atama silinirken bir hata oluştu."}), 500
+
+# NOT: Eski '/api/kullanici_detay', '/api/kullanici_guncelle' ve 
+# '/api/kullanici_sifre_setle' rotaları, yeni Auth ve RLS yapımızda
+# yerini daha güvenli olan 'personel' ve 'atama' rotalarına bırakmıştır.
+# 'firma_yonetimi.js' dosyanızın bu yeni API rotalarına göre güncellenmesi gerekecektir.

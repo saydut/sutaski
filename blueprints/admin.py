@@ -1,173 +1,170 @@
 # blueprints/admin.py
+# Yeni RLS-bypass servis (admin_service) yanıt formatına göre güncellendi.
 
-from flask import Blueprint, jsonify, render_template, request, session
-from decorators import login_required, admin_required
+import logging
+from flask import Blueprint, jsonify, render_template, request, g
+# Yeni '@role_required' decorator'ını ve UserRole sabitlerini kullanalım
+from decorators import login_required, role_required
+from constants import UserRole
 from services.admin_service import admin_service
 
-admin_bp = Blueprint('admin', __name__)
+logger = logging.getLogger(__name__)
+admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
-@admin_bp.route('/admin')
+@admin_bp.route('/')
 @login_required
-@admin_required
-def admin_panel():
-    kullanici_adi = session.get('user', {}).get('kullanici_adi', 'Admin')
-    return render_template('admin.html', kullanici_adi=kullanici_adi)
+@role_required(UserRole.ADMIN.value) # Sadece süper admin ('admin')
+def admin_paneli():
+    """Süper Admin ana panelini render eder."""
+    return render_template('admin.html')
 
-@admin_bp.route('/api/admin/data')
+# --- API ROTALARI ---
+
+@admin_bp.route('/api/dashboard_stats', methods=['GET'])
 @login_required
-@admin_required
-def get_admin_data():
+@role_required(UserRole.ADMIN.value)
+def get_dashboard_stats_api():
+    """Admin paneli için temel istatistikleri çeker."""
     try:
-        data = admin_service.get_all_data()
+        # Servis artık (data, error) döndürüyor
+        data, error = admin_service.get_admin_dashboard_data()
+        if error:
+            return jsonify({"error": error}), 500
         return jsonify(data)
-    except Exception:
-        return jsonify({"error": "Admin verileri alınırken bir sunucu hatası oluştu."}), 500
+    except Exception as e:
+        logger.error(f"Admin dashboard stats API hatası: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
-@admin_bp.route('/api/admin/update_lisans', methods=['POST'])
+@admin_bp.route('/api/sirketler', methods=['GET'])
 @login_required
-@admin_required
-def update_lisans():
+@role_required(UserRole.ADMIN.value)
+def get_sirketler_api():
+    """Tüm şirketleri sayfalayarak listeler."""
     try:
-        data = request.get_json()
-        admin_service.update_license(data['sirket_id'], data.get('yeni_tarih'))
-        return jsonify({"message": "Lisans tarihi başarıyla güncellendi!"})
-    except Exception:
-        return jsonify({"error": "Lisans güncellenirken bir sunucu hatası oluştu."}), 500
+        sayfa = request.args.get('sayfa', 1, type=int)
+        limit = request.args.get('limit', 10, type=int)
         
-@admin_bp.route('/api/admin/update_rol', methods=['POST'])
-@login_required
-@admin_required
-def update_rol():
-    try:
-        data = request.get_json()
-        admin_service.update_user_role(data['kullanici_id'], data.get('yeni_rol'))
-        return jsonify({"message": "Kullanıcı rolü başarıyla güncellendi!"})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
-    except Exception:
-        return jsonify({"error": "Rol güncellenirken bir sunucu hatası oluştu."}), 500
-
-@admin_bp.route('/api/admin/delete_company', methods=['POST'])
-@login_required
-@admin_required
-def delete_company():
-    try:
-        data = request.get_json()
-        admin_service.delete_company(data['sirket_id'])
-        return jsonify({"message": "Şirket ve tüm bağlı verileri başarıyla silindi."})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 404
-    except Exception:
-        return jsonify({"error": "Şirket silinirken bir sunucu hatası oluştu."}), 500
-
-@admin_bp.route('/api/admin/reset_password', methods=['POST'])
-@login_required
-@admin_required
-def reset_password():
-    try:
-        data = request.get_json()
-        admin_service.reset_password(data.get('kullanici_id'), data.get('yeni_sifre'))
-        return jsonify({"message": "Kullanıcı şifresi başarıyla güncellendi."})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
-    except Exception:
-        return jsonify({"error": "Şifre sıfırlanırken bir sunucu hatası oluştu."}), 500
-
-@admin_bp.route('/api/admin/cache_version', methods=['GET'])
-@login_required
-@admin_required
-def get_cache_version():
-    try:
-        version = admin_service.get_cache_version()
-        return jsonify({"version": version})
-    except Exception:
-        return jsonify({"error": "Önbellek sürümü alınamadı."}), 500
-
-@admin_bp.route('/api/admin/increment_cache_version', methods=['POST'])
-@login_required
-@admin_required
-def increment_cache_version():
-    try:
-        new_version = admin_service.increment_cache_version()
-        return jsonify({"message": f"Önbellek sürümü başarıyla v{new_version}'e yükseltildi!", "new_version": new_version})
-    except Exception:
-        return jsonify({"error": "Önbellek sürümü yükseltilemedi."}), 500
-
-@admin_bp.route('/api/admin/maintenance_status', methods=['GET'])
-@login_required
-@admin_required
-def get_maintenance_status():
-    try:
-        is_maintenance = admin_service.get_maintenance_status()
-        return jsonify({"is_maintenance_mode": is_maintenance})
-    except Exception:
-        return jsonify({"error": "Bakım modu durumu alınamadı."}), 500
-
-@admin_bp.route('/api/admin/toggle_maintenance', methods=['POST'])
-@login_required
-@admin_required
-def toggle_maintenance_mode():
-    try:
-        yeni_durum = request.get_json().get('maintenance_mode', False)
-        admin_service.set_maintenance_status(yeni_durum)
-        mesaj = "Uygulama başarıyla bakım moduna alındı." if yeni_durum else "Uygulama bakım modundan çıkarıldı."
-        return jsonify({"message": mesaj})
-    except Exception:
-        return jsonify({"error": "Bakım modu değiştirilemedi."}), 500
-
-@admin_bp.route('/api/admin/surum_notlari', methods=['GET', 'POST'])
-@login_required
-@admin_required
-def handle_surum_notlari():
-    try:
-        if request.method == 'GET':
-            notlar = admin_service.get_all_version_notes()
-            return jsonify(notlar)
-        elif request.method == 'POST':
-            admin_service.add_version_note(request.get_json())
-            return jsonify({"message": "Sürüm notu başarıyla eklendi."}), 201
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
-    except Exception:
-        return jsonify({"error": "Sürüm notları işlenirken bir hata oluştu."}), 500
-
-@admin_bp.route('/api/admin/surum_notlari/<int:id>', methods=['PUT', 'DELETE'])
-@login_required
-@admin_required
-def handle_surum_notu(id):
-    try:
-        if request.method == 'PUT':
-            admin_service.update_version_note(id, request.get_json())
-            return jsonify({"message": "Sürüm notu başarıyla güncellendi."})
-        elif request.method == 'DELETE':
-            admin_service.delete_version_note(id)
-            return jsonify({"message": "Sürüm notu başarıyla silindi."})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 404
-    except Exception:
-        return jsonify({"error": "Sürüm notu işlenirken bir hata oluştu."}), 500
-
-@admin_bp.route('/api/admin/send_notification', methods=['POST'])
-@login_required
-@admin_required
-def send_notification_to_user():
-    """Belirli bir kullanıcıya admin panelinden bildirim gönderir."""
-    try:
-        data = request.get_json()
-        user_id = data.get('user_id')
-        title = data.get('title')
-        body = data.get('body')
-
-        if not all([user_id, title, body]):
-            return jsonify({"error": "Kullanıcı ID, başlık ve içerik alanları zorunludur."}), 400
+        # Servis artık (data, count, error) döndürüyor
+        sirketler, toplam_kayit, error = admin_service.get_all_sirketler(sayfa, limit)
         
-        from services.push_service import push_service
-        sent_count = push_service.send_notification_to_user(user_id=user_id, title=title, body=body)
+        if error:
+            return jsonify({"error": error}), 500
+            
+        return jsonify({
+            "sirketler": sirketler,
+            "toplam_kayit": toplam_kayit,
+            "sayfa": sayfa,
+            "limit": limit
+        })
+    except Exception as e:
+        logger.error(f"Admin sirket listeleme API hatası: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
-        if sent_count > 0:
-            return jsonify({"message": f"Bildirim, kullanıcının {sent_count} cihazına başarıyla gönderildi."})
-        else:
-            return jsonify({"error": "Kullanıcının kayıtlı bir bildirim aboneliği bulunamadı."}), 404
+@admin_bp.route('/api/sirketler/lisans_guncelle/<int:sirket_id>', methods=['PUT'])
+@login_required
+@role_required(UserRole.ADMIN.value)
+def update_lisans_api(sirket_id):
+    """Bir şirketin lisans bitiş tarihini günceller."""
+    try:
+        data = request.get_json()
+        # Servis artık (data, error) döndürüyor
+        guncel_sirket, error = admin_service.update_sirket_lisans(sirket_id, data)
+        
+        if error:
+            return jsonify({"error": error}), 400
+            
+        return jsonify({"message": "Lisans başarıyla güncellendi.", "sirket": guncel_sirket})
+    except Exception as e:
+        logger.error(f"Admin lisans güncelleme API hatası: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
-    except Exception:
-        return jsonify({"error": "Bildirim gönderilirken bir sunucu hatası oluştu."}), 500
+@admin_bp.route('/api/surum_notlari', methods=['GET'])
+@login_required
+@role_required(UserRole.ADMIN.value)
+def get_surum_notlari_api():
+    """Sürüm notlarını sayfalayarak listeler."""
+    try:
+        sayfa = request.args.get('sayfa', 1, type=int)
+        limit = request.args.get('limit', 5, type=int)
+        
+        # Servis artık (data, count, error) döndürüyor
+        notlar, toplam_kayit, error = admin_service.get_all_surum_notlari(sayfa, limit)
+        
+        if error:
+            return jsonify({"error": error}), 500
+            
+        return jsonify({
+            "notlar": notlar,
+            "toplam_kayit": toplam_kayit,
+            "sayfa": sayfa,
+            "limit": limit
+        })
+    except Exception as e:
+        logger.error(f"Admin sürüm notları listeleme API hatası: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/api/surum_notlari', methods=['POST'])
+@login_required
+@role_required(UserRole.ADMIN.value)
+def add_surum_notu_api():
+    """Yeni bir sürüm notu ekler."""
+    try:
+        data = request.get_json()
+        # Servis artık (data, error) döndürüyor
+        yeni_not, error = admin_service.add_surum_notu(data)
+        
+        if error:
+            return jsonify({"error": error}), 400
+            
+        return jsonify({"message": "Sürüm notu başarıyla eklendi.", "not": yeni_not}), 201
+    except Exception as e:
+        logger.error(f"Admin sürüm notu ekleme API hatası: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/api/surum_notlari/<int:not_id>', methods=['DELETE'])
+@login_required
+@role_required(UserRole.ADMIN.value)
+def delete_surum_notu_api(not_id):
+    """Bir sürüm notunu siler."""
+    try:
+        # Servis artık (data, error) döndürüyor
+        success, error = admin_service.delete_surum_notu(not_id)
+        if error:
+            return jsonify({"error": error}), 404
+        return jsonify({"message": "Sürüm notu başarıyla silindi."})
+    except Exception as e:
+        logger.error(f"Admin sürüm notu silme API hatası: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/api/ayarlar', methods=['GET'])
+@login_required
+@role_required(UserRole.ADMIN.value)
+def get_ayarlar_api():
+    """Global ayarları çeker."""
+    try:
+        # Servis artık (data, error) döndürüyor
+        ayarlar, error = admin_service.get_global_settings()
+        if error:
+            return jsonify({"error": error}), 500
+        return jsonify(ayarlar)
+    except Exception as e:
+        logger.error(f"Admin ayarlar (GET) API hatası: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+@admin_bp.route('/api/ayarlar', methods=['POST'])
+@login_required
+@role_required(UserRole.ADMIN.value)
+def update_ayarlar_api():
+    """Global ayarları günceller (Upsert)."""
+    try:
+        data = request.get_json()
+        # Servis artık (data, error) döndürüyor
+        success, error = admin_service.update_global_settings(data)
+        
+        if error:
+            return jsonify({"error": error}), 400
+            
+        return jsonify({"message": "Ayarlar başarıyla güncellendi."})
+    except Exception as e:
+        logger.error(f"Admin ayarlar (POST) API hatası: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500

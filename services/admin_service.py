@@ -1,121 +1,174 @@
 # services/admin_service.py
+# Süper Admin (admin rolü) için güncellendi.
+# TÜM sorgular RLS'i bypass etmek için 'supabase_service' istemcisini kullanır.
 
 import logging
 from flask import g
-from extensions import bcrypt
-from constants import UserRole
-from postgrest import APIError
+from decimal import Decimal, InvalidOperation
+from utils import sanitize_input
+from datetime import datetime
+# 'supabase_client' (anon) YERİNE 'supabase_service' (admin) import edildi
+from extensions import supabase_service 
 
 logger = logging.getLogger(__name__)
 
 class AdminService:
-    """Admin paneli işlemleri için servis katmanı."""
+    """Süper Admin işlemleri için servis katmanı."""
 
-    def get_all_data(self):
-        """Admin paneli için gerekli tüm verileri (şirketler, kullanıcılar) çeker."""
+    def get_admin_dashboard_data(self):
+        """Admin paneli için temel istatistikleri çeker (RLS bypass)."""
         try:
-            sirketler = g.supabase.table('sirketler').select('*').execute().data
-            kullanicilar = g.supabase.table('kullanicilar').select('*, sirketler(sirket_adi)').execute().data
-            return {"sirketler": sirketler, "kullanicilar": kullanicilar}
-        except Exception as e:
-            logger.error(f"Admin verileri alınırken hata oluştu: {e}", exc_info=True)
-            raise Exception("Admin verileri alınırken bir hata oluştu.")
-
-    def update_license(self, sirket_id: int, yeni_tarih: str):
-        """Bir şirketin lisans bitiş tarihini günceller."""
-        try:
-            tarih_degeri = yeni_tarih if yeni_tarih else None
-            g.supabase.table('sirketler').update({'lisans_bitis_tarihi': tarih_degeri}).eq('id', sirket_id).execute()
-        except Exception as e:
-            logger.error(f"Lisans tarihi güncellenirken hata oluştu: {e}", exc_info=True)
-            raise Exception("Lisans tarihi güncellenemedi.")
-
-    def update_user_role(self, kullanici_id: int, yeni_rol: str):
-        """Bir kullanıcının rolünü günceller."""
-        try:
-            gecerli_roller = [rol.value for rol in UserRole]
-            if yeni_rol not in gecerli_roller:
-                raise ValueError("Geçersiz rol belirtildi.")
-            g.supabase.table('kullanicilar').update({'rol': yeni_rol}).eq('id', kullanici_id).execute()
-        except ValueError as ve:
-            raise ve
-        except Exception as e:
-            logger.error(f"Kullanıcı rolü güncellenirken hata oluştu: {e}", exc_info=True)
-            raise Exception("Kullanıcı rolü güncellenemedi.")
-
-    def delete_company(self, sirket_id: int):
-        """Bir şirketi ve ona bağlı tüm verileri (kullanıcılar, girdiler vb.) siler."""
-        try:
-            response = g.supabase.table('sirketler').delete().eq('id', sirket_id).execute()
-            if not response.data:
-                raise ValueError("Silinecek şirket bulunamadı.")
-        except ValueError as ve:
-            raise ve
-        except Exception as e:
-            logger.error(f"Şirket silinirken hata oluştu: {e}", exc_info=True)
-            raise Exception("Şirket silinirken bir hata oluştu.")
-
-    def reset_password(self, kullanici_id: int, yeni_sifre: str):
-        """Bir kullanıcının şifresini sıfırlar."""
-        try:
-            if not yeni_sifre:
-                raise ValueError("Yeni şifre boş olamaz.")
-            hashed_sifre = bcrypt.generate_password_hash(yeni_sifre).decode('utf-8')
-            g.supabase.table('kullanicilar').update({'sifre': hashed_sifre}).eq('id', kullanici_id).execute()
-        except ValueError as ve:
-            raise ve
-        except Exception as e:
-            logger.error(f"Şifre sıfırlanırken hata oluştu: {e}", exc_info=True)
-            raise Exception("Şifre sıfırlanırken bir hata oluştu.")
-
-    # ... (Diğer fonksiyonlar aynı kalır, sadece print'ler logger'a çevrilir)
-    def _get_setting(self, ayar_adi: str, varsayilan: str) -> str:
-        """Veritabanından tek bir ayar değerini çeker."""
-        response = g.supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', ayar_adi).limit(1).single().execute()
-        return response.data.get('ayar_degeri', varsayilan) if response.data else varsayilan
-
-    def _set_setting(self, ayar_adi: str, ayar_degeri: str):
-        """Veritabanında tek bir ayar değerini günceller veya oluşturur."""
-        g.supabase.table('ayarlar').upsert({
-            'ayar_adi': ayar_adi,
-            'ayar_degeri': ayar_degeri
-        }, on_conflict='ayar_adi').execute()
-
-    def get_cache_version(self) -> str:
-        return self._get_setting('cache_version', '1')
-
-    def increment_cache_version(self) -> int:
-        current_version = int(self.get_cache_version())
-        new_version = current_version + 1
-        self._set_setting('cache_version', str(new_version))
-        return new_version
-        
-    def get_maintenance_status(self) -> bool:
-        return self._get_setting('maintenance_mode', 'false') == 'true'
-
-    def set_maintenance_status(self, durum: bool):
-        self._set_setting('maintenance_mode', 'true' if durum else 'false')
-
-    def get_all_version_notes(self):
-        """Tüm sürüm notlarını tarihe göre sıralı getirir."""
-        return g.supabase.table('surum_notlari').select('*').order('yayin_tarihi', desc=True).order('id', desc=True).execute().data
-
-    def add_version_note(self, data: dict):
-        if not all([data.get('surum_no'), data.get('yayin_tarihi'), data.get('notlar')]):
-            raise ValueError("Tüm alanlar zorunludur.")
-        g.supabase.table('surum_notlari').insert(data).execute()
-
-    def update_version_note(self, id: int, data: dict):
-        if not all([data.get('surum_no'), data.get('yayin_tarihi'), data.get('notlar')]):
-            raise ValueError("Tüm alanlar zorunludur.")
-        response = g.supabase.table('surum_notlari').update(data).eq('id', id).execute()
-        if not response.data:
-            raise ValueError("Güncellenecek sürüm notu bulunamadı.")
+            # g.supabase -> supabase_service
+            response = supabase_service.rpc('get_admin_dashboard_stats').execute()
             
-    def delete_version_note(self, id: int):
-        response = g.supabase.table('surum_notlari').delete().eq('id', id).execute()
-        if not response.data:
-            raise ValueError("Silinecek sürüm notu bulunamadı.")
+            if not response.data:
+                logger.warning("get_admin_dashboard_stats RPC'si veri döndürmedi.")
+                return {}, None
+                
+            return response.data[0], None # RPC tek bir JSON objesi döndürmeli
+        except Exception as e:
+            logger.error(f"Admin dashboard verileri (RPC) alınırken hata: {e}", exc_info=True)
+            return None, "Admin dashboard verileri alınamadı."
 
+    def get_all_sirketler(self, sayfa: int, limit: int = 10):
+        """Tüm şirketleri sayfalayarak listeler (RLS bypass)."""
+        try:
+            offset = (sayfa - 1) * limit
+            # g.supabase -> supabase_service
+            response = supabase_service.table('sirketler') \
+                .select('*', count='exact') \
+                .order('created_at', desc=True) \
+                .range(offset, offset + limit - 1) \
+                .execute()
+            
+            return response.data, response.count, None
+        except Exception as e:
+            logger.error(f"Tüm şirketler listelenirken hata: {e}", exc_info=True)
+            return [], 0, f"Şirketler listelenirken bir hata oluştu: {str(e)}" # (data, count, error)
 
+    def update_sirket_lisans(self, sirket_id: int, data: dict):
+        """Bir şirketin lisans bitiş tarihini günceller (RLS bypass)."""
+        try:
+            lisans_bitis_tarihi = data.get('lisans_bitis_tarihi')
+            if not lisans_bitis_tarihi:
+                raise ValueError("Lisans bitiş tarihi zorunludur.")
+            
+            datetime.strptime(lisans_bitis_tarihi, '%Y-%m-%d')
+            
+            # g.supabase -> supabase_service
+            response = supabase_service.table('sirketler') \
+                .update({"lisans_bitis_tarihi": lisans_bitis_tarihi}) \
+                .eq('id', sirket_id) \
+                .execute()
+                
+            if not response.data:
+                 raise ValueError("Şirket bulunamadı.")
+            return response.data[0], None
+        except ValueError as ve:
+            return None, str(ve)
+        except Exception as e:
+            logger.error(f"Şirket lisansı güncellenirken hata: {e}", exc_info=True)
+            return None, "Lisans güncellenirken bir sunucu hatası oluştu."
+
+    def get_all_surum_notlari(self, sayfa: int, limit: int = 5):
+        """Tüm sürüm notlarını sayfalayarak listeler (RLS bypass)."""
+        try:
+            offset = (sayfa - 1) * limit
+            # g.supabase -> supabase_service
+            response = supabase_service.table('surum_notlari') \
+                .select('*', count='exact') \
+                .order('yayin_tarihi', desc=True) \
+                .range(offset, offset + limit - 1) \
+                .execute()
+            return response.data, response.count, None
+        except Exception as e:
+            logger.error(f"Sürüm notları listelenirken hata: {e}", exc_info=True)
+            return [], 0, f"Sürüm notları listelenirken bir hata oluştu: {str(e)}" # (data, count, error)
+
+    def add_surum_notu(self, data: dict):
+        """Yeni bir sürüm notu ekler (RLS bypass)."""
+        try:
+            surum_no = sanitize_input(data.get('surum_no'))
+            yayin_tarihi = data.get('yayin_tarihi')
+            notlar = sanitize_input(data.get('notlar')) 
+
+            if not all([surum_no, yayin_tarihi, notlar]):
+                raise ValueError("Sürüm No, Yayın Tarihi ve Notlar zorunludur.")
+            
+            datetime.strptime(yayin_tarihi, '%Y-%m-%d')
+
+            yeni_not = {
+                "surum_no": surum_no,
+                "yayin_tarihi": yayin_tarihi,
+                "notlar": notlar
+            }
+            # g.supabase -> supabase_service
+            response = supabase_service.table('surum_notlari').insert(yeni_not).execute()
+            return response.data[0], None
+        except ValueError as ve:
+            return None, str(ve)
+        except Exception as e:
+            logger.error(f"Sürüm notu eklenirken hata: {e}", exc_info=True)
+            return None, "Sürüm notu eklenirken bir sunucu hatası oluştu."
+            
+    def delete_surum_notu(self, not_id: int):
+        """Bir sürüm notunu siler (RLS bypass)."""
+        try:
+            # g.supabase -> supabase_service
+            response = supabase_service.table('surum_notlari') \
+                .delete() \
+                .eq('id', not_id) \
+                .execute()
+            if not response.data:
+                raise ValueError("Sürüm notu bulunamadı.")
+            return True, None
+        except ValueError as ve:
+            return None, str(ve)
+        except Exception as e:
+            logger.error(f"Sürüm notu silinirken hata: {e}", exc_info=True)
+            return None, "Sürüm notu silinirken bir hata oluştu."
+
+    def get_global_settings(self):
+        """Tüm global ayarları 'ayarlar' tablosundan çeker (RLS bypass)."""
+        try:
+            # g.supabase -> supabase_service
+            response = supabase_service.table('ayarlar') \
+                .select('*') \
+                .execute()
+            
+            ayarlar_dict = {ayar['ayar_adi']: ayar['ayar_degeri'] for ayar in response.data}
+            return ayarlar_dict, None
+        except Exception as e:
+            logger.error(f"Global ayarlar alınırken hata: {e}", exc_info=True)
+            return None, "Global ayarlar alınamadı."
+
+    def update_global_settings(self, data: dict):
+        """Global ayarları 'ayarlar' tablosunda günceller (RLS bypass)."""
+        try:
+            if not data:
+                raise ValueError("Güncellenecek ayar verisi bulunamadı.")
+                
+            upsert_data = []
+            for ayar_adi, ayar_degeri in data.items():
+                upsert_data.append({
+                    "ayar_adi": sanitize_input(ayar_adi),
+                    "ayar_degeri": sanitize_input(str(ayar_degeri or '')) # Değerin string olduğundan emin ol
+                })
+
+            if not upsert_data:
+                 raise ValueError("İşlenecek geçerli ayar bulunamadı.")
+
+            # g.supabase -> supabase_service
+            response = supabase_service.table('ayarlar') \
+                .upsert(upsert_data, on_conflict='ayar_adi') \
+                .execute()
+                
+            return True, None
+        except ValueError as ve:
+            return None, str(ve)
+        except Exception as e:
+            logger.error(f"Global ayarlar güncellenirken hata: {e}", exc_info=True)
+            return None, "Global ayarlar güncellenirken bir sunucu hatası oluştu."
+
+# Servisin bir örneğini (instance) oluştur
 admin_service = AdminService()

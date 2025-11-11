@@ -1,76 +1,116 @@
 # blueprints/finans.py
 
 import logging
-from flask import Blueprint, jsonify, render_template, request, session
-from decorators import login_required, lisans_kontrolu, modification_allowed
+from flask import Blueprint, jsonify, render_template, request
+# 'session' import'u kaldırıldı, 'g' objesi kullanılacak
+from decorators import login_required, role_required 
 from services.finans_service import finans_service
+from services.tedarikci_service import tedarikci_service
 
 logger = logging.getLogger(__name__)
 finans_bp = Blueprint('finans', __name__, url_prefix='/finans')
 
 @finans_bp.route('/')
 @login_required
-@lisans_kontrolu
+@role_required('firma_admin') # Finans sayfasını sadece admin görebilir
 def finans_sayfasi():
-    if request.headers.get('X-Cache-Me') == 'true':
-        return render_template('finans_yonetimi.html', session={})
-    return render_template('finans_yonetimi.html')
+    """
+    Finans yönetim sayfasını render eder.
+    Manuel işlem ekleme formu için tedarikçi listesini de gönderir.
+    """
+    try:
+        # RLS, sadece bu şirketin tedarikçilerini getirecek
+        tedarikciler, error = tedarikci_service.get_all()
+        if error:
+            logger.error(f"Finans sayfası için tedarikçiler alınamadı: {error}")
+            tedarikciler = []
+            
+        return render_template('finans_yonetimi.html', tedarikciler=tedarikciler)
+    except Exception as e:
+        logger.error(f"Finans sayfası yüklenirken hata: {str(e)}")
+        return render_template('finans_yonetimi.html', tedarikciler=[])
+
 
 @finans_bp.route('/api/islemler', methods=['GET'])
 @login_required
+@role_required('firma_admin') # Finans listesini sadece admin görebilir
 def get_finansal_islemler():
+    """Finansal işlemleri RLS ve RPC kullanarak sayfalı listeler."""
     try:
-        # GÜNCELLEME: Session'dan kullanıcı bilgilerini alıyoruz.
-        user_info = session['user']
-        sirket_id = user_info['sirket_id']
-        kullanici_id = user_info['id']
-        rol = user_info['rol']
-        
         sayfa = int(request.args.get('sayfa', 1))
+        limit = int(request.args.get('limit', 15))
+        tarih_str = request.args.get('tarih_str') # JS tarafındaki filtreyle eşleşmeli
+        tip = request.args.get('tip')
         
-        # GÜNCELLEME: Servis fonksiyonunu yeni parametrelerle çağırıyoruz.
-        islemler, toplam_sayi = finans_service.get_paginated_transactions(sirket_id, kullanici_id, rol, sayfa, limit=15)
+        # sirket_id, kullanici_id, rol parametreleri KALDIRILDI
+        # Servis bu bilgileri 'g' objesinden (decorator'dan) alacak
+        islemler, toplam_sayi = finans_service.get_paginated_transactions(
+            sayfa=sayfa, 
+            limit=limit, 
+            tarih_str=tarih_str, 
+            tip=tip
+        )
         
         return jsonify({"islemler": islemler, "toplam_kayit": toplam_sayi})
-    except Exception:
+    except Exception as e:
+        logger.error(f"Finansal işlemler API hatası: {e}", exc_info=True)
         return jsonify({"error": "Finansal işlemler listelenirken bir sunucu hatası oluştu."}), 500
 
 @finans_bp.route('/api/islemler', methods=['POST'])
 @login_required
-@modification_allowed
+@role_required('firma_admin') # Manuel işlemi sadece admin ekler
 def add_finansal_islem():
+    """
+    Yeni (manuel) finansal işlem ekler.
+    Servis, ID'leri 'g' objesinden alır.
+    """
     try:
-        sirket_id = session['user']['sirket_id']
-        kullanici_id = session['user']['id']
-        message = finans_service.add_transaction(sirket_id, kullanici_id, request.get_json())
+        # sirket_id ve kullanici_id parametreleri KALDIRILDI
+        message, error = finans_service.add_transaction(request.get_json())
+        
+        if error:
+            return jsonify({"error": error}), 400
+            
         return jsonify({"message": message}), 201
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
-    except Exception:
+    except Exception as e:
+        logger.error(f"Finansal işlem ekleme API hatası: {e}", exc_info=True)
         return jsonify({"error": "İşlem eklenirken bir sunucu hatası oluştu."}), 500
 
 @finans_bp.route('/api/islemler/<int:islem_id>', methods=['PUT'])
 @login_required
-@modification_allowed
+@role_required('firma_admin') # Sadece admin günceller
 def update_finansal_islem(islem_id):
+    """
+    Manuel finansal işlemi RLS kullanarak günceller.
+    (Otomatik oluşan yem/süt işlemleri buradan güncellenmemeli!)
+    """
     try:
-        sirket_id = session['user']['sirket_id']
-        finans_service.update_transaction(islem_id, sirket_id, request.get_json())
+        # sirket_id parametresi KALDIRILDI
+        success, error = finans_service.update_transaction(islem_id, request.get_json())
+        if error:
+            return jsonify({"error": error}), 400
+            
         return jsonify({"message": "İşlem başarıyla güncellendi."})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
-    except Exception:
+    except Exception as e:
+        logger.error(f"Finansal işlem güncelleme API hatası: {e}", exc_info=True)
         return jsonify({"error": "İşlem güncellenirken bir sunucu hatası oluştu."}), 500
 
 @finans_bp.route('/api/islemler/<int:islem_id>', methods=['DELETE'])
 @login_required
-@modification_allowed
+@role_required('firma_admin') # Sadece admin siler
 def delete_finansal_islem(islem_id):
+    """
+    Manuel finansal işlemi RLS kullanarak siler.
+    (Otomatik oluşan yem/süt işlemleri buradan silinmemeli!)
+    """
     try:
-        sirket_id = session['user']['sirket_id']
-        finans_service.delete_transaction(islem_id, sirket_id)
+        # sirket_id parametresi KALDIRILDI
+        success, error = finans_service.delete_transaction(islem_id)
+        
+        if error:
+            return jsonify({"error": error}), 404
+            
         return jsonify({"message": "İşlem başarıyla silindi."})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 404
-    except Exception:
+    except Exception as e:
+        logger.error(f"Finansal işlem silme API hatası: {e}", exc_info=True)
         return jsonify({"error": "İşlem silinirken bir sunucu hatası oluştu."}), 500

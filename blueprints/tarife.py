@@ -1,11 +1,12 @@
 # blueprints/tarife.py
 
 import logging
-from flask import Blueprint, jsonify, render_template, request, session
-# YENİ: Güvenlik için firma_yetkilisi_required ve modification_allowed decorator'larını import ediyoruz
-from decorators import login_required, lisans_kontrolu, firma_yetkilisi_required, modification_allowed
-# YENİ: Az önce oluşturduğumuz servisi import ediyoruz
+from flask import Blueprint, jsonify, render_template, request, g, flash
+# 'session' import'u kaldırıldı
+from decorators import login_required, role_required
+# Yeni servis objemizi (instance) import ediyoruz
 from services.tarife_service import tarife_service
+from constants import UserRole # Rol sabitlerini kullanmak için
 
 logger = logging.getLogger(__name__)
 tarife_bp = Blueprint('tarife', __name__, url_prefix='/tarife')
@@ -14,8 +15,7 @@ tarife_bp = Blueprint('tarife', __name__, url_prefix='/tarife')
 
 @tarife_bp.route('/yonetim')
 @login_required
-@lisans_kontrolu
-@firma_yetkilisi_required # Sadece firma yetkilisi ve admin bu sayfayı görebilir
+@role_required('firma_admin') # Eski decorator'lar yerine
 def tarife_yonetim_sayfasi():
     """Süt fiyatı tarifelerinin yönetildiği arayüz sayfasını render eder."""
     return render_template('tarife_yonetimi.html')
@@ -24,12 +24,14 @@ def tarife_yonetim_sayfasi():
 
 @tarife_bp.route('/api/listele', methods=['GET'])
 @login_required
-@firma_yetkilisi_required
+@role_required('firma_admin')
 def get_tarifeler_api():
-    """Tüm tarifeleri listeler."""
+    """Tüm tarifeleri RLS kullanarak listeler."""
     try:
-        sirket_id = session['user']['sirket_id']
-        tarifeler = tarife_service.get_all_tariffs(sirket_id)
+        # sirket_id parametresi KALDIRILDI
+        tarifeler, error = tarife_service.get_all_tariffs()
+        if error:
+            return jsonify({"error": error}), 500
         return jsonify(tarifeler)
     except Exception as e:
         logger.error(f"Tarife listeleme API hatası: {e}", exc_info=True)
@@ -37,74 +39,74 @@ def get_tarifeler_api():
 
 @tarife_bp.route('/api/ekle', methods=['POST'])
 @login_required
-@modification_allowed # Muhasebeci ekleyemez
-@firma_yetkilisi_required
+@role_required('firma_admin')
 def add_tarife_api():
-    """Yeni bir tarife ekler."""
+    """Yeni bir tarife ekler. Servis, sirket_id'yi 'g' objesinden alır."""
     try:
-        sirket_id = session['user']['sirket_id']
         data = request.get_json()
-        yeni_tarife = tarife_service.add_tariff(sirket_id, data)
+        # sirket_id parametresi KALDIRILDI
+        yeni_tarife, error = tarife_service.add_tariff(data)
+        if error:
+            return jsonify({"error": error}), 400
         return jsonify({"message": "Fiyat tarifesi başarıyla eklendi.", "tarife": yeni_tarife}), 201
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
     except Exception as e:
         logger.error(f"Tarife ekleme API hatası: {e}", exc_info=True)
         return jsonify({"error": "Tarife eklenirken bir sunucu hatası oluştu."}), 500
 
 @tarife_bp.route('/api/guncelle/<int:tarife_id>', methods=['PUT'])
 @login_required
-@modification_allowed # Muhasebeci güncelleyemez
-@firma_yetkilisi_required
+@role_required('firma_admin')
 def update_tarife_api(tarife_id):
-    """Bir tarifeyi günceller."""
+    """Bir tarifeyi RLS kullanarak günceller."""
     try:
-        sirket_id = session['user']['sirket_id']
         data = request.get_json()
-        guncel_tarife = tarife_service.update_tariff(sirket_id, tarife_id, data)
+        # sirket_id parametresi KALDIRILDI
+        guncel_tarife, error = tarife_service.update_tariff(tarife_id, data)
+        if error:
+            return jsonify({"error": error}), 400
         return jsonify({"message": "Tarife başarıyla güncellendi.", "tarife": guncel_tarife})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
     except Exception as e:
         logger.error(f"Tarife güncelleme API hatası: {e}", exc_info=True)
         return jsonify({"error": "Tarife güncellenirken bir sunucu hatası oluştu."}), 500
 
 @tarife_bp.route('/api/sil/<int:tarife_id>', methods=['DELETE'])
 @login_required
-@modification_allowed # Muhasebeci silemez
-@firma_yetkilisi_required
+@role_required('firma_admin')
 def delete_tarife_api(tarife_id):
-    """Bir tarifeyi siler."""
+    """Bir tarifeyi RLS kullanarak siler."""
     try:
-        sirket_id = session['user']['sirket_id']
-        tarife_service.delete_tariff(sirket_id, tarife_id)
+        # sirket_id parametresi KALDIRILDI
+        success, error = tarife_service.delete_tariff(tarife_id)
+        if error:
+            return jsonify({"error": error}), 404
         return jsonify({"message": "Tarife başarıyla silindi."})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 404
     except Exception as e:
         logger.error(f"Tarife silme API hatası: {e}", exc_info=True)
         return jsonify({"error": "Tarife silinirken bir sunucu hatası oluştu."}), 500
 
 @tarife_bp.route('/api/get_fiyat', methods=['GET'])
 @login_required
-# NOT: Bu endpoint'e @firma_yetkilisi_required eklemiyoruz,
-# çünkü toplayıcıların da ana panelde fiyatı çekebilmesi gerekiyor.
-# @login_required olması yeterli.
+# Toplayıcı ve Admin bu rotayı kullanabilmeli
+@role_required('firma_admin', 'toplayici')
 def get_fiyat_api():
     """
-    Belirli bir tarih için geçerli süt fiyatını getirir.
+    Belirli bir tarih için geçerli süt ALIŞ fiyatını RLS kullanarak getirir.
     Ana paneldeki süt girişi formu tarafından kullanılır.
     """
     try:
-        sirket_id = session['user']['sirket_id']
         tarih_str = request.args.get('tarih') # 'YYYY-MM-DD'
         
         if not tarih_str:
             raise ValueError("Tarih parametresi zorunludur.")
-            
-        fiyat = tarife_service.get_fiyat_for_date(sirket_id, tarih_str)
         
-        # fiyat None dönebilir (o tarih için tarife yoktur)
+        # sirket_id parametresi KALDIRILDI
+        # Servis, sirket_id'yi 'g' objesinden alacak
+        fiyat, error = tarife_service.get_fiyat_for_date(tarih_str)
+        
+        if error:
+            # Fiyat bulunamaması da bir 'error' olabilir
+            return jsonify({"error": error, "fiyat": None}), 404
+            
         return jsonify({"fiyat": fiyat})
         
     except ValueError as ve:

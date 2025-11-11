@@ -1,185 +1,203 @@
 # services/tanker_service.py
 
-from flask import g  # 'supabase' yerine 'g' import edildi
+from flask import g
 from constants import UserRole
-from postgrest import APIError  # PostgrestAPIError yerine standart APIError kullanıldı
+from postgrest import APIError
 import logging
+from extensions import supabase_client # g.supabase yerine bunu kullanacağız
+from utils import sanitize_input
 
-logger = logging.getLogger(__name__) # Logger eklendi
+logger = logging.getLogger(__name__) 
 
-def get_tankerler(sirket_id):
-    try:
-        # 'supabase' -> 'g.supabase' olarak değiştirildi
-        response = g.supabase.table('tankerler') \
-            .select('*') \
-            .eq('firma_id', sirket_id) \
-            .order('tanker_adi', desc=False) \
-            .execute()
-        return response.data
-    except Exception as e:
-        logger.error(f"Tankerler alınırken hata: {e}", exc_info=True)
-        raise
+class TankerService:
+    """Tanker ve atama işlemleri için servis katmanı. RLS ile güncellendi."""
 
-def add_tanker(data):
-    try:
-        tanker_adi = data.get('tanker_adi')
-        kapasite = data.get('kapasite_litre')
-        firma_id = g.user.sirket_id
-
-        if not tanker_adi or not kapasite:
-            raise ValueError("Tanker adı ve kapasite zorunludur.")
-        
+    def get_all_tankers(self):
+        """Tüm tankerleri RLS kullanarak listeler."""
         try:
-            kapasite_numeric = float(kapasite)
-        except ValueError:
-            raise ValueError("Kapasite sayısal bir değer olmalıdır.")
+            # g.supabase -> supabase_client
+            # .eq('firma_id', ...) FİLTRESİ KALDIRILDI (RLS halleder)
+            # Not: Veritabanı şemasında 'firma_id' 'sirket_id' olarak güncellenmişti.
+            response = supabase_client.table('tankerler') \
+                .select('*') \
+                .order('tanker_adi', desc=False) \
+                .execute()
+            return response.data, None
+        except Exception as e:
+            logger.error(f"Tankerler alınırken hata: {e}", exc_info=True)
+            return None, "Tankerler alınamadı."
 
-        # 'supabase' -> 'g.supabase' olarak değiştirildi
-        response = g.supabase.table('tankerler').insert({
-            'firma_id': firma_id,
-            'tanker_adi': tanker_adi,
-            'kapasite_litre': kapasite_numeric,
-            'mevcut_doluluk': 0
-        }).execute()
-        return response.data[0]
-    except ValueError as ve: 
-        raise ve
-    except Exception as e:
-        logger.error(f"Tanker eklenirken hata: {e}", exc_info=True)
-        raise
-
-def update_tanker(tanker_id, data):
-    try:
-        tanker_adi = data.get('tanker_adi')
-        kapasite = data.get('kapasite_litre')
-        
-        update_data = {}
-        if tanker_adi:
-            update_data['tanker_adi'] = tanker_adi
-        if kapasite:
-            try:
-                update_data['kapasite_litre'] = float(kapasite)
-            except ValueError:
-                raise ValueError("Kapasite sayısal bir değer olmalıdır.")
-
-        if not update_data:
-            raise ValueError("Güncellenecek veri bulunamadı.")
-
-        # 'supabase' -> 'g.supabase' olarak değiştirildi
-        response = g.supabase.table('tankerler') \
-            .update(update_data) \
-            .eq('id', tanker_id) \
-            .eq('firma_id', g.user.sirket_id) \
-            .execute()
-        return response.data[0]
-    except ValueError as ve:
-        raise ve
-    except Exception as e:
-        logger.error(f"Tanker güncellenirken hata: {e}", exc_info=True)
-        raise
-
-# --- BU FONKSİYON GÜNCELLENDİ (delete_tanker) ---
-def delete_tanker(tanker_id):
-    """
-    Bir tankeri güvenli bir şekilde siler.
-    'g.supabase' kullanarak GÜVENLİ RPC fonksiyonunu çağırır.
-    """
-    try:
-        # 'supabase.rpc' -> 'g.supabase.rpc' olarak değiştirildi
-        rpc_result = g.supabase.rpc('delete_tanker_safely', {'p_tanker_id': tanker_id}).execute()
-        
-        if rpc_result.data and 'SQL tanker silme hatasi' in rpc_result.data:
-            logger.error(f"SQL delete_tanker_safely hatası (Tanker ID: {tanker_id}): {rpc_result.data}")
-            raise Exception(f"SQL fonksiyon hatası: {rpc_result.data}")
+    def add_tanker(self, data: dict):
+        """Yeni bir tanker ekler. sirket_id'yi 'g' objesinden alır."""
+        try:
+            # ID'leri 'g' objesinden al
+            sirket_id = g.profile['sirket_id']
             
-        return {"success": True, "message": "Tanker başarıyla silindi."}
-        
-    except APIError as e: # PostgrestAPIError -> APIError
-        logger.error(f"Tanker silinirken Postgrest hatası (Tanker ID: {tanker_id}): {e}", exc_info=True)
-        return {"success": False, "message": f"Veritabanı hatası: {e.message}"}
-    except Exception as e:
-        logger.error(f"Tanker silinirken genel hata (Tanker ID: {tanker_id}): {e}", exc_info=True)
-        return {"success": False, "message": "Tanker silinirken beklenmedik bir hata oluştu."}
+            tanker_adi = sanitize_input(data.get('tanker_adi'))
+            kapasite = data.get('kapasite_litre')
 
-# --- Kalan fonksiyonlar (atamalarla ilgili) ---
+            if not tanker_adi or not kapasite:
+                raise ValueError("Tanker adı ve kapasite zorunludur.")
+            
+            kapasite_numeric = float(kapasite)
 
-def get_tanker_assignments(sirket_id):
-    """Tankerlere atanan toplayıcıların listesini alır."""
-    try:
-        # 'supabase' -> 'g.supabase' olarak değiştirildi
-        response = g.supabase.table('toplayici_tanker_atama') \
-            .select('id, toplayici_user_id, tanker_id, kullanicilar(isim), tankerler(tanker_adi)') \
-            .eq('firma_id', sirket_id) \
-            .execute()
-        return response.data
-    except Exception as e:
-        logger.error(f"Tanker atamaları alınırken hata: {e}", exc_info=True)
-        raise
+            # g.supabase -> supabase_client
+            # 'firma_id' -> 'sirket_id' (SQL şemamıza göre)
+            response = supabase_client.table('tankerler').insert({
+                'sirket_id': sirket_id, # RLS 'WITH CHECK' için
+                'tanker_adi': tanker_adi,
+                'kapasite_litre': kapasite_numeric,
+                'mevcut_doluluk': 0
+            }).execute()
+            return response.data[0], None
+        except ValueError as ve: 
+            return None, str(ve)
+        except Exception as e:
+            if 'unique constraint' in str(e):
+                return None, "Bu tanker adı zaten mevcut."
+            logger.error(f"Tanker eklenirken hata: {e}", exc_info=True)
+            return None, "Tanker eklenirken bir hata oluştu."
 
-def assign_toplayici_to_tanker(data):
-    """Bir toplayıcıyı bir tankere atar."""
-    try:
-        toplayici_id = data.get('toplayici_id')
-        tanker_id = data.get('tanker_id')
-        firma_id = g.user.sirket_id
+    def update_tanker(self, tanker_id: int, data: dict):
+        """Bir tankeri RLS kullanarak günceller."""
+        try:
+            tanker_adi = sanitize_input(data.get('tanker_adi'))
+            kapasite = data.get('kapasite_litre')
+            
+            update_data = {}
+            if tanker_adi:
+                update_data['tanker_adi'] = tanker_adi
+            if kapasite:
+                update_data['kapasite_litre'] = float(kapasite)
 
-        if not toplayici_id or not tanker_id:
-            raise ValueError("Toplayıcı ID ve Tanker ID zorunludur.")
+            if not update_data:
+                raise ValueError("Güncellenecek veri bulunamadı.")
 
-        # 'supabase' -> 'g.supabase' olarak değiştirildi
-        response = g.supabase.table('toplayici_tanker_atama').upsert({
-            'toplayici_user_id': toplayici_id,
-            'tanker_id': tanker_id,
-            'firma_id': firma_id
-        }, on_conflict='toplayici_user_id').execute()
-        
-        return response.data[0]
-    except Exception as e:
-        logger.error(f"Tanker ataması yapılırken hata: {e}", exc_info=True)
-        if 'unique constraint' in str(e).lower():
-             raise ValueError("Bu toplayıcı zaten bir tankere atanmış.")
-        raise
+            # g.supabase -> supabase_client
+            # .eq('firma_id', ...) FİLTRESİ KALDIRILDI
+            response = supabase_client.table('tankerler') \
+                .update(update_data) \
+                .eq('id', tanker_id) \
+                .execute()
+                
+            if not response.data:
+                 raise ValueError("Tanker bulunamadı veya güncelleme yetkiniz yok.")
+            return response.data[0], None
+        except ValueError as ve:
+            return None, str(ve)
+        except Exception as e:
+            if 'unique constraint' in str(e):
+                return None, "Bu tanker adı zaten mevcut."
+            logger.error(f"Tanker güncellenirken hata: {e}", exc_info=True)
+            return None, "Tanker güncellenirken bir hata oluştu."
 
-def unassign_toplayici_from_tanker(assignment_id):
-    """Bir toplayıcının tanker atamasını kaldırır."""
-    try:
-        # 'supabase' -> 'g.supabase' olarak değiştirildi
-        g.supabase.table('toplayici_tanker_atama') \
-            .delete() \
-            .eq('id', assignment_id) \
-            .eq('firma_id', g.user.sirket_id) \
-            .execute()
-        return True
-    except Exception as e:
-        logger.error(f"Tanker ataması kaldırılırken hata: {e}", exc_info=True)
-        raise
+    def delete_tanker(self, tanker_id: int):
+        """Bir tankeri RLS kullanarak siler. Kullanımdaysa FK hatası verir."""
+        try:
+            # RPC'li karmaşık silme yerine, RLS'e güvenen basit silme
+            # g.supabase -> supabase_client
+            response = supabase_client.table('tankerler') \
+                .delete() \
+                .eq('id', tanker_id) \
+                .execute()
 
-# EKLENECEK YENİ FONKSİYON
-# services/tanker_service.py
+            if not response.data:
+                raise ValueError("Tanker bulunamadı veya silme yetkiniz yok.")
+                
+            return True, None
+            
+        except ValueError as ve:
+            return None, str(ve)
+        except Exception as e:
+            if 'violates foreign key constraint' in str(e).lower():
+                return None, "Bu tanker süt girdilerinde veya atamalarda kullanıldığı için silinemez."
+            logger.error(f"Tanker silinirken genel hata (Tanker ID: {tanker_id}): {e}", exc_info=True)
+            return None, "Tanker silinirken beklenmedik bir hata oluştu."
 
-# ... diğer importlar ve fonksiyonlar ...
+    # --- Tanker Atama Fonksiyonları ---
 
-# services/tanker_service.py
+    def get_tanker_assignments(self):
+        """Tankerlere atanan toplayıcıların listesini RLS ile alır."""
+        try:
+            # sirket_id parametresi KALDIRILDI
+            # g.supabase -> supabase_client
+            # 'firma_id' -> 'sirket_id' (SQL şemasında düzeltmiştik)
+            # 'kullanicilar(isim)' -> 'profiller(kullanici_adi)'
+            response = supabase_client.table('toplayici_tanker_atama') \
+                .select('id, toplayici_user_id, tanker_id, profiller(kullanici_adi), tankerler(tanker_adi)') \
+                .execute()
+            return response.data, None
+        except Exception as e:
+            logger.error(f"Tanker atamaları alınırken hata: {e}", exc_info=True)
+            return None, "Tanker atamaları alınamadı."
 
-# ... diğer importlar ve fonksiyonlar ...
+    def assign_toplayici_to_tanker(self, data: dict):
+        """Bir toplayıcıyı bir tankere atar. RLS (WITH CHECK) güvenliği sağlar."""
+        try:
+            # 'toplayici_id' (eski int) -> 'toplayici_user_id' (yeni UUID)
+            toplayici_id_uuid = data.get('toplayici_id') 
+            tanker_id = data.get('tanker_id')
+            sirket_id = g.profile['sirket_id'] # 'g' objesinden al
 
-# EKLENECEK YENİ FONKSİYON (GÜNCELLENDİ)
-# EKLENECEK YENİ FONKSİYON (DÜZELTİLDİ)
-def get_collectors_for_assignment(sirket_id):
-    """
-    Tanker ataması modalı için sadece 'toplayici' rolündeki
-    kullanıcıları listeler.
-    """
-    try:
-        # DÜZELTME: .order('isim', ...) -> .order('kullanici_adi', ...)
-        # Şemada 'isim' sütunu yok, 'kullanici_adi' var.
-        response = g.supabase.table('kullanicilar') \
-            .select('id, kullanici_adi') \
-            .eq('sirket_id', sirket_id) \
-            .eq('rol', UserRole.TOPLAYICI.value) \
-            .order('kullanici_adi', desc=False) \
-            .execute()
-        return response.data
-    except Exception as e:
-        logger.error(f"Atama için toplayıcılar alınırken hata: {e}", exc_info=True)
-        raise
+            if not toplayici_id_uuid or not tanker_id:
+                raise ValueError("Toplayıcı ID ve Tanker ID zorunludur.")
+
+            # g.supabase -> supabase_client
+            # 'firma_id' -> 'sirket_id'
+            response = supabase_client.table('toplayici_tanker_atama').upsert({
+                'toplayici_user_id': toplayici_id_uuid, # UUID'yi doğru sütuna ata
+                'tanker_id': tanker_id,
+                'sirket_id': sirket_id # RLS 'WITH CHECK' için
+            }, on_conflict='toplayici_user_id').execute() # Toplayıcıyı tek tankere ata
+            
+            return response.data[0], None
+        except ValueError as ve:
+            return None, str(ve)
+        except Exception as e:
+            logger.error(f"Tanker ataması yapılırken hata: {e}", exc_info=True)
+            if 'unique constraint "toplayici_tanker_atama_toplayici_user_id_key"' in str(e).lower():
+                 return None, "Bu toplayıcı zaten bir tankere atanmış."
+            if 'foreign key constraint' in str(e).lower():
+                 return None, "Seçilen toplayıcı veya tanker bulunamadı."
+            return None, "Tanker ataması yapılırken bir hata oluştu."
+
+    def unassign_toplayici_from_tanker(self, assignment_id: int):
+        """Bir toplayıcının tanker atamasını RLS ile kaldırır."""
+        try:
+            # g.supabase -> supabase_client
+            # .eq('firma_id', ...) FİLTRESİ KALDIRILDI
+            response = supabase_client.table('toplayici_tanker_atama') \
+                .delete() \
+                .eq('id', assignment_id) \
+                .execute()
+                
+            if not response.data:
+                raise ValueError("Atama kaydı bulunamadı veya silme yetkiniz yok.")
+            return True, None
+        except ValueError as ve:
+            return None, str(ve)
+        except Exception as e:
+            logger.error(f"Tanker ataması kaldırılırken hata: {e}", exc_info=True)
+            return None, "Atama kaldırılırken bir hata oluştu."
+
+    def get_collectors_for_assignment(self):
+        """
+        Tanker ataması modalı için RLS ile 'toplayici' rolündeki
+        personeli listeler.
+        """
+        try:
+            # sirket_id parametresi KALDIRILDI
+            # g.supabase.table('kullanicilar') -> supabase_client.table('profiller')
+            # .eq('sirket_id', ...) FİLTRESİ KALDIRILDI
+            response = supabase_client.table('profiller') \
+                .select('id, kullanici_adi') \
+                .eq('rol', UserRole.TOPLAYICI.value) \
+                .order('kullanici_adi', desc=False) \
+                .execute()
+            return response.data, None
+        except Exception as e:
+            logger.error(f"Atama için toplayıcılar alınırken hata: {e}", exc_info=True)
+            return None, "Toplayıcı listesi alınamadı."
+
+# Servis objesini (instance) oluştur
+tanker_service = TankerService()

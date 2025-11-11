@@ -1,209 +1,137 @@
 # blueprints/ciftci.py
+# RLS ve yeni 'ciftci' rolü mantığına göre güncellendi.
 
 import logging
-from flask import Blueprint, jsonify, request, session, g
-from decorators import login_required # Genel giriş kontrolü
-from constants import UserRole # Rolleri kontrol etmek için
+from flask import Blueprint, jsonify, render_template, request, g, session
+# 'role_required' decorator'ını ve 'UserRole' sabitlerini kullan
+from decorators import login_required, role_required
+from constants import UserRole
+from extensions import supabase_client
 from decimal import Decimal
 
 logger = logging.getLogger(__name__)
-ciftci_bp = Blueprint('ciftci', __name__, url_prefix='/api/ciftci')
+ciftci_bp = Blueprint('ciftci', __name__, url_prefix='/ciftci')
 
-# --- Yardımcı Fonksiyon: Giriş yapmış çiftçinin tedarikçi ID'sini bul ---
-def _get_ciftci_tedarikci_id():
+@ciftci_bp.route('/panel')
+@login_required
+@role_required(UserRole.CIFCI.value) # Sadece 'ciftci' rolü girebilir
+def ciftci_paneli():
+    """Çiftçi rolündeki kullanıcının ana panelini render eder."""
+    # 'g.profile' @login_required tarafından dolduruldu
+    kullanici_adi = g.profile.get('kullanici_adi', 'Çiftçi')
+    return render_template('ciftci_panel.html', kullanici_adi=kullanici_adi)
+
+# --- API ROTALARI (ÇİFTÇİ PANELİ İÇİN) ---
+
+@ciftci_bp.route('/api/panel_data')
+@login_required
+@role_required(UserRole.CIFCI.value)
+def get_ciftci_panel_data_api():
     """
-    Session'daki kullanıcı ID'sini kullanarak ilgili tedarikçi ID'sini bulur.
-    Kullanıcı çiftçi değilse veya tedarikçi ile eşleşmiyorsa None döner.
+    Çiftçi paneli için gerekli tüm verileri (Özet, son işlemler)
+    yeni RPC fonksiyonunu (get_ciftci_panel_data) kullanarak çeker.
     """
-    user_info = session.get('user')
-    if not user_info or user_info.get('rol') != UserRole.CIFCI.value:
-        return None # Yetkisiz veya çiftçi değil
-
-    user_id = user_info['id']
-    sirket_id = user_info['sirket_id']
-
-    # Tedarikçiler tablosundan bu kullanıcı ID'sine bağlı tedarikçiyi bul
-    tedarikci_res = g.supabase.table('tedarikciler') \
-        .select('id') \
-        .eq('kullanici_id', user_id) \
-        .eq('sirket_id', sirket_id) \
-        .maybe_single() \
-        .execute()
-
-    if tedarikci_res.data:
-        return tedarikci_res.data['id']
-    else:
-        logger.warning(f"Çiftçi rolündeki kullanıcı {user_id} için eşleşen tedarikçi kaydı bulunamadı (Şirket ID: {sirket_id}).")
-        return None # Eşleşen tedarikçi yok
-
-# --- API Endpoint'leri ---
-
-@ciftci_bp.route('/ozet', methods=['GET'])
-@login_required # Önce giriş yapılmış mı kontrol et
-def get_ciftci_ozet():
-    """Giriş yapmış çiftçinin finansal özetini getirir."""
-    tedarikci_id = _get_ciftci_tedarikci_id()
-    if tedarikci_id is None:
-        return jsonify({"error": "Bu bilgilere erişim yetkiniz yok veya profilinizle eşleşen bir tedarikçi kaydı bulunamadı."}), 403
-
-    sirket_id = session['user']['sirket_id']
-
     try:
-        # Güncellenmiş RPC fonksiyonunu çağır
-        summary_res = g.supabase.rpc('get_supplier_summary', {
-            'p_sirket_id': sirket_id,
-            'p_tedarikci_id': tedarikci_id
+        # 1. Kullanıcı UUID'sini 'g' objesinden al
+        kullanici_id_uuid = g.user.id
+        
+        # 2. Yeni RLS'e uyumlu RPC'yi çağır
+        response = supabase_client.rpc('get_ciftci_panel_data', {
+            'p_kullanici_id': kullanici_id_uuid
         }).execute()
-
-        if not summary_res.data:
-             return jsonify({
-                "toplam_sut_alacagi": "0.00",
-                "toplam_yem_borcu": "0.00",
-                "toplam_sirket_odemesi": "0.00", # Yeni alan adı
-                "toplam_tahsilat": "0.00",      # Yeni alan adı
-                "net_bakiye": "0.00"
-            })
-
-        ozet = summary_res.data
-        # Sayıları string olarak formatlayıp gönderelim
-        # --- GÜNCELLEME: Yeni alan adları kullanıldı ---
-        formatted_ozet = {
-            "toplam_sut_alacagi": f"{Decimal(ozet.get('toplam_sut_alacagi', 0)):.2f}",
-            "toplam_yem_borcu": f"{Decimal(ozet.get('toplam_yem_borcu', 0)):.2f}",
-            "toplam_sirket_odemesi": f"{Decimal(ozet.get('toplam_sirket_odemesi', 0)):.2f}", # Eski toplam_odeme yerine
-            "toplam_tahsilat": f"{Decimal(ozet.get('toplam_tahsilat', 0)):.2f}",          # Yeni alan
-            "net_bakiye": f"{Decimal(ozet.get('net_bakiye', 0)):.2f}"
+        
+        if not response.data:
+            return jsonify({"error": "Çiftçi verisi bulunamadı veya RPC hatası."}), 404
+        
+        # 3. Veriyi formatla (RPC'den gelen özeti Decimal'e çevir)
+        data = response.data
+        summary = data.get('summary', {})
+        formatted_summary = {
+            "toplam_sut_alacagi": f"{Decimal(summary.get('toplam_sut_alacagi', 0)):.2f}",
+            "toplam_yem_borcu": f"{Decimal(summary.get('toplam_yem_borcu', 0)):.2f}",
+            "toplam_sirket_odemesi": f"{Decimal(summary.get('toplam_sirket_odemesi', 0)):.2f}",
+            "toplam_tahsilat": f"{Decimal(summary.get('toplam_tahsilat', 0)):.2f}",
+            "net_bakiye": f"{Decimal(summary.get('net_bakiye', 0)):.2f}"
         }
-        # --- GÜNCELLEME SONU ---
-        return jsonify(formatted_ozet)
+        data['summary'] = formatted_summary # Özeti formatlanmışıyla değiştir
 
+        return jsonify(data)
+        
     except Exception as e:
-        logger.error(f"Çiftçi özeti alınırken hata (Tedarikçi ID: {tedarikci_id}): {e}", exc_info=True)
-        return jsonify({"error": "Özet bilgileri alınırken bir sunucu hatası oluştu."}), 500
+        logger.error(f"Çiftçi panel verisi (API) alınırken hata: {e}", exc_info=True)
+        return jsonify({"error": "Panel verileri alınırken bir hata oluştu."}), 500
 
-
-@ciftci_bp.route('/sut_girdileri', methods=['GET'])
+@ciftci_bp.route('/api/sut_girdileri')
 @login_required
-def get_ciftci_sut_girdileri():
-    """Giriş yapmış çiftçinin süt girdilerini sayfalayarak getirir."""
-    tedarikci_id = _get_ciftci_tedarikci_id()
-    if tedarikci_id is None:
-        return jsonify({"error": "Bu bilgilere erişim yetkiniz yok veya profilinizle eşleşen bir tedarikçi kaydı bulunamadı."}), 403
-
-    sirket_id = session['user']['sirket_id']
-    sayfa = int(request.args.get('sayfa', 1))
-    limit = int(request.args.get('limit', 5)) # Sayfa başına kayıt sayısı (Önceki JS ile uyumlu hale getirdim)
-    offset = (sayfa - 1) * limit
-
+@role_required(UserRole.CIFCI.value)
+def get_ciftci_sut_girdileri_api():
+    """Çiftçinin KENDİ süt girdilerini sayfalı olarak çeker."""
     try:
-        query = g.supabase.table('sut_girdileri').select(
-            'id, taplanma_tarihi, litre, fiyat',
-            count='exact'
-        ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id) \
-         .order('taplanma_tarihi', desc=True) \
-         .range(offset, offset + limit - 1)
+        # Çiftçinin tedarikçi ID'sini RLS kullanarak al
+        # (SQL'de çiftçinin sadece kendi kaydını görme politikası ekledik)
+        tedarikci_res = supabase_client.table('tedarikciler') \
+            .select('id') \
+            .eq('kullanici_id', g.user.id) \
+            .single() \
+            .execute()
+        
+        if not tedarikci_res.data:
+            return jsonify({"error": "İlişkili tedarikçi kaydı bulunamadı."}), 404
+        
+        tedarikci_id = tedarikci_res.data['id']
+        
+        sayfa = request.args.get('sayfa', 1, type=int)
+        limit = 10
+        offset = (sayfa - 1) * limit
 
-        response = query.execute()
+        # Kendi tedarikçi ID'si ile RLS'e tabi olarak sorgula
+        response = supabase_client.table('sut_girdileri') \
+            .select('taplanma_tarihi, litre, fiyat, toplam_tutar:fiyat', count='exact') \
+            .eq('tedarikci_id', tedarikci_id) \
+            .order('taplanma_tarihi', desc=True) \
+            .range(offset, offset + limit - 1) \
+            .execute()
+            
+        # Toplam tutarı manuel hesapla (fiyat * litre)
+        for item in response.data:
+            item['toplam_tutar'] = f"{Decimal(item.get('litre', 0)) * Decimal(item.get('fiyat', 0)):.2f}"
 
-        girdiler = []
-        for girdi in response.data:
-            litre = Decimal(girdi.get('litre', '0'))
-            fiyat = Decimal(girdi.get('fiyat', '0'))
-            girdiler.append({
-                "id": girdi['id'],
-                "tarih": girdi['taplanma_tarihi'],
-                "litre": f"{litre:.2f}",
-                "fiyat": f"{fiyat:.2f}",
-                "tutar": f"{(litre * fiyat):.2f}"
-            })
-
-        return jsonify({"girdiler": girdiler, "toplam_kayit": response.count})
-
+        return jsonify({"data": response.data, "count": response.count})
+        
     except Exception as e:
-        logger.error(f"Çiftçi süt girdileri alınırken hata (Tedarikçi ID: {tedarikci_id}): {e}", exc_info=True)
-        return jsonify({"error": "Süt girdileri alınırken bir sunucu hatası oluştu."}), 500
+        logger.error(f"Çiftçi süt girdileri (API) alınırken hata: {e}", exc_info=True)
+        return jsonify({"error": "Süt girdileri alınırken bir hata oluştu."}), 500
 
-
-@ciftci_bp.route('/yem_alimlarim', methods=['GET'])
+@ciftci_bp.route('/api/yem_islemleri')
 @login_required
-def get_ciftci_yem_alimlarim():
-    """Giriş yapmış çiftçinin yem alımlarını sayfalayarak getirir."""
-    tedarikci_id = _get_ciftci_tedarikci_id()
-    if tedarikci_id is None:
-        return jsonify({"error": "Bu bilgilere erişim yetkiniz yok veya profilinizle eşleşen bir tedarikçi kaydı bulunamadı."}), 403
-
-    sirket_id = session['user']['sirket_id']
-    sayfa = int(request.args.get('sayfa', 1))
-    limit = int(request.args.get('limit', 5)) # Sayfa başına kayıt sayısı
-    offset = (sayfa - 1) * limit
-
+@role_required(UserRole.CIFCI.value)
+def get_ciftci_yem_islemleri_api():
+    """Çiftçinin KENDİ yem işlemlerini sayfalı olarak çeker."""
     try:
-        query = g.supabase.table('yem_islemleri').select(
-            'id, islem_tarihi, miktar_kg, islem_anindaki_birim_fiyat, toplam_tutar, yem_urunleri(yem_adi)',
-            count='exact'
-        ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id) \
-         .order('islem_tarihi', desc=True) \
-         .range(offset, offset + limit - 1)
+        tedarikci_res = supabase_client.table('tedarikciler') \
+            .select('id') \
+            .eq('kullanici_id', g.user.id) \
+            .single() \
+            .execute()
+        
+        if not tedarikci_res.data:
+            return jsonify({"error": "İlişkili tedarikçi kaydı bulunamadı."}), 404
+            
+        tedarikci_id = tedarikci_res.data['id']
+        
+        sayfa = request.args.get('sayfa', 1, type=int)
+        limit = 10
+        offset = (sayfa - 1) * limit
 
-        response = query.execute()
+        response = supabase_client.table('yem_islemleri') \
+            .select('islem_tarihi, miktar_kg, toplam_tutar, yem_urunleri(yem_adi)', count='exact') \
+            .eq('tedarikci_id', tedarikci_id) \
+            .order('islem_tarihi', desc=True) \
+            .range(offset, offset + limit - 1) \
+            .execute()
 
-        islemler = []
-        for islem in response.data:
-            islemler.append({
-                "id": islem['id'],
-                "tarih": islem['islem_tarihi'],
-                "yem_adi": islem['yem_urunleri']['yem_adi'] if islem.get('yem_urunleri') else 'Bilinmeyen Yem',
-                "miktar_kg": f"{Decimal(islem.get('miktar_kg','0')):.2f}",
-                "birim_fiyat": f"{Decimal(islem.get('islem_anindaki_birim_fiyat','0')):.2f}",
-                "toplam_tutar": f"{Decimal(islem.get('toplam_tutar','0')):.2f}"
-            })
-
-        return jsonify({"islemler": islemler, "toplam_kayit": response.count})
-
+        return jsonify({"data": response.data, "count": response.count})
+        
     except Exception as e:
-        logger.error(f"Çiftçi yem alımları alınırken hata (Tedarikçi ID: {tedarikci_id}): {e}", exc_info=True)
-        return jsonify({"error": "Yem alımları alınırken bir sunucu hatası oluştu."}), 500
-
-# --- YENİ ENDPOINT: Çiftçinin Kendi Finansal İşlemleri ---
-@ciftci_bp.route('/finans_islemleri', methods=['GET'])
-@login_required
-def get_ciftci_finans_islemleri():
-    """Giriş yapmış çiftçinin finansal işlemlerini (ödeme/avans/tahsilat) sayfalayarak getirir."""
-    tedarikci_id = _get_ciftci_tedarikci_id()
-    if tedarikci_id is None:
-        return jsonify({"error": "Bu bilgilere erişim yetkiniz yok veya profilinizle eşleşen bir tedarikçi kaydı bulunamadı."}), 403
-
-    sirket_id = session['user']['sirket_id']
-    sayfa = int(request.args.get('sayfa', 1))
-    limit = int(request.args.get('limit', 5)) # Sayfa başına kayıt sayısı
-    offset = (sayfa - 1) * limit
-
-    try:
-        # Sadece ilgili tedarikçinin finansal işlemlerini çek
-        query = g.supabase.table('finansal_islemler').select(
-            'id, islem_tarihi, islem_tipi, tutar, aciklama', # Kullanıcı adını göstermeye gerek yok
-            count='exact'
-        ).eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id) \
-         .order('islem_tarihi', desc=True) \
-         .range(offset, offset + limit - 1)
-
-        response = query.execute()
-
-        # Veriyi formatlayarak döndür
-        islemler = []
-        for islem in response.data:
-            islemler.append({
-                "id": islem['id'],
-                "tarih": islem['islem_tarihi'],
-                "islem_tipi": islem['islem_tipi'],
-                "tutar": f"{Decimal(islem.get('tutar','0')):.2f}",
-                "aciklama": islem['aciklama']
-            })
-
-        return jsonify({"islemler": islemler, "toplam_kayit": response.count})
-
-    except Exception as e:
-        logger.error(f"Çiftçi finans işlemleri alınırken hata (Tedarikçi ID: {tedarikci_id}): {e}", exc_info=True)
-        return jsonify({"error": "Finansal işlemler alınırken bir sunucu hatası oluştu."}), 500
-# --- /YENİ ENDPOINT ---
-
+        logger.error(f"Çiftçi yem işlemleri (API) alınırken hata: {e}", exc_info=True)
+        return jsonify({"error": "Yem işlemleri alınırken bir hata oluştu."}), 500

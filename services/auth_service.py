@@ -1,139 +1,105 @@
 # services/auth_service.py
 
-from flask import g
-from extensions import bcrypt, turkey_tz
-from datetime import datetime
-from postgrest import APIError
+from extensions import supabase_client, supabase_service
+from gotrue.errors import AuthApiError
 import logging
-# Bu import satırı çok önemli:
-from constants import UserRole
 
-logger = logging.getLogger(__name__)
+def register_admin_and_firma(email, password, sirket_adi, kullanici_adi):
+    """
+    Yeni bir firma ve admin kullanıcısını atomik olarak kaydeder.
+    Bu işlem admin (service_role) client'ı ile yapılır.
+    1. Auth'ta kullanıcıyı oluşturur.
+    2. RPC çağırarak 'sirketler' ve 'profiller' tablolarına kayıt yapar.
+    3. Hata olursa Auth kullanıcısını geri siler (rollback).
+    """
+    new_user_id = None
+    try:
+        # 1. ADIM: Supabase Auth'ta kullanıcıyı oluştur
+        # (service_role anahtarı ile)
+        auth_response = supabase_service.auth.admin.create_user(
+            email=email,
+            password=password,
+            email_confirm=True  # E-posta doğrulaması isteyebilirsiniz (opsiyonel)
+        )
+        new_user_id = auth_response.user.id
 
-class AuthService:
-    """Kullanıcı kimlik doğrulama işlemleri için servis katmanı."""
+    except AuthApiError as e:
+        # "User already exists" hatasını yakala
+        if "User already registered" in str(e) or "already exists" in str(e):
+            return None, "Bu e-posta adresi zaten kayıtlı."
+        logging.error(f"Auth kullanıcısı oluşturulamadı: {str(e)}")
+        return None, f"Kimlik doğrulama hatası: {str(e)}"
+    except Exception as e:
+        logging.error(f"Bilinmeyen bir hata oluştu (Auth): {str(e)}")
+        return None, "Bilinmeyen bir hata oluştu (Auth)."
 
-    def register_user(self, kullanici_adi, sifre, sirket_adi):
-        """Yeni bir kullanıcı ve YENİ bir şirket kaydı yapar."""
+    try:
+        # 2. ADIM: Firmayı ve profili oluşturmak için RPC'yi çağır
+        # Bu fonksiyonu (setup_new_firma_and_admin) SQL Editor'de oluşturmuştuk.
+        rpc_params = {
+            'p_admin_user_id': new_user_id, # Oluşturulan kullanıcının UUID'si
+            'p_admin_email': email,
+            'p_kullanici_adi': kullanici_adi,
+            'p_sirket_adi': sirket_adi
+        }
+        rpc_response = supabase_service.rpc('setup_new_firma_and_admin', rpc_params).execute()
+        
+        if rpc_response.data:
+            return rpc_response.data, None # Başarılı, yeni sirket_id'yi döndür
+        else:
+            # RPC'den bir hata geldi veya veri dönmedi
+            raise Exception("Veritabanı fonksiyonu (RPC) beklenen yanıtı vermedi.")
+
+    except Exception as e:
+        # 3. ADIM (ROLLBACK): Profil/Şirket oluşturma başarısız olursa, 
+        # 1. adımda oluşturulan Auth kullanıcısını SİL.
         try:
-            if not all([kullanici_adi, sifre, sirket_adi]):
-                raise ValueError("Tüm alanların doldurulması zorunludur.")
-
-            # 1. Kullanıcı adı benzersiz mi?
-            kullanici_var_mi = g.supabase.table('kullanicilar').select('id', count='exact').eq('kullanici_adi', kullanici_adi).execute()
-            if kullanici_var_mi.count > 0:
-                raise ValueError("Bu kullanıcı adı zaten mevcut.")
-
-            # 2. Şirket adı benzersiz mi? (YENİ KURAL)
-            formatted_name = sirket_adi.strip().title()
-            sirket_response = g.supabase.table('sirketler').select('id').eq('sirket_adi', formatted_name).execute()
-
-            if sirket_response.data:
-                # Şirket zaten varsa, kayıt olmasını engelle
-                raise ValueError(f"'{formatted_name}' adında bir şirket zaten kayıtlı. Lütfen giriş yapın veya yöneticinizle iletişime geçin.")
-
-            # 3. Şirket ve Kullanıcıyı oluştur (Çünkü ikisi de yeni)
-            
-            # Yeni şirketi oluştur
-            yeni_sirket_response = g.supabase.table('sirketler').insert({'sirket_adi': formatted_name}).execute()
-            sirket_id = yeni_sirket_response.data[0]['id']
-            
-            # Yeni kullanıcıyı 'firma_yetkilisi' rolüyle oluştur
-            rol = UserRole.FIRMA_YETKILISI.value 
-            
-            hashed_sifre = bcrypt.generate_password_hash(sifre).decode('utf-8')
-            
-            g.supabase.table('kullanicilar').insert({
-                'kullanici_adi': kullanici_adi, 
-                'sifre': hashed_sifre,
-                'sirket_id': sirket_id,
-                'rol': rol
-            }).execute()
-
-            # Mesajı daha açıklayıcı hale getirdim
-            return {"message": "Şirketiniz ve yönetici hesabınız başarıyla oluşturuldu! Giriş yapabilirsiniz."}
-
-        except ValueError as ve:
-            raise
-        except APIError as e:
-            logger.error(f"Kayıt sırasında API hatası: {e}", exc_info=True)
-            raise Exception("Kayıt sırasında bir veritabanı hatası oluştu.")
-        except Exception as e:
-            logger.error(f"Kayıt sırasında genel hata: {e}", exc_info=True)
-            raise Exception("Kayıt sırasında beklenmedik bir sunucu hatası oluştu.")
-
-    def _get_or_create_sirket(self, sirket_adi):
-        """
-        Verilen isimde bir şirket arar, bulamazsa yenisini oluşturur.
-        Dönüş değeri olarak (sirket_id, is_yeni_sirket_mi) şeklinde bir tuple döndürür.
-        (Bu fonksiyon artık register_user tarafından kullanılmıyor ancak başka bir yerde
-         kullanılma ihtimaline karşı yerinde bırakılabilir.)
-        """
-        formatted_name = sirket_adi.strip().title()
-        sirket_response = g.supabase.table('sirketler').select('id').eq('sirket_adi', formatted_name).execute()
+            if new_user_id:
+                supabase_service.auth.admin.delete_user(new_user_id)
+                logging.warning(f"ROLLBACK: Auth kullanıcısı silindi: {new_user_id}")
+        except Exception as delete_e:
+            # Bu çok kritik bir hata, manuel müdahale gerektirebilir
+            logging.error(f"KRİTİK HATA: Profil oluşturulamadı ({str(e)}) VE auth kullanıcısı silinemedi ({str(delete_e)}).")
+            return None, "Kritik kayıt hatası. Lütfen yöneticiye başvurun."
         
-        if sirket_response.data:
-            # Şirket zaten varsa, ID'sini ve 'yeni değil' (False) bilgisini döndür.
-            return sirket_response.data[0]['id'], False
+        # Hata mesajını kullanıcıya daha anlaşılır ver
+        if 'duplicate key value violates unique constraint "sirketler_sirket_adi_key"' in str(e):
+             return None, "Bu şirket adı zaten alınmış."
         
-        # Şirket yoksa, yeni bir tane oluştur.
-        yeni_sirket_response = g.supabase.table('sirketler').insert({'sirket_adi': formatted_name}).execute()
-        # Yeni şirketin ID'sini ve 'yeni' (True) bilgisini döndür.
-        return yeni_sirket_response.data[0]['id'], True
+        logging.error(f"Firma profili oluşturulamadı, kayıt geri alındı: {str(e)}")
+        return None, "Firma profili oluşturulamadı, kayıt geri alındı."
 
 
-    def login_user(self, kullanici_adi, sifre):
-        """Kullanıcıyı doğrular, lisansını kontrol eder ve oturum verilerini döndürür."""
-        try:
-            user_response = g.supabase.table('kullanicilar').select('*, sirketler(sirket_adi, lisans_bitis_tarihi)').eq('kullanici_adi', kullanici_adi).execute()
-        
-            if not user_response.data:
-                raise ValueError("Bu kullanıcı adına sahip bir hesap bulunamadı.")
+def login_user(email, password):
+    """
+    Kullanıcıyı anon client ile giriş yaptırır ve session bilgisini döndürür.
+    """
+    try:
+        # RLS'e tabi olan 'anon' client'ı kullanarak giriş yap
+        auth_response = supabase_client.auth.sign_in_with_password(
+            {"email": email, "password": password}
+        )
+        return auth_response.session, None
+    except AuthApiError as e:
+        if "Invalid login credentials" in str(e):
+            return None, "Geçersiz e-posta veya şifre."
+        if "Email not confirmed" in str(e):
+             return None, "E-posta adresiniz henüz doğrulanmamış."
+        logging.error(f"Giriş hatası (AuthApiError): {str(e)}")
+        return None, "Giriş sırasında bir hata oluştu."
+    except Exception as e:
+        logging.error(f"Bilinmeyen giriş hatası: {str(e)}")
+        return None, "Bilinmeyen bir hata oluştu."
 
-            user = user_response.data[0]
-            self._check_license(user)
-
-            if not bcrypt.check_password_hash(user['sifre'], sifre):
-                raise ValueError("Yanlış şifre.")
-
-            session_data = {
-                'id': user['id'],
-                'kullanici_adi': user['kullanici_adi'],
-                'sirket_id': user['sirket_id'],
-                'rol': user['rol'],
-                'sirket_adi': user['sirketler']['sirket_adi'] if user.get('sirketler') else 'Atanmamış',
-                'lisans_bitis_tarihi': user['sirketler']['lisans_bitis_tarihi'] if user.get('sirketler') else None
-            }
-            return session_data
-
-        except ValueError:
-            raise
-        except Exception as e:
-            logger.error(f"Giriş yapılırken hata oluştu: {e}", exc_info=True)
-            raise Exception("Giriş yapılırken bir sunucu hatası oluştu.")
-
-
-    def _check_license(self, user):
-        """Kullanıcının şirket lisansının geçerli olup olmadığını kontrol eder."""
-        if user.get('rol') == 'admin':
-            return
-
-        lisans_bilgisi = user.get('sirketler')
-        if not lisans_bilgisi or not lisans_bilgisi.get('lisans_bitis_tarihi'):
-            raise ValueError("Şirketiniz için bir lisans tanımlanmamıştır.")
-        
-        try:
-            lisans_bitis_tarihi_str = lisans_bilgisi['lisans_bitis_tarihi']
-            lisans_bitis_tarihi_obj = datetime.strptime(lisans_bitis_tarihi_str, '%Y-%m-%d').date()
-            bugun_tr = datetime.now(turkey_tz).date()
-            
-            if bugun_tr >= lisans_bitis_tarihi_obj:
-                raise ValueError("Şirketinizin lisans süresi dolmuştur.")
-        except (ValueError, TypeError) as e:
-            if "Şirketinizin lisans süresi dolmuştur" not in str(e):
-                 logger.error(f"Lisans tarihi format hatası: {e}", exc_info=True)
-                 raise Exception("Lisans tarihi formatı geçersiz. Yöneticinizle iletişime geçin.")
-            else:
-                raise e
-
-auth_service = AuthService()
+def logout_user():
+    """
+    Mevcut kullanıcının oturumunu (token'ını) geçersiz kılar.
+    Decorator zaten client'ı (supabase_client) yetkilendirdiği için
+    token'lara burada ihtiyacımız yok.
+    """
+    try:
+        supabase_client.auth.sign_out()
+        return True, None
+    except Exception as e:
+        logging.error(f"Çıkış hatası: {str(e)}")
+        return False, "Çıkış yapılırken bir hata oluştu."

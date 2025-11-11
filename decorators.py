@@ -1,211 +1,92 @@
 # decorators.py
-import logging
-from functools import wraps
-# DÜZELTME: API hata yanıtları için request ve jsonify eklendi
-from flask import session, redirect, url_for, g, flash, abort, request, jsonify
-from constants import UserRole
-from datetime import date # Lisans kontrolü için eklendi
 
-logger = logging.getLogger(__name__)
+from functools import wraps
+from flask import session, redirect, url_for, flash, g
+from extensions import supabase_client  # Sadece anon key'li (RLS'e tabi) client'ı import ediyoruz
+from gotrue.errors import AuthApiError
 
 def login_required(f):
-    """
-    Kullanıcının giriş yapıp yapmadığını kontrol eder.
-    Giriş yapmamışsa login sayfasına yönlendirir.
-    Giriş yapmışsa kullanıcı bilgilerini 'g.user'a atar.
-    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user' not in session:
+        access_token = session.get('access_token')
+        refresh_token = session.get('refresh_token')
+
+        if not access_token:
             flash('Bu sayfayı görmek için giriş yapmalısınız.', 'warning')
+            session.clear()
             return redirect(url_for('auth.login'))
-        
-        g.user = session.get('user')
-        
-        if g.user is None:
-            session.pop('user', None)
-            flash('Oturum hatası, lütfen tekrar giriş yapın.', 'danger')
-            return redirect(url_for('auth.login'))
-            
-        return f(*args, **kwargs)
-    return decorated_function
-
-
-def lisans_kontrolu(f):
-    """
-    Kullanıcının lisansının geçerli olup olmadığını kontrol eder.
-    Sadece 'ADMIN' olmayan rolleri kontrol eder.
-    MUTLAKA @login_required'dan SONRA kullanılmalıdır.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not hasattr(g, 'user') or g.user is None:
-            logger.warning("Lisans decorator'ı 'g.user' olmadan çağrıldı. @login_required eksik.")
-            flash('Yetkilendirme için önce giriş yapılmalı.', 'danger')
-            return redirect(url_for('auth.login'))
-
-        kullanici_rolu = g.user.get('rol')
-        
-        # Admin lisans kontrolüne tabi değildir
-        if kullanici_rolu == UserRole.ADMIN.value:
-            return f(*args, **kwargs)
-
-        lisans_bitis_str = g.user.get('lisans_bitis_tarihi')
-        
-        if not lisans_bitis_str:
-            logger.warning(f"Kullanıcı {g.user.get('email')} için lisans bitiş tarihi bulunamadı.")
-            flash('Lisans bilgileriniz eksik. Lütfen yönetici ile iletişime geçin.', 'danger')
-            # Giriş yapılmış ama lisans yoksa ana sayfaya yönlendir (login'e değil)
-            return redirect(url_for('main.index')) 
 
         try:
-            # Tarihi 'YYYY-MM-DD' formatından parse et
-            lisans_bitis_tarihi = date.fromisoformat(lisans_bitis_str)
-            bugun = date.today()
+            # 1. RLS'in çalışması için client'a KULLANICININ KİMLİĞİNİ BİLDİR
+            # Bu, "supabase_client.auth.set_session(access_token, refresh_token)" komutunun eşdeğeridir
+            # ve token'ın geçerliliğini kontrol eder.
+            user_response = supabase_client.auth.get_user(access_token)
             
-            if lisans_bitis_tarihi < bugun:
-                # Lisans süresi dolmuş
-                logger.warning(f"Lisans süresi doldu: Kullanıcı {g.user.get('email')}, Bitiş: {lisans_bitis_tarihi}")
-                flash(f"Lisans süreniz {lisans_bitis_tarihi} tarihinde sona erdi. Lütfen lisansınızı yenileyin.", 'danger')
-                return redirect(url_for('main.index')) # Ana sayfaya yönlendir
-                
-        except ValueError:
-            logger.error(f"Kullanıcı {g.user.get('email')} için geçersiz lisans tarihi formatı: {lisans_bitis_str}")
-            flash('Lisans bilgileriniz okunamadı. Lütfen yönetici ile iletişime geçin.', 'danger')
-            return redirect(url_for('main.index'))
+            g.user = user_response.user
+            if not g.user:
+                raise Exception("Kullanıcı bulunamadı veya token geçersiz")
 
-        # Lisans geçerli
+            # 2. Kullanıcının profil bilgilerini (rol, sirket_id) 'profiller' tablosundan çek
+            # Bu bilgiler artık tüm istek boyunca 'g' objesi üzerinden erişilebilir olacak.
+            # NOT: Bu sorgu, RLS politikaları (Bölüm 3'te kurduğumuz) sayesinde GÜVENLİDİR.
+            # Kullanıcı sadece kendi profilini çekebilir.
+            profile_res = supabase_client.table('profiller').select('*').eq('id', g.user.id).single().execute()
+            
+            if not profile_res.data:
+                # Auth kullanıcısı var ama profili yoksa (kayıt olurken bir hata olduysa)
+                session.clear()
+                flash('Kullanıcı profiliniz bulunamadı. Lütfen yönetici ile iletişime geçin.', 'danger')
+                return redirect(url_for('auth.login'))
+                
+            g.profile = profile_res.data
+            
+            # 3. (ÖNEMLİ) Client'ı bu kullanıcının token'ı ile kalıcı olarak ayarla
+            # Bu sayede bu istek boyunca yapılacak TÜM supabase_client sorguları
+            # bu kullanıcı adına yapılır ve RLS'e tabi olur.
+            supabase_client.auth.set_session(access_token, refresh_token)
+
+
+        except (AuthApiError, Exception) as e:
+            # Token geçersiz veya süresi dolmuş
+            session.clear()
+            flash(f'Oturumunuzun süresi doldu veya geçersiz. Lütfen tekrar giriş yapın.', 'danger')
+            return redirect(url_for('auth.login'))
+
         return f(*args, **kwargs)
     return decorated_function
-
 
 def role_required(*roles):
     """
-    Kullanıcının belirtilen rollerden birine sahip olmasını gerektiren bir decorator.
-    MUTLAKA @login_required'dan SONRA kullanılmalıdır.
+    Kullanıcının belirtilen rollerden BİRİNE sahip olmasını kontrol eder.
+    Örnek kullanım: @role_required('firma_admin')
+    Örnek kullanım: @role_required('firma_admin', 'toplayici')
     """
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            if not hasattr(g, 'user') or g.user is None:
-                logger.warning(f"Role decorator'ı 'g.user' olmadan çağrıldı. @login_required eksik olabilir.")
-                flash('Yetkilendirme için önce giriş yapılmalı.', 'danger')
+            # @login_required zaten çalışmış olmalı ve g.profile'ı doldurmuş olmalı
+            if 'profile' not in g:
+                flash('Yetki kontrolü için profil bilgisi bulunamadı.', 'danger')
                 return redirect(url_for('auth.login'))
-            
-            izin_verilen_roller = set()
-            for rol in roles:
-                if isinstance(rol, UserRole):
-                    izin_verilen_roller.add(rol.value)
-                else:
-                    izin_verilen_roller.add(str(rol))
-            
-            kullanici_rolu = g.user.get('rol')
-            
-            if kullanici_rolu not in izin_verilen_roller:
-                logger.warning(f"Yetkisiz Erişim Girişimi: Kullanıcı {g.user.get('email')} (Rol: {kullanici_rolu}), '{f.__name__}' fonksiyonuna erişmeye çalıştı. İzin verilen roller: {izin_verilen_roller}")
-                if request.path.startswith('/api/'):
-                     return jsonify({"error": "Bu işlem için yetkiniz bulunmamaktadır."}), 403
-                abort(403)  # 403 Forbidden (Yasak)
+                
+            # Artık 'rol' sütununu direkt g.profile'dan okuyoruz
+            if g.profile.get('rol') not in roles:
+                flash('Bu sayfayı görüntüleme yetkiniz yok.', 'danger')
+                return redirect(url_for('main.index'))
             
             return f(*args, **kwargs)
-        return decorated_function
+        return decorator
+    # role_required'ı @login_required'dan SONRA kullanmanız gerekir.
+    # Bu yüzden @login_required'ı buraya eklemeye gerek yok.
     return decorator
 
+# 'admin_required' decorator'ını da yeni role_required'ı kullanacak şekilde güncelleyelim
+# (Not: Eğer süper-admin rolünüzün adı 'admin' ise bu doğrudur)
 def admin_required(f):
-    """
-    Kullanıcının 'ADMIN' rolüne sahip olmasını gerektiren bir decorator.
-    @role_required(UserRole.ADMIN)'in bir kısayoludur.
-    MUTLAKA @login_required'dan SONRA kullanılmalıdır.
-    """
     @wraps(f)
+    @login_required # Önce login kontrolü
+    @role_required('admin') # Sonra rol kontrolü
     def decorated_function(*args, **kwargs):
-        # @login_required'ın g.user'ı ayarlamış olması gerekir
-        if not hasattr(g, 'user') or g.user is None:
-            logger.warning(f"Admin decorator'ı 'g.user' olmadan çağrıldı. @login_required eksik olabilir.")
-            flash('Yetkilendirme için önce giriş yapılmalı.', 'danger')
-            return redirect(url_for('auth.login'))
-        
-        kullanici_rolu = g.user.get('rol')
-        
-        if kullanici_rolu != UserRole.ADMIN.value:
-            # Kullanıcının rolü 'ADMIN' değilse
-            logger.warning(f"Yetkisiz Erişim Girişimi (ADMIN GEREKLİ): Kullanıcı {g.user.get('email')} (Rol: {kullanici_rolu}), '{f.__name__}' fonksiyonuna erişmeye çalıştı.")
-            if request.path.startswith('/api/'):
-                 return jsonify({"error": "Bu işlem için yetkiniz bulunmamaktadır."}), 403
-            abort(403)  # 403 Forbidden (Yasak)
-        
-        # Yetkisi var, fonksiyona devam et
-        return f(*args, **kwargs)
-    return decorated_function
-
-def modification_allowed(f):
-    """
-    Kullanıcının veri girişi/güncelleme/silme yetkisi olup olmadığını kontrol eder.
-    Sadece 'ADMIN', 'FIRMA_YETKILISI' ve 'TOPLAYICI' rollerine izin verir.
-    (Muhasebeci ve Çiftçi rolleri hariç tutulur).
-    MUTLAKA @login_required'dan SONRA kullanılmalıdır.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not hasattr(g, 'user') or g.user is None:
-            logger.warning(f"Modification decorator'ı 'g.user' olmadan çağrıldı. @login_required eksik olabilir.")
-            # API isteği ise JSON dön
-            if request.path.startswith('/api/'):
-                return jsonify({"error": "Yetkilendirme için önce giriş yapılmalı."}), 401
-            flash('Yetkilendirme için önce giriş yapılmalı.', 'danger')
-            return redirect(url_for('auth.login'))
-        
-        kullanici_rolu = g.user.get('rol')
-        
-        izin_verilen_roller = {
-            UserRole.ADMIN.value,
-            UserRole.FIRMA_YETKILISI.value,
-            UserRole.TOPLAYICI.value
-        }
-        
-        if kullanici_rolu not in izin_verilen_roller:
-            # Kullanıcının rolü izin verilen rollerden biri değilse
-            logger.warning(f"Yetkisiz Değişiklik Girişimi: Kullanıcı {g.user.get('email')} (Rol: {kullanici_rolu}), '{f.__name__}' (Path: {request.path}) fonksiyonuna erişmeye çalıştı.")
-            
-            # API rotası ise JSON dön, değilse 403 sayfası göster
-            if request.path.startswith('/api/'):
-                    return jsonify({"error": "Bu işlem için yetkiniz bulunmamaktadır."}), 403
-            abort(403)  # 403 Forbidden (Yasak)
-        
-        # Yetkisi var, fonksiyona devam et
-        return f(*args, **kwargs)
-    return decorated_function
-
-# --- BU FONKSİYON YENİ EKLENDİ ---
-def firma_yetkilisi_required(f):
-    """
-    Kullanıcının 'FIRMA_YETKILISI' rolüne sahip olmasını gerektiren bir decorator.
-    @role_required(UserRole.FIRMA_YETKILISI)'nin bir kısayoludur.
-    MUTLAKA @login_required'dan SONRA kullanılmalıdır.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not hasattr(g, 'user') or g.user is None:
-            logger.warning(f"Firma Yetkilisi decorator'ı 'g.user' olmadan çağrıldı. @login_required eksik olabilir.")
-            if request.path.startswith('/api/'):
-                return jsonify({"error": "Yetkilendirme için önce giriş yapılmalı."}), 401
-            flash('Yetkilendirme için önce giriş yapılmalı.', 'danger')
-            return redirect(url_for('auth.login'))
-        
-        kullanici_rolu = g.user.get('rol')
-        
-        # Hem Admin hem de Firma Yetkilisi bu alanları görebilir (Genellikle Admin her şeyi görür)
-        # Ancak fonksiyon adı 'firma_yetkilisi_required' olduğu için
-        # SADECE firma yetkilisini kontrol etmek daha doğru olabilir.
-        # Eğer Admin'in de görmesi gerekiyorsa, 'role_required(UserRole.FIRMA_YETKILISI, UserRole.ADMIN)' kullanılmalı.
-        # Şimdilik fonksiyonun adına sadık kalıyorum:
-        
-        if kullanici_rolu != UserRole.FIRMA_YETKILISI.value:
-            logger.warning(f"Yetkisiz Erişim Girişimi (FIRMA YETKILISI GEREKLİ): Kullanıcı {g.user.get('email')} (Rol: {kullanici_rolu}), '{f.__name__}' fonksiyonuna erişmeye çalıştı.")
-            if request.path.startswith('/api/'):
-                 return jsonify({"error": "Bu işlem için sadece Firma Yetkilisi yetkilidir."}), 403
-            abort(403)  # 403 Forbidden (Yasak)
-        
-        # Yetkisi var, fonksiyona devam et
+        # Yetki kontrolü zaten role_required tarafından yapıldı
         return f(*args, **kwargs)
     return decorated_function

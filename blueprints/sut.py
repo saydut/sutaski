@@ -1,153 +1,154 @@
-# blueprints/sut.py (SERVİS KATMANINI KULLANACAK ŞEKİLDE GÜNCELLENDİ)
+# blueprints/sut.py
 
-from flask import Blueprint, jsonify, request, session, g
-from decorators import login_required, lisans_kontrolu, modification_allowed
-from extensions import turkey_tz
+from flask import Blueprint, render_template, request, jsonify, g, flash, redirect, url_for
+from services import sut_service, tedarikci_service, tanker_service, tarife_service
+# Artık auth_service veya session'dan sirket_id almaya GEREK YOK
+from decorators import login_required, role_required
 import logging
 from datetime import datetime
 
-# YENİ: Veritabanı mantığını içeren servis dosyasını import ediyoruz
-from services.sut_service import sut_service
+sut_bp = Blueprint('sut', __name__)
 
-sut_bp = Blueprint('sut', __name__, url_prefix='/api')
-logger = logging.getLogger(__name__)
-
-@sut_bp.route('/sut_girdileri', methods=['GET'])
+@sut_bp.route('/sut')
 @login_required
-def get_sut_girdileri():
-    """Süt girdilerini servis üzerinden listeler."""
+def sut_page():
+    """
+    Süt girdilerinin ana sayfasını render eder.
+    Veri yüklemesi artık JavaScript tarafından (API rotaları üzerinden) yapılacak.
+    Ancak, sayfa yüklenirken gerekli olan temel verileri (tedarikçiler, tankerler) yollayabiliriz.
+    """
     try:
-        # GÜNCELLEME: Session'dan sadece sirket_id'yi değil, kullanıcı bilgilerini de alıyoruz.
-        user_info = session['user']
-        sirket_id = user_info['sirket_id']
-        kullanici_id = user_info['id']
-        rol = user_info['rol']
+        # RLS otomatik olarak sadece bu şirketin tedarikçilerini getirecek
+        tedarikciler, error1 = tedarikci_service.get_all_tedarikciler()
+        # RLS otomatik olarak sadece bu şirketin tankerlerini getirecek
+        tankerler, error2 = tanker_service.get_all_tankers()
         
-        secilen_tarih_str = request.args.get('tarih')
-        sayfa = int(request.args.get('sayfa', 1))
-        
-        # GÜNCELLEME: Servis fonksiyonunu yeni parametrelerle (kullanici_id, rol) çağırıyoruz.
-        girdiler, toplam_sayi = sut_service.get_paginated_list(sirket_id, kullanici_id, rol, secilen_tarih_str, sayfa)
-        
-        return jsonify({"girdiler": girdiler, "toplam_girdi_sayisi": toplam_sayi})
-    except Exception as e:
-        logger.error(f"Süt girdileri listeleme hatası: {e}", exc_info=True)
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        # 'g.profile' decorator tarafından doldurulduğu için rolü oradan alabiliriz
+        user_role = g.profile.get('rol', 'ciftci')
 
-@sut_bp.route('/sut_girdisi_ekle', methods=['POST'])
+        if error1 or error2:
+            flash(f"Veri yüklenirken hata oluştu: {error1 or error2}", "danger")
+            return render_template('sut_yonetimi.html', tedarikciler=[], tankerler=[], user_role=user_role)
+
+        return render_template('sut_yonetimi.html', tedarikciler=tedarikciler, tankerler=tankerler, user_role=user_role)
+
+    except Exception as e:
+        logging.error(f"Süt sayfası yüklenirken hata: {str(e)}")
+        flash("Sayfa yüklenirken beklenmedik bir hata oluştu.", "danger")
+        return redirect(url_for('main.index'))
+
+
+@sut_bp.route('/api/sut_girdileri', methods=['GET'])
 @login_required
-@lisans_kontrolu
-@modification_allowed
-def add_sut_girdisi():
-    """Yeni bir süt girdisi eklemek için servisi çağırır."""
-    try:
-        yeni_girdi = request.get_json()
-        sirket_id = session['user']['sirket_id']
-        kullanici_id = session['user']['id']
+def get_sut_girdileri_api():
+    """
+    Tarih aralığına göre süt girdilerini JSON olarak döndüren API rotası.
+    RLS otomatik olarak sirket_id'ye göre filtreleme yapacak.
+    """
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    tedarikci_id = request.args.get('tedarikci_id')
 
-        data = sut_service.add_entry(sirket_id, kullanici_id, yeni_girdi)
-        
-        # Güncel özet, arayüzün anında güncellenmesi için hala gerekli
-        bugun_str = datetime.now(turkey_tz).date().isoformat()
-        yeni_ozet = sut_service.get_daily_summary(sirket_id, bugun_str)
-        
-        return jsonify({"status": "success", "data": data, "yeni_ozet": yeni_ozet})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
-    except Exception as e:
-        logger.error(f"Süt girdisi ekleme hatası: {e}", exc_info=True)
-        return jsonify({"error": "Sunucuda bir hata oluştu."}), 500
+    # Servis fonksiyonuna sirket_id GÖNDERMİYORUZ.
+    girdiler, error = sut_service.get_sut_girdileri(start_date, end_date, tedarikci_id)
 
-@sut_bp.route('/sut_girdisi_duzenle/<int:girdi_id>', methods=['PUT'])
+    if error:
+        return jsonify({'error': error}), 500
+        
+    return jsonify(girdiler)
+
+@sut_bp.route('/api/sut_girdisi', methods=['POST'])
 @login_required
-@lisans_kontrolu
-@modification_allowed
-def update_sut_girdisi(girdi_id):
-    """Bir süt girdisini düzenlemek için servisi çağırır."""
-    try:
-        data = request.get_json()
-        sirket_id = session['user']['sirket_id']
-        kullanici_id = session['user']['id']
-        
-        guncel_girdi, girdi_tarihi_str = sut_service.update_entry(girdi_id, sirket_id, kullanici_id, data)
-        
-        yeni_ozet = sut_service.get_daily_summary(sirket_id, girdi_tarihi_str)
-        
-        return jsonify({"status": "success", "data": guncel_girdi, "yeni_ozet": yeni_ozet})
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
-    except Exception as e:
-        logger.error(f"Süt girdisi düzenleme hatası: {e}", exc_info=True)
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+@role_required('firma_admin', 'toplayici') # Sadece admin ve toplayıcı ekleyebilir
+def add_sut_girdisi_api():
+    """
+    Yeni süt girdisi ekleyen API rotası.
+    """
+    data = request.json
+    if not data or 'litre' not in data or 'tedarikci_id' not in data:
+        return jsonify({'error': 'Eksik bilgi (litre ve tedarikci_id zorunlu)'}), 400
 
-@sut_bp.route('/sut_girdisi_sil/<int:girdi_id>', methods=['DELETE'])
+    try:
+        # Fiyatı otomatik olarak tarifeden çek
+        if 'fiyat' not in data or data['fiyat'] is None:
+            tarih = data.get('taplanma_tarihi', datetime.now().isoformat())
+            fiyat, error = tarife_service.get_fiyat_for_date(tarih)
+            if error or fiyat is None:
+                # Fiyat bulunamazsa hata vermek yerine 0 ile devam edebilir veya varsayılanı kullanabilir
+                # Şimdilik 0 varsayalım, ancak hata fırlatmak daha doğru olabilir
+                data['fiyat'] = 0.0
+                logging.warning(f"Fiyat tarifesi bulunamadı ({tarih}), fiyat 0 olarak ayarlandı.")
+            else:
+                data['fiyat'] = fiyat
+
+        # Servis fonksiyonu 'data' objesini ve 'g' objesini kullanarak kaydı yapar
+        yeni_girdi, error = sut_service.add_sut_girdisi(data)
+        
+        if error:
+            return jsonify({'error': error}), 500
+        
+        return jsonify(yeni_girdi[0]), 201 # Genelde insert [data] döndürür
+        
+    except Exception as e:
+        logging.error(f"Süt girdisi API'de eklenirken hata: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@sut_bp.route('/api/sut_girdisi/<int:girdi_id>', methods=['PUT'])
 @login_required
-@lisans_kontrolu
-@modification_allowed
-def delete_sut_girdisi(girdi_id):
-    """Bir süt girdisini silmek için servisi çağırır."""
+@role_required('firma_admin') # Sadece firma admini güncelleyebilir
+def update_sut_girdisi_api(girdi_id):
+    """
+    Mevcut süt girdisini güncelleyen API rotası.
+    """
+    data = request.json
+    duzenleme_sebebi = data.pop('duzenleme_sebebi', 'Güncelleme') # 'duzenleme_sebebi' özel alanı al
+
     try:
-        sirket_id = session['user']['sirket_id']
-        girdi_tarihi_str = sut_service.delete_entry(girdi_id, sirket_id)
+        # Önce mevcut (eski) veriyi al (geçmiş kaydı için)
+        eski_data, error = sut_service.get_sut_girdisi_by_id(girdi_id)
+        if error:
+            return jsonify({'error': f"Güncellenecek kayıt bulunamadı: {error}"}), 404
         
-        yeni_ozet = sut_service.get_daily_summary(sirket_id, girdi_tarihi_str)
+        # Güncelleme işlemini yap
+        guncellenen_veri, error = sut_service.update_sut_girdisi(girdi_id, data)
+        if error:
+            return jsonify({'error': error}), 500
+            
+        # Başarılı güncelleme sonrası geçmiş kaydı oluştur
+        if eski_data:
+            sut_service.add_girdi_gecmisi(girdi_id, duzenleme_sebebi, eski_data)
+
+        return jsonify(guncellenen_veri[0]), 200
         
-        return jsonify({"message": "Girdi başarıyla silindi.", "yeni_ozet": yeni_ozet}), 200
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 404
     except Exception as e:
-        logger.error(f"Süt girdisi silme hatası: {e}", exc_info=True)
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        logging.error(f"Süt girdisi {girdi_id} güncellenirken API hatası: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-@sut_bp.route('/girdi_gecmisi/<int:girdi_id>')
+
+@sut_bp.route('/api/sut_girdisi/<int:girdi_id>', methods=['DELETE'])
 @login_required
-def get_girdi_gecmisi(girdi_id):
-    """Bir girdinin düzenleme geçmişini servis üzerinden getirir."""
+@role_required('firma_admin') # Sadece firma admini silebilir
+def delete_sut_girdisi_api(girdi_id):
+    """
+    Süt girdisini silen API rotası.
+    """
     try:
-        sirket_id = session['user']['sirket_id']
-        gecmis_data = sut_service.get_entry_history(girdi_id, sirket_id)
-        return jsonify(gecmis_data)
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 403
+        # RLS, bu kullanıcının bu kaydı silme yetkisi olup olmadığını kontrol eder.
+        data, error = sut_service.delete_sut_girdisi(girdi_id)
+        
+        if error:
+            return jsonify({'error': error}), 500
+        
+        if not data:
+            return jsonify({'error': 'Kayıt bulunamadı veya silme yetkiniz yok.'}), 404
+
+        return jsonify({'message': 'Kayıt başarıyla silindi'}), 200
+        
     except Exception as e:
-        logger.error(f"Girdi geçmişi hatası: {e}", exc_info=True)
-        return jsonify({"error": "Sunucuda beklenmedik bir hata oluştu."}), 500
+        logging.error(f"Süt girdisi {girdi_id} silinirken API hatası: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
-@sut_bp.route('/tedarikci/<int:tedarikci_id>/son_fiyat', methods=['GET'])
-@login_required
-def get_son_fiyat(tedarikci_id):
-    """Bir tedarikçi için girilen en son süt fiyatını döndürür."""
-    try:
-        sirket_id = session['user']['sirket_id']
-        data = sut_service.get_last_price_for_supplier(sirket_id, tedarikci_id)
-        return jsonify({"son_fiyat": data.get('fiyat')})
-    except Exception as e:
-        logger.error(f"Son fiyat API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Fiyat bilgisi alınamadı."}), 500
-
-# --- AKILLI DOĞRULAMA İÇİN YENİ ENDPOINT ---
-@sut_bp.route('/tedarikci/<int:tedarikci_id>/stats', methods=['GET'])
-@login_required
-def get_tedarikci_stats(tedarikci_id):
-    """Bir tedarikçinin süt girdisi istatistiklerini getirir."""
-    try:
-        # YANLIŞ IMPORT SATIRI KALDIRILDI: from extensions import supabase
-        sirket_id = session['user']['sirket_id']
-
-        params = {
-            'p_sirket_id': sirket_id,
-            'p_tedarikci_id': tedarikci_id
-        }
-        # DOĞRU KULLANIM: g.supabase kullanılıyor
-        response = g.supabase.rpc('get_supplier_stats', params).execute()
-
-        if not response.data:
-            # RPC fonksiyonu artık veri olmasa bile [{ "ortalama_litre": 0, "standart_sapma": 0 }] döndürmeli.
-            # Ama yine de kontrol ekleyelim.
-            logger.warning(f"get_supplier_stats RPC'den veri dönmedi. Parametreler: {params}")
-            return jsonify([{"ortalama_litre": 0, "standart_sapma": 0}])
-
-        return jsonify(response.data)
-    except Exception as e:
-        logger.error(f"İstatistik API hatası: {e}", exc_info=True)
-        return jsonify({"error": "İstatistik verisi alınamadı."}), 500
+# Eski 'toplayici_sut_girisi' ve 'toplayici_sut_listesi' rotaları
+# artık yeni 'sut_page' ve API rotaları ile birleştirildi.
+# Rol kontrolü decorator'lar ile yapılıyor.
