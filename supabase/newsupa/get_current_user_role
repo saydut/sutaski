@@ -1,2 +1,0 @@
-
-  SELECT rol FROM public.profiller WHERE id = auth.uid()
