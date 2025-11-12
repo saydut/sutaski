@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Yeni Kayıt - Süt Takip Sistemi{% endblock %}
+
+{% block content %}
+<div class="main-wrapper d-flex justify-content-center align-items-center min-vh-100 p-3">
+    <div class="card p-4 p-md-5 w-100" style="max-width: 450px;">
+        <button id="theme-toggle" class="btn align-self-end">
+            <i id="sun-icon" class="bi bi-sun-fill"></i>
+            <i id="moon-icon" class="bi bi-moon-fill"></i>
+        </button>
+
+        <h2 class="text-center mb-4 fw-bold">Yeni Kullanıcı Kaydı</h2>
+        <div id="alert-container"></div>
+        <div class="mb-3">
+            <label for="sirket-input" class="form-label">Şirket Adı</label>
+            <input type="text" class="form-control" id="sirket-input" placeholder="Örn: Yılmaz Süt A.Ş.">
+            <small class="form-text text-secondary">Şirketiniz kayıtlıysa tam adını yazın. Yoksa yeni bir şirket oluşturulur.</small>
+        </div>
+        <div class="mb-3">
+            <label for="kullanici-input" class="form-label">Kullanıcı Adı</label>
+            <input type="text" class="form-control" id="kullanici-input" placeholder="Yeni kullanıcı adınız">
+        </div>
+        <div class="mb-3">
+            <label for="sifre-input" class="form-label">Şifre</label>
+            <input type="password" class="form-control" id="sifre-input" placeholder="Güçlü bir şifre belirleyin">
+        </div>
+        <div class="d-grid mt-4">
+            <button class="btn btn-primary" onclick="kayitOl()">Kayıt Ol</button>
+        </div>
+        <p class="text-center mt-3 mb-0">
+            <small class="text-secondary">Zaten bir hesabın var mı? <a href="{{ url_for('auth.login_page') }}">Giriş Yap</a></small>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/register.js') }}"></script>
+{% endblock %}

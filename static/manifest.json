@@ -1,0 +1,27 @@
+{
+  "name": "Dijital Mandıra",
+  "short_name": "Dijital Mandıra",
+  "description": "Süt toplama ve mandıra yönetimi operasyonlarınızı kolayca yönetin.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3B82F6",
+  "icons": [
+    {
+      "src": "/static/images/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/images/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/images/notification-icon-white.png", 
+      "sizes": "96x96",                                 
+      "type": "image/png",
+      "purpose": "monochrome"                           
+    }
+  ]
+}

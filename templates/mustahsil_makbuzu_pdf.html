@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Müstahsil Makbuzu</title>
+    <style>
+        /* Stil tanımlamaları önceki cevapla aynı kalabilir,
+           .islem-tipi-tahsilat stili eklenebilir. */
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+        body { font-family: 'Roboto', sans-serif; font-size: 9pt; color: #333; }
+        .container { width: 95%; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h1 { margin: 0; padding: 0; font-size: 18pt; border-bottom: 2px solid #000; display: inline-block; }
+        .info-section { display: flex; justify-content: space-between; margin-bottom: 20px; border: 1px solid #999; padding: 10px; }
+        .info-section div { width: 48%; }
+        .info-section h2 { font-size: 11pt; margin: 0 0 5px 0; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
+        .info-section p { margin: 2px 0; }
+        h2.table-title { font-size: 12pt; margin-top: 20px; margin-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        th, td { border: 1px solid #999; padding: 5px; text-align: left; }
+        thead { background-color: #f2f2f2; }
+        th { font-weight: 500; }
+        .text-right { text-align: right; }
+        .summary-section { display: flex; justify-content: flex-end; margin-top: 20px; }
+        .summary-table { width: 60%; }
+        .summary-table td { font-size: 10pt; }
+        .summary-table .label { font-weight: 500; }
+        .summary-table .total { font-weight: 700; background-color: #f2f2f2; font-size: 11pt; }
+        .footer-section { display: flex; justify-content: space-between; margin-top: 40px; }
+        .footer-section div { width: 45%; text-align: center; }
+        .footer-section .signature { border-bottom: 1px solid #333; padding-bottom: 2px; margin-top: 40px; }
+        .islem-tipi-odeme, .islem-tipi-avans { color: #D9534F; } /* Şirketten çıkış kırmızı */
+        .islem-tipi-tahsilat { color: #5CB85C; } /* Şirkete giriş yeşil */
+        h3 { /* Yeni eklenen başlık için stil */
+            font-size: 11pt; /* Makbuzda biraz daha küçük */
+            color: #334155;
+            border-bottom: 1px solid #E2E8F0;
+            padding-bottom: 3px;
+            margin-top: 15px;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header"><h1>MÜSTAHSİL MAKBUZU</h1></div>
+
+        <div class="info-section">
+            <div>
+                <h2>DÜZENLEYEN</h2>
+                <p><strong>Unvan:</strong> {{ sirket.sirket_adi }}</p>
+                <p><strong>Adres:</strong> {{ sirket.adres or 'Belirtilmemiş' }}</p>
+                <p><strong>VKN:</strong> {{ sirket.vergi_kimlik_no or 'Belirtilmemiş' }}</p>
+            </div>
+            <div>
+                <h2>MÜSTAHİSİLİN BİLGİLERİ</h2>
+                <p><strong>Ad Soyad:</strong> {{ tedarikci.isim }}</p>
+                <p><strong>Adres:</strong> {{ tedarikci.adres or 'Belirtilmemiş' }}</p>
+                <p><strong>TCKN:</strong> {{ tedarikci.tc_no or 'Belirtilmemiş' }}</p>
+                <p><strong>Tarih:</strong> {{ makbuz_tarihi }}</p>
+            </div>
+        </div>
+
+        <h2 class="table-title">Süt Alımları (Fiyata Göre Toplam)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Cinsi</th>
+                    <th class="text-right">Birim Fiyat</th>
+                    <th class="text-right">Toplam Miktar</th>
+                    <th class="text-right">Toplam Tutar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for girdi in sut_girdileri %}
+                <tr>
+                    <td>Soğutulmuş Çiğ İnek Sütü</td>
+                    <td class="text-right">{{ "%.2f"|format(girdi.fiyat | default(0) | float) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(girdi.litre | default(0) | float) }} Lt.</td>
+                    <td class="text-right">{{ "%.2f"|format(girdi.tutar | default(0)) }} TL</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align:center;">Bu ay için süt alımı bulunmamaktadır.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <h2 class="table-title">Yem Alımları (Fiyata Göre Toplam)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Ürün Adı</th>
+                    <th class="text-right">Birim Fiyat</th>
+                    <th class="text-right">Toplam Miktar (KG)</th>
+                    <th class="text-right">Toplam Tutar</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for islem in yem_islemleri %}
+                <tr>
+                    <td>{{ islem.yem_adi }}</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.islem_anindaki_birim_fiyat | default(0)) }} TL</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.miktar_kg | default(0)) }}</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.toplam_tutar | default(0)) }} TL</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align:center;">Bu ay için yem alımı bulunmamaktadır.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {# --- Finansal İşlemler Bölümü (Değişiklik Yok) --- #}
+        <h3>Şirketten Yapılan Ödemeler (Avans/Hakediş)</h3>
+        <table>
+             <thead><tr><th style="width:15%;">Tarih</th><th>İşlem Tipi</th><th>Açıklama</th><th class="text-right">Tutar</th></tr></thead>
+             <tbody>
+                {% for islem in sirket_odemeleri %}
+                <tr>
+                    <td>{{ islem.islem_tarihi }}</td>
+                    <td><span class="islem-tipi-{{ 'avans' if islem.islem_tipi == 'Avans' else 'odeme' }}">{{ islem.islem_tipi }}</span></td>
+                    <td>{{ islem.aciklama or '-' }}</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.tutar | default(0)) }} TL</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align:center;">Bu ay şirketten ödeme (Avans/Hakediş) yapılmamıştır.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h3>Çiftçiden Alınan Tahsilatlar</h3>
+        <table>
+             <thead><tr><th style="width:15%;">Tarih</th><th>İşlem Tipi</th><th>Açıklama</th><th class="text-right">Tutar</th></tr></thead>
+             <tbody>
+                {% for islem in tahsilatlar %}
+                <tr>
+                    <td>{{ islem.islem_tarihi }}</td>
+                    <td><span class="islem-tipi-tahsilat">{{ islem.islem_tipi }}</span></td>
+                    <td>{{ islem.aciklama or '-' }}</td>
+                    <td class="text-right">{{ "%.2f"|format(islem.tutar | default(0)) }} TL</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" style="text-align:center;">Bu ay çiftçiden tahsilat yapılmamıştır.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {# --- Finansal İşlemler Sonu --- #}
+
+        {# --- Özet Tablosu (Değişiklik Yok) --- #}
+        <div class="summary-section">
+            <table class="summary-table">
+                <tr>
+                    <td class="label">Süt Alım Toplam Tutarı</td>
+                    <td class="text-right">{{ "%.2f"|format(ozet.toplam_sut_tutari | default(0)) }} TL</td>
+                </tr>
+                <tr>
+                    <td class="label">G.V. Stopajı (%{{ (stopaj_orani * 100) | int }})</td>
+                    <td class="text-right">- {{ "%.2f"|format(ozet.stopaj_tutari | default(0)) }} TL</td>
+                </tr>
+                <tr>
+                    <td class="label">Yem Alım Toplamı</td>
+                    <td class="text-right">- {{ "%.2f"|format(ozet.toplam_yem_borcu | default(0)) }} TL</td>
+                </tr>
+                 <tr>
+                    <td class="label">Şirketten Yapılan Ödeme Toplamı</td>
+                    <td class="text-right">- {{ "%.2f"|format(ozet.toplam_sirket_odemesi | default(0)) }} TL</td>
+                </tr>
+                <tr>
+                    <td class="label">Çiftçiden Alınan Tahsilat Toplamı</td>
+                    <td class="text-right">+ {{ "%.2f"|format(ozet.toplam_tahsilat | default(0)) }} TL</td>
+                </tr>
+                <tr class="total">
+                    <td class="label">ÖDENECEK NET TUTAR</td>
+                    <td class="text-right">{{ "%.2f"|format(ozet.net_odenecek | default(0)) }} TL</td>
+                </tr>
+            </table>
+        </div>
+        {# --- Özet Tablosu Sonu --- #}
+
+        <div class="footer-section">
+            <div><p>Malı Satan</p><p>{{ tedarikci.isim }}</p><p class="signature">İmza</p></div>
+            <div><p>Teslim Alan</p><p>{{ sirket.sirket_adi }}</p><p class="signature">İmza</p></div>
+        </div>
+    </div>
+</body>
+</html>

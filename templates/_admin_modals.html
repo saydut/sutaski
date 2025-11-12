@@ -1,0 +1,60 @@
+<div class="modal fade" id="sirketSilmeOnayModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle-fill"></i> DİKKAT! KALICI SİLME</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p><strong id="silinecek-sirket-adi"></strong> adlı şirketi ve bu şirkete ait tüm verileri KALICI OLARAK silmek istediğinize emin misiniz?</p><input type="hidden" id="silinecek-sirket-id"></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-danger btn-sm" onclick="sirketSil()">Evet, Sil</button></div></div></div></div>
+<div class="modal fade" id="sifreSifirlaModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Şifre Sıfırla</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p class="small"><strong id="sifresi-sifirlanacak-kullanici"></strong> kullanıcısı için yeni bir şifre belirleyin:</p><input type="hidden" id="sifirlanacak-kullanici-id"><div class="mb-2"><label for="yeni-sifre-input" class="form-label">Yeni Şifre</label><input type="password" class="form-control form-control-sm" id="yeni-sifre-input" placeholder="Yeni şifreyi girin"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="sifreSifirla()">Şifreyi Güncelle</button></div></div></div></div>
+
+<div class="modal fade" id="surumDuzenleModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Sürüm Notunu Düzenle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="surum-duzenle-formu">
+                    <input type="hidden" id="edit-surum-id">
+                    <div class="mb-2">
+                        <label for="edit-surum-no-input" class="form-label">Sürüm No</label>
+                        <input type="text" id="edit-surum-no-input" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="mb-2">
+                        <label for="edit-yayin-tarihi-input" class="form-label">Yayın Tarihi</label>
+                        <input type="text" id="edit-yayin-tarihi-input" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="mb-2">
+                        <label for="edit-notlar-input" class="form-label">Sürüm Notları</label>
+                        <textarea id="edit-notlar-input" class="form-control form-control-sm" rows="4" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="surumNotuGuncelle()">Değişiklikleri Kaydet</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="bildirimGonderModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Bildirim Gönder</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small">Kullanıcı: <strong id="bildirim-gonderilecek-kullanici"></strong></p>
+                <input type="hidden" id="bildirim-gonderilecek-kullanici-id">
+                <div class="mb-2">
+                    <label for="bildirim-baslik-input" class="form-label">Bildirim Başlığı</label>
+                    <input type="text" class="form-control form-control-sm" id="bildirim-baslik-input" placeholder="Dikkat çekici bir başlık girin">
+                </div>
+                <div class="mb-2">
+                    <label for="bildirim-icerik-input" class="form-label">Bildirim İçeriği</label>
+                    <textarea class="form-control form-control-sm" id="bildirim-icerik-input" rows="3" placeholder="Kullanıcıya iletmek istediğiniz mesaj"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="bildirimGonder()">Gönder</button>
+            </div>
+        </div>
+    </div>
+</div>

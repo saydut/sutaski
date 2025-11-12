@@ -1,0 +1,109 @@
+/* static/css/pdf_style.css - PDF Raporu için özel stiller */
+
+/* --- DÜZELTME: Font import satırı geri eklendi --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+body {
+    /* --- DÜZELTME: Font ailesi 'Inter' olarak geri ayarlandı --- */
+    font-family: 'Inter', sans-serif;
+    color: #333;
+    font-size: 10pt;
+}
+
+.rapor-container {
+    width: 100%;
+    margin: 0 auto;
+}
+
+.rapor-baslik {
+    text-align: center;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.rapor-baslik h1 {
+    margin: 0;
+    font-size: 24pt;
+    color: #1E293B;
+}
+
+.rapor-baslik p {
+    margin: 5px 0 0;
+    font-size: 11pt;
+    color: #64748B;
+}
+
+.ozet-karti-container {
+    /* --- DÜZELTME: Bu stiller CSS dosyasında kalmalı --- */
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 30px;
+    padding: 0;
+}
+
+.ozet-karti {
+    /* --- DÜZELTME: Bu stiller CSS dosyasında kalmalı --- */
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    flex: 1;
+    background-color: #F8FAFC;
+}
+
+.ozet-karti .baslik {
+    font-size: 9pt;
+    color: #64748B;
+    margin-bottom: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.ozet-karti .deger {
+    font-size: 18pt;
+    font-weight: 700;
+    color: #16A34A;
+}
+
+h2 {
+    font-size: 16pt;
+    color: #1E293B;
+    border-bottom: 1px solid #E2E8F0;
+    padding-bottom: 5px;
+    margin-top: 30px;
+    margin-bottom: 15px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+}
+
+th, td {
+    border: 1px solid #E2E8F0;
+    padding: 8px 10px;
+    text-align: left;
+}
+
+thead {
+    background-color: #F1F5F9;
+}
+
+th {
+    font-weight: 600;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #F8FAFC;
+}
+
+.rapor-altbilgi {
+    margin-top: 40px;
+    text-align: center;
+    font-size: 8pt;
+    color: #94A3B8;
+}
+

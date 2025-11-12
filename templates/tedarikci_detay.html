@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Tedarikçi Detayı - Süt Takip Sistemi{% endblock %}
+
+{% block content %}
+<div class="main-wrapper p-3 p-md-4">
+    <div id="alert-container"></div>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <span>
+            <a href="{{ url_for('main.tedarikciler_sayfasi') }}" class="btn btn-sm btn-outline-secondary mb-2">
+                <i class="bi bi-arrow-left"></i> Tüm Tedarikçiler
+            </a>
+            <h1 id="tedarikci-adi-baslik" class="fw-bold">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+            </h1>
+        </span>
+        <div class="d-flex align-items-center gap-2">
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" id="btn-view-table" class="btn btn-sm btn-outline-primary active" onclick="gorunumuDegistir('tablo')"><i class="bi bi-list-task"></i></button>
+                <button type="button" id="btn-view-card" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('kart')"><i class="bi bi-grid-3x2-gap-fill"></i></button>
+            </div>
+            <button id="theme-toggle" class="btn btn-sm">
+                <i id="sun-icon" class="bi bi-sun-fill"></i>
+                <i id="moon-icon" class="bi bi-moon-fill"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3" id="ozet-kartlari">
+        </div>
+
+    <div class="card mb-3">
+        <div class="card-body p-3">
+            <h5 class="card-title">Raporlar</h5>
+            <div class="row g-3 align-items-end">
+                <div class="col-lg-4 col-md-6 col-12">
+                    <label for="rapor-ay" class="form-label mb-1">Ay</label>
+                    <select id="rapor-ay" class="form-select form-select-sm"></select>
+                </div>
+                <div class="col-lg-4 col-md-6 col-12">
+                    <label for="rapor-yil" class="form-label mb-1">Yıl</label>
+                    <select id="rapor-yil" class="form-select form-select-sm"></select>
+                </div>
+                <div class="col-lg-2 col-md-6 col-12 d-grid">
+                     <button class="btn btn-success btn-sm w-100" id="pdf-indir-btn" onclick="hesapOzetiIndir()">
+                        <i class="bi bi-file-earmark-pdf"></i> Hesap Özeti
+                    </button>
+                </div>
+                <div class="col-lg-2 col-md-6 col-12 d-grid">
+                    <button class="btn btn-info btn-sm w-100" id="mustahsil-indir-btn" onclick="mustahsilMakbuzuIndir()">
+                        <i class="bi bi-receipt"></i> Müstahsil
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <ul class="nav nav-tabs card-header-tabs" id="myTab" role="tablist">
+                <li class="nav-item" role="presentation"><button class="nav-link active" id="sut-tab" data-bs-toggle="tab" data-bs-target="#sut-tab-pane" type="button" role="tab">Süt Girdileri</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link" id="yem-tab" data-bs-toggle="tab" data-bs-target="#yem-tab-pane" type="button" role="tab">Yem Alımları</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link" id="finans-tab" data-bs-toggle="tab" data-bs-target="#finans-tab-pane" type="button" role="tab">Finansal İşlemler</button></li>
+            </ul>
+        </div>
+        <div class="card-body p-3">
+            <div class="tab-content" id="myTabContent">
+                <div class="tab-pane fade show active" id="sut-tab-pane" role="tabpanel">
+                    <div class="gorunum-konteyneri-detay" id="sut-tablo-gorunumu">
+                        <div class="table-responsive"><table class="table"><thead><tr><th>Tarih</th><th class="text-end">Litre</th><th class="text-end">Fiyat (TL)</th><th class="text-end">Tutar (TL)</th><th>Giren Kullanıcı</th></tr></thead><tbody id="sut-girdileri-tablosu"></tbody></table></div>
+                    </div>
+                    <div class="gorunum-konteyneri-detay row g-3" id="sut-kart-gorunumu" style="display: none;"></div>
+                    <div class="veri-yok-mesaji text-center p-4 text-secondary" id="sut-veri-yok" style="display: none;">Süt girdisi bulunamadı.</div>
+                    <nav id="sut-sayfalama" class="d-flex justify-content-center mt-3"></nav>
+                </div>
+        
+                <div class="tab-pane fade" id="yem-tab-pane" role="tabpanel">
+                    <div class="gorunum-konteyneri-detay" id="yem-tablo-gorunumu">
+                        <div class="table-responsive"><table class="table"><thead><tr><th>İşlem Tarihi</th><th>Yem Adı</th><th class="text-end">Miktar (KG)</th><th class="text-end">Birim Fiyat (TL)</th><th class="text-end">Toplam Tutar (TL)</th><th>İşlemi Yapan</th></tr></thead><tbody id="yem-islemleri-tablosu"></tbody></table></div>
+                    </div>
+                    <div class="gorunum-konteyneri-detay row g-3" id="yem-kart-gorunumu" style="display: none;"></div>
+                    <div class="veri-yok-mesaji text-center p-4 text-secondary" id="yem-veri-yok" style="display: none;">Yem alımı bulunamadı.</div>
+                    <nav id="yem-sayfalama" class="d-flex justify-content-center mt-3"></nav>
+                </div>
+        
+                <div class="tab-pane fade" id="finans-tab-pane" role="tabpanel">
+                    <div class="gorunum-konteyneri-detay" id="finans-tablo-gorunumu">
+                        <div class="table-responsive"><table class="table"><thead><tr><th>İşlem Tarihi</th><th>İşlem Tipi</th><th class="text-end">Tutar (TL)</th><th>Açıklama</th><th>İşlemi Yapan</th></tr></thead><tbody id="finansal-islemler-tablosu"></tbody></table></div>
+                    </div>
+                    <div class="gorunum-konteyneri-detay row g-3" id="finans-kart-gorunumu" style="display: none;"></div>
+                    <div class="veri-yok-mesaji text-center p-4 text-secondary" id="finans-veri-yok" style="display: none;">Finansal işlem bulunamadı.</div>
+                    <nav id="finans-sayfalama" class="d-flex justify-content-center mt-3"></nav>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script> const TEDARIKCI_ID = {{ tedarikci_id }}; </script>
+<script src="{{ url_for('static', filename='js/tedarikci_detay.js') }}"></script>
+{% endblock %}

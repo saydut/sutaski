@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Giriş Yap - Süt Takip Sistemi{% endblock %}
+
+{% block content %}
+<div class="main-wrapper d-flex justify-content-center align-items-center min-vh-100 p-3">
+    <div class="card p-4 p-md-5 w-100" style="max-width: 450px;">
+        <button id="theme-toggle" class="btn align-self-end">
+            <i id="sun-icon" class="bi bi-sun-fill"></i>
+            <i id="moon-icon" class="bi bi-moon-fill"></i>
+        </button>
+
+        <h2 class="text-center mb-4 fw-bold">Sisteme Giriş Yap</h2>
+        
+        <div id="alert-container"></div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="mb-3">
+            <label for="kullanici-input" class="form-label">Kullanıcı Adı</label>
+            <input type="text" class="form-control" id="kullanici-input" placeholder="Kullanıcı adınızı girin">
+        </div>
+        <div class="mb-3">
+            <label for="sifre-input" class="form-label">Şifre</label>
+            <input type="password" class="form-control" id="sifre-input" placeholder="Şifrenizi girin">
+        </div>
+        <div class="d-grid mt-4">
+            <button class="btn btn-primary" onclick="girisYap()">Giriş Yap</button>
+        </div>
+        <p class="text-center mt-3 mb-0">
+            <small class="text-secondary">Hesabın yok mu? <a href="{{ url_for('auth.register_page') }}">Yeni Kayıt Oluştur</a></small>
+        </p>
+        
+        <!-- YENİ BUTONLAR (GÜNCELLENDİ) -->
+        <div class="text-center mt-4 d-flex justify-content-center gap-3">
+            <a href="{{ url_for('main.landing_page', from_login='true') }}" class="text-secondary">
+                <i class="bi bi-house"></i> Ana Sayfa
+            </a>
+            <a href="#" class="text-secondary" data-bs-toggle="modal" data-bs-target="#hakkindaModal">
+                <i class="bi bi-info-circle"></i> Uygulama Hakkında
+            </a>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/login.js') }}"></script>
+{% endblock %}

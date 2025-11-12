@@ -1,0 +1,172 @@
+// templates/service-worker.js.jinja (OTOMATİK GÜNCELLEME ve ÖNBELLEK TEMİZLEME)
+
+const CACHE_NAME = 'sut-takip-cache-v{{ cache_version }}'; // Sürüm admin panelinden yönetiliyor
+
+// Temel uygulama kabuğu ve sık kullanılan kütüphaneler
+const CORE_ASSETS = [
+    '/', '/login', '/offline', '/panel',
+    '/tedarikciler', '/raporlar', '/yem/yonetim',
+    '/finans/', '/profil', '/firma/yonetim',
+    '/static/style.css', '/static/theme.js',
+    '/static/js/utils.js', '/static/js/api.js', '/static/js/store.js',
+    '/static/js/ui.js', '/static/js/main.js', '/static/js/login.js',
+    '/static/js/offline.js', '/static/js/tedarikciler.js', '/static/js/tedarikci_detay.js',
+    '/static/js/yem_yonetimi.js', '/static/js/finans_yonetimi.js', '/static/js/firma_yonetimi.js',
+    '/static/js/reports.js', '/static/js/charts.js', '/static/js/chart-manager.js',
+    '/static/js/data-loader.js', '/static/js/profil.js', '/static/js/push-manager.js',
+    '/static/js/ios-install-prompt.js', '/static/js/ciftci_panel.js',
+    '/static/images/icon.png', '/static/images/favicon.ico'
+];
+// CDN'den yüklenen kütüphaneler
+const CDN_ASSETS = [
+    'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
+    'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
+    'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css',
+    'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js',
+    'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
+    'https://cdn.jsdelivr.net/npm/flatpickr',
+    'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/tr.js',
+    'https://unpkg.com/dexie@3/dist/dexie.js',
+    'https://cdn.jsdelivr.net/npm/chart.js',
+    'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css',
+    'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2?v=1.11.3' // Font dosyası
+];
+
+/**
+ * Belirtilen URL'deki kaynağı getirir ve önbelleğe alır.
+ */
+const cacheAsset = async (cache, assetUrl) => {
+    try {
+        const request = new Request(assetUrl, { cache: 'no-store' });
+        const response = await fetch(request);
+        if (!response.ok) throw new Error(`Ağ yanıtı başarısız: ${response.status} - ${assetUrl}`);
+        await cache.put(assetUrl, response);
+    } catch (error) {
+        console.warn(`'${assetUrl}' önbelleğe alınamadı:`, error.message);
+    }
+};
+
+// Service Worker kurulum aşaması
+self.addEventListener('install', event => {
+  console.log(`SW v{{ cache_version }} kuruluyor...`);
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const allAssets = [...CORE_ASSETS, ...CDN_ASSETS];
+      await Promise.all(allAssets.map(asset => cacheAsset(cache, asset)));
+      console.log(`SW v{{ cache_version }}: Gerekli kaynaklar önbelleğe alındı.`);
+      // YENİ: Kurulum biter bitmez beklemeden aktifleşmesini sağla.
+      await self.skipWaiting();
+      console.log(`SW v{{ cache_version }} skipWaiting() çağrıldı.`);
+    })()
+  );
+});
+
+// Service Worker aktifleşme aşaması
+self.addEventListener('activate', event => {
+  console.log(`SW v{{ cache_version }} aktifleşiyor...`);
+  event.waitUntil(
+    (async () => {
+      // Aktif olan SW'nin kontrolü ele almasını sağla
+      await self.clients.claim();
+      // Eski (bu sürüme ait olmayan) önbellekleri temizle
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames
+          .filter(name => name !== CACHE_NAME)
+          .map(name => {
+            console.log(`SW v{{ cache_version }}: Eski önbellek siliniyor: ${name}`);
+            return caches.delete(name);
+          })
+      );
+      console.log(`SW v{{ cache_version }} aktifleşti ve eski önbellekler temizlendi.`);
+    })()
+  );
+});
+
+// Ağ isteklerini yönetme aşaması (Öncekiyle aynı)
+self.addEventListener('fetch', event => {
+    const { request } = event;
+    const url = new URL(request.url);
+
+    // API istekleri veya ana sayfa isteği -> Önce AĞ, sonra ÇEVRİMDIŞI sayfası
+    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/yem/api/') || url.pathname.startsWith('/finans/api/') || url.pathname.startsWith('/firma/api/') || url.pathname.startsWith('/ciftci/api/') || url.pathname === '/panel' || url.pathname === '/') {
+        event.respondWith(
+            fetch(request)
+            .catch(async (error) => {
+                console.warn(`SW v{{ cache_version }}: Ağ isteği başarısız (${request.url}):`, error);
+                if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/yem/api/') || url.pathname.startsWith('/finans/api/') || url.pathname.startsWith('/firma/api/') || url.pathname.startsWith('/ciftci/api/')) {
+                    return new Response(JSON.stringify({ error: 'İnternet bağlantısı yok veya sunucuya ulaşılamıyor.' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+                }
+                const cache = await caches.open(CACHE_NAME);
+                const offlineResponse = await cache.match('/offline');
+                return offlineResponse || new Response("Çevrimdışısınız ve çevrimdışı sayfası bulunamadı.", { status: 503 });
+            })
+        );
+        return;
+    }
+
+    // Diğer tüm istekler -> Önbellek Öncelikli (Cache First)
+    event.respondWith(
+        caches.open(CACHE_NAME).then(cache => {
+            return cache.match(request).then(cachedResponse => {
+                if (cachedResponse) { return cachedResponse; }
+                return fetch(request).then(networkResponse => {
+                    if (request.method === 'GET' && networkResponse && networkResponse.status === 200) {
+                         cache.put(request, networkResponse.clone());
+                    }
+                    return networkResponse;
+                }).catch(error => {
+                    console.error(`SW v{{ cache_version }}: Hem önbellekte yok hem ağdan alınamadı (${request.url}):`, error);
+                    return new Response(`Kaynak bulunamadı: ${request.url}`, { status: 404 });
+                });
+            });
+        })
+    );
+});
+
+
+// === Bildirim Yönetimi (Öncekiyle aynı) ===
+ self.addEventListener('push', event => {
+   let payload = { title: 'Süt Takip Sistemi', body: 'Yeni bir bildiriminiz var.' };
+   try { payload = event.data.json(); } catch (e) { payload.body = event.data.text(); }
+   event.waitUntil(self.registration.showNotification(payload.title, {
+       body: payload.body,
+       icon: payload.icon || '/static/images/icon.png', // Büyük ikon
+       badge: '/static/images/notification-icon-white.png', // <-- YENİ BEYAZ İKONUN YOLU
+       data: { url: payload.data ? payload.data.url : '/panel' }
+   }));
+ });
+
+ self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    const urlToOpen = event.notification.data.url || '/panel';
+    event.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+        for (const client of clientList) {
+            const clientUrl = new URL(client.url);
+            const targetUrl = new URL(urlToOpen, self.location.origin);
+            if (clientUrl.pathname === targetUrl.pathname) { return client.focus(); }
+        }
+        if (clients.openWindow) { return clients.openWindow(urlToOpen); }
+    }));
+ });
+
+// === Arka Plan Senkronizasyonu (Öncekiyle aynı) ===
+self.addEventListener('sync', event => {
+  if (event.tag === 'sync-new-data') {
+    console.log(`SW v{{ cache_version }}: 'sync-new-data' etiketiyle senkronizasyon tetiklendi.`);
+    event.waitUntil(
+      importScripts('/static/js/api.js', 'https://unpkg.com/dexie@3/dist/dexie.js', '/static/js/offline.js')
+      .then(() => {
+          console.log(`SW v{{ cache_version }}: senkronizeEt() çağrılıyor...`);
+          return senkronizeEt();
+      }).catch(err => {
+          console.error(`SW v{{ cache_version }}: Senkronizasyon için script yüklenemedi veya senkronizeEt() hatası:`, err);
+      })
+    );
+  }
+});
+
+// === İstemciden Gelen Mesajları Dinleme İPTAL EDİLDİ (Artık gerek yok) ===
+// self.addEventListener('message', event => { ... });
+
