@@ -1,98 +1,70 @@
-// Bu dosya, login.html sayfasının tüm JavaScript mantığını içerir.
-// Yeni Auth (email ile giriş) sistemine güncellendi.
-
-async function girisYap() {
-    // 1. 'kullanici-input' ID'si yerine 'email' ID'sinden (login.html'de güncellediğimiz) oku
-    const email = document.getElementById('email').value; 
-    const sifre = document.getElementById('sifre-input').value;
-    const girisButton = document.querySelector('.btn-primary');
-    const originalButtonText = girisButton.innerHTML;
-
-    // 2. 'kullaniciAdi' -> 'email' kontrolü
-    if (!email || !sifre) {
-        gosterMesaj("Lütfen e-posta ve şifre alanlarını doldurun.", "danger");
-        return;
-    }
-
-    girisButton.disabled = true;
-    girisButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Giriş Yapılıyor...`;
-
-    try {
-        // Rota '/api/login' (blueprints/auth.py) doğru
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                // 3. 'kullanici_adi' yerine 'email' gönder
-                email: email, 
-                sifre: sifre
-            })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            // 4. (KALDIRILDI) localStorage.setItem('offlineUser', ...)
-            // Yeni Auth sisteminde buna gerek yok, Flask session (cookie) yeterli.
-            window.location.href = '/panel'; // Başarılı girişte ana panele yönlendir
-        } else {
-            gosterMesaj(result.error || "Bir hata oluştu.", "danger");
-            girisButton.disabled = false;
-            girisButton.innerHTML = originalButtonText;
-        }
-    } catch (error) {
-        console.error("Giriş yaparken hata oluştu:", error);
-        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
-        girisButton.disabled = false;
-        girisButton.innerHTML = originalButtonText;
-    }
-}
-
-// Enter tuşuna basıldığında da giriş yapmayı sağla
-document.getElementById('sifre-input').addEventListener('keypress', function(event) {
-    if (event.key === 'Enter') {
-        event.preventDefault(); // Formun submit olmasını engelle
-        girisYap();
-    }
-});
-
-// 5. 'kullanici-input' -> 'email' olarak güncellendi
-document.getElementById('email').addEventListener('keypress', function(event) {
-    if (event.key === 'Enter') {
-        event.preventDefault(); 
-        girisYap();
-    }
-});
-
-// 'gosterMesaj' fonksiyonu (ui.js dosyasında olduğunu varsayıyoruz)
-function gosterMesaj(mesaj, tip = 'info') {
-    const alertContainer = document.getElementById('alert-container');
-    if (!alertContainer) {
-        console.error("'alert-container' ID'li element bulunamadı.");
-        return;
-    }
-    const alert = `
-        <div class="alert alert-${tip} alert-dismissible fade show" role="alert">
-            ${mesaj}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    `;
-    alertContainer.innerHTML = alert;
-}
-
-// Tema değiştirici (Aynı kalabilir)
+// Bu script SADECE login.html'de çalışır.
+// utils.js veya api.js'e erişimi YOKTUR (çünkü base.html'e dahil değil).
 document.addEventListener('DOMContentLoaded', () => {
-    const themeToggle = document.getElementById('theme-toggle');
-    if (themeToggle) {
-        themeToggle.addEventListener('click', () => {
-            document.body.classList.toggle('dark-mode');
-            const isDarkMode = document.body.classList.contains('dark-mode');
-            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-        });
-
-        const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        if (savedTheme === 'dark') {
-            document.body.classList.add('dark-mode');
+    const loginForm = document.getElementById('login-form');
+    
+    // Hata mesajlarını göstermek için özel bir fonksiyon (utils.js'deki showToast'a benzer)
+    const showLoginError = (message) => {
+        // Hata konteynerini bul veya oluştur
+        let errorContainer = document.getElementById('login-error-toast');
+        if (!errorContainer) {
+            errorContainer = document.createElement('div');
+            errorContainer.id = 'login-error-toast';
+            // Flask'in flash mesajlarıyla aynı stilde yapalım
+            errorContainer.className = "p-4 rounded-md bg-red-100 border border-red-400 text-red-700 mb-4";
+            
+            // Hata mesajını başlığın altına ekle
+            const heading = loginForm.parentElement.querySelector('h2');
+            heading.insertAdjacentElement('afterend', errorContainer);
         }
-    }
+        errorContainer.textContent = message;
+        errorContainer.style.display = 'block';
+    };
+    
+    // Kullanıcı forma yazmaya başlarsa,
+    // hem Flask'ten gelen (sayfa yenilenince) hem de JS ile oluşan hataları temizle
+    loginForm.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', () => {
+            // Flask flash mesajlarını gizle
+            const flashMessages = document.querySelector('.mb-4 > .p-4');
+            if (flashMessages) flashMessages.style.display = 'none';
+            
+            // JS hata mesajını gizle
+            const errorToast = document.getElementById('login-error-toast');
+            if (errorToast) errorToast.style.display = 'none';
+        });
+    });
+
+    // Form gönderildiğinde (submit)
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault(); // Sayfanın yeniden yüklenmesini engelle
+
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const actionUrl = loginForm.action; // URL'yi formun 'action' attribute'undan al
+
+        try {
+            const response = await fetch(actionUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                // Giriş başarılıysa, backend'in söylediği URL'ye yönlendir
+                window.location.href = data.redirect_url || '/'; 
+            } else {
+                // Giriş başarısızsa, hatayı ekranda göster
+                showLoginError(data.hata || 'Bilinmeyen bir hata oluştu.');
+            }
+        } catch (error) {
+            console.error('Giriş hatası:', error);
+            showLoginError('Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.');
+        }
+    });
 });

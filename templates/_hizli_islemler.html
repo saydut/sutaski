@@ -1,41 +1,158 @@
-{% if request.endpoint != 'main.panel' %}
-<a href="{{ url_for('main.panel') }}" class="btn btn-secondary btn-sm">Ana Panele Dön</a>
-{% endif %}
+<!-- 
+Bu dosya 'base.html' içerisine {% include '_hizli_islemler.html' %} olarak dahil edilmiştir.
+Tüm Süt, Yem ve Ödeme modallarını barındırır.
+-->
 
-<div class="btn-group">
-    <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-        <i class="bi bi-lightning-charge-fill"></i> Hızlı İşlemler
-    </button>
-    <ul class="dropdown-menu dropdown-menu-end">
-        <li><a class="dropdown-item" href="{{ url_for('main.panel') }}"><i class="bi bi-house-door-fill me-2"></i>Ana Panele Dön</a></li>
-        <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="{{ url_for('main.tedarikciler_sayfasi') }}"><i class="bi bi-people-fill me-2"></i>Tedarikçi Yönetimi</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('yem.yem_yonetimi_sayfasi') }}"><i class="bi bi-inboxes-fill me-2"></i>Yem Yönetimi</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('finans.finans_sayfasi') }}"><i class="bi bi-cash-coin me-2"></i>Finans Yönetimi</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('main.raporlar_page') }}"><i class="bi bi-bar-chart-line-fill me-2"></i>Detaylı Raporlar</a></li>
-        <li><hr class="dropdown-divider"></li>
-        
-        {% if session.get('user', {}).get('rol') in ['admin', 'firma_yetkilisi'] %}
-        <li><a class="dropdown-item" href="{{ url_for('firma.firma_yonetim_sayfasi') }}"><i class="bi bi-person-badge me-2"></i>Kullanıcı Yönetimi</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('tarife.tarife_yonetim_sayfasi') }}"><i class="bi bi-tags-fill me-2"></i>Süt Fiyat Tarifesi</a></li>
-        
-        <li><a class="dropdown-item" href="{{ url_for('tanker.tanker_yonetimi_sayfasi') }}"><i class="bi bi-fuel-pump-fill me-2"></i>Tanker Yönetimi</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('masraf.masraf_yonetim_sayfasi') }}"><i class="bi bi-wallet-fill me-2"></i>Genel Masraf Yönetimi</a></li>
-        {% endif %}
-        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#hakkindaModal"><i class="bi bi-info-circle-fill me-2"></i>Uygulama Hakkında</a></li>
-        
-        {% if session.get('user', {}).get('rol') == 'admin' %}
-        <li><a class="dropdown-item" href="{{ url_for('admin.admin_panel') }}"><i class="bi bi-shield-lock-fill me-2"></i>Admin Paneli</a></li>
-        {% endif %}
-        
-        <li><a class="dropdown-item" href="{{ url_for('profil.profil_sayfasi') }}"><i class="bi bi-person-circle me-2"></i>Profilim</a></li>
-        <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="#" onclick="askForNotificationPermission()"><i class="bi bi-bell-fill me-2"></i>Bildirimleri Aç</a></li>
-        <li><a class="dropdown-item text-danger" href="#" onclick="guvenliCikis()"><i class="bi bi-box-arrow-right me-2"></i>Güvenli Çıkış</a></li>
-    </ul>
+<!-- Hızlı İşlemler Ana Menü Modalı -->
+<div id="hizli-islemler-modal" class="modal-backdrop">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="modal-title">Hızlı İşlemler</h3>
+            <button class="modal-close-btn" data-modal-id="hizli-islemler-modal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p class="mb-6 text-center">Hangi işlemi yapmak istersiniz?</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button id="open-hizli-sut-ekle-modal-btn" class="quick-action-menu-btn bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300">
+                    <i class="fas fa-tint text-3xl"></i>
+                    <span>Süt Girdisi</span>
+                </button>
+                <button id="open-hizli-yem-ekle-modal-btn" class="quick-action-menu-btn bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300">
+                    <i class="fas fa-seedling text-3xl"></i>
+                    <span>Yem Girdisi</span>
+                </button>
+                <button id="open-hizli-odeme-ekle-modal-btn" class="quick-action-menu-btn bg-yellow-100 dark:bg-yellow-900 text-yellow-600 dark:text-yellow-300">
+                    <i class="fas fa-lira-sign text-3xl"></i>
+                    <span>Ödeme</span>
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
-<button id="theme-toggle" class="btn btn-sm">
-    <i id="sun-icon" class="bi bi-sun-fill"></i>
-    <i id="moon-icon" class="bi bi-moon-fill"></i>
-</button>
+<!-- Hızlı Süt Ekleme Modalı -->
+<div id="hizli-sut-ekle-modal" class="modal-backdrop">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3 class="modal-title" id="hizli-sut-modal-title">Süt Girdisi Ekle</h3>
+            <button class="modal-close-btn" data-modal-id="hizli-sut-ekle-modal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="hizli-sut-form">
+            <input type="hidden" id="hizli-sut-kayit-id" name="kayit_id">
+            <div class="modal-body">
+                <div class="mb-4">
+                    <label for="hizli-sut-tedarikci" class="block text-sm font-medium mb-2">Tedarikçi</label>
+                    <select id="hizli-sut-tedarikci" name="tedarikci_id" class="input-field" required>
+                        <option value="">Yükleniyor...</option>
+                        <!-- JS ile doldurulacak -->
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="hizli-sut-tarih" class="block text-sm font-medium mb-2">Tarih</label>
+                        <input type="date" id="hizli-sut-tarih" name="tarih" class="input-field" required>
+                    </div>
+                    <div>
+                        <label for="hizli-sut-litre" class="block text-sm font-medium mb-2">Litre</label>
+                        <input type="number" step="0.01" id="hizli-sut-litre" name="litre" class="input-field" required>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-modal-id="hizli-sut-ekle-modal">İptal</button>
+                <button type="submit" class="btn-primary-filled">Kaydet</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Hızlı Yem Ekleme Modalı -->
+<div id="hizli-yem-ekle-modal" class="modal-backdrop">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3 class="modal-title" id="hizli-yem-modal-title">Yem Girdisi Ekle</h3>
+            <button class="modal-close-btn" data-modal-id="hizli-yem-ekle-modal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="hizli-yem-form">
+             <input type="hidden" id="hizli-yem-kayit-id" name="kayit_id">
+            <div class="modal-body">
+                <div class="mb-4">
+                    <label for="hizli-yem-tedarikci" class="block text-sm font-medium mb-2">Tedarikçi</label>
+                    <select id="hizli-yem-tedarikci" name="tedarikci_id" class="input-field" required>
+                        <option value="">Yükleniyor...</option>
+                        <!-- JS ile doldurulacak -->
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="hizli-yem-tipi" class="block text-sm font-medium mb-2">Yem Tipi</label>
+                    <select id="hizli-yem-tipi" name="yem_tipi_id" class="input-field" required>
+                         <option value="">Yükleniyor...</option>
+                        <!-- JS ile doldurulacak -->
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="hizli-yem-tarih" class="block text-sm font-medium mb-2">Tarih</label>
+                        <input type="date" id="hizli-yem-tarih" name="tarih" class="input-field" required>
+                    </div>
+                    <div>
+                        <label for="hizli-yem-miktar" class="block text-sm font-medium mb-2">Miktar (Adet/Çuval)</label>
+                        <input type="number" id="hizli-yem-miktar" name="miktar" class="input-field" required>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-modal-id="hizli-yem-ekle-modal">İptal</button>
+                <button type="submit" class="btn-success-filled">Kaydet</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Hızlı Ödeme Ekleme Modalı -->
+<div id="hizli-odeme-ekle-modal" class="modal-backdrop">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3 class="modal-title" id="hizli-odeme-modal-title">Ödeme Girdisi Ekle</h3>
+            <button class="modal-close-btn" data-modal-id="hizli-odeme-ekle-modal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="hizli-odeme-form">
+            <input type="hidden" id="hizli-odeme-kayit-id" name="kayit_id">
+            <div class="modal-body">
+                <div class="mb-4">
+                    <label for="hizli-odeme-tedarikci" class="block text-sm font-medium mb-2">Tedarikçi</label>
+                    <select id="hizli-odeme-tedarikci" name="tedarikci_id" class="input-field" required>
+                        <option value="">Yükleniyor...</option>
+                        <!-- JS ile doldurulacak -->
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="hizli-odeme-tarih" class="block text-sm font-medium mb-2">Tarih</label>
+                        <input type="date" id="hizli-odeme-tarih" name="tarih" class="input-field" required>
+                    </div>
+                    <div>
+                        <label for="hizli-odeme-tutar" class="block text-sm font-medium mb-2">Tutar (TL)</label>
+                        <input type="number" step="0.01" id="hizli-odeme-tutar" name="tutar" class="input-field" required>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label for="hizli-odeme-aciklama" class="block text-sm font-medium mb-2">Açıklama (İsteğe bağlı)</label>
+                    <input type="text" id="hizli-odeme-aciklama" name="aciklama" class="input-field" placeholder="Örn: Avans, Bayram ödemesi">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-modal-id="hizli-odeme-ekle-modal">İptal</button>
+                <button type="submit" class="btn-warning-filled">Kaydet</button>
+            </div>
+        </form>
+    </div>
+</div>

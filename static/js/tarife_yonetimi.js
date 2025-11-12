@@ -1,310 +1,194 @@
-// static/js/tarife_yonetimi.js
+// Bu script, tarife_yonetimi.html sayfasının mantığını yönetir.
+document.addEventListener('DOMContentLoaded', () => {
 
-// Modallar ve tarih seçiciler için global değişkenler
-let duzenleModal, silmeOnayModal;
-let yeniBaslangicTarihi, yeniBitisTarihi;
-let duzenleBaslangicTarihi, duzenleBitisTarihi;
-let tumTarifeler = []; // Tarifeleri burada saklayacağız (admin.js'deki gibi)
+    // --- Süt Tarifesi DOM Elementleri ---
+    const sutTableBody = document.getElementById('sut-tarife-table-body');
+    const openSutModalBtn = document.getElementById('open-add-sut-tarife-modal-btn');
+    const sutModal = document.getElementById('sut-tarife-modal');
+    const sutModalTitle = document.getElementById('sut-tarife-modal-title');
+    const sutForm = document.getElementById('sut-tarife-form');
+    const sutTarifeIdInput = document.getElementById('sut-tarife-id');
 
-/**
- * JavaScript Date objesini 'YYYY-MM-DD' formatına çevirir.
- * Bu, flatpickr'dan gelen veriyi API'ye göndermek için gereklidir.
- * @param {Date} date - Formatlanacak tarih objesi.
- * @returns {string} - 'YYYY-MM-DD' formatında tarih metni veya tarih yoksa null.
- */
-function formatDateToYYYYMMDD(date) {
-    if (!date) return null;
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
+    // --- Yem Tarifesi DOM Elementleri ---
+    const yemTableBody = document.getElementById('yem-tarife-table-body');
+    const openYemModalBtn = document.getElementById('open-add-yem-tarife-modal-btn');
+    const yemModal = document.getElementById('yem-tarife-modal');
+    const yemModalTitle = document.getElementById('yem-tarife-modal-title');
+    const yemForm = document.getElementById('yem-tarife-form');
+    const yemTarifeIdInput = document.getElementById('yem-tarife-id');
 
-/**
- * Sayfa yüklendiğinde çalışır.
- */
-window.onload = function() {
-    // Modalları başlat
-    duzenleModal = new bootstrap.Modal(document.getElementById('tarifeDuzenleModal'));
-    silmeOnayModal = new bootstrap.Modal(document.getElementById('tarifeSilmeOnayModal'));
+    // --- SÜT İŞLEMLERİ ---
 
-    // Flatpickr (Tarih Seçici) instance'larını başlat
-    const flatpickrConfig = {
-        dateFormat: "Y-m-d", // API'ye gönderilecek format
-        altInput: true,      // Kullanıcıya gösterilecek format
-        altFormat: "d.m.Y",  // Gösterilecek format
-        locale: "tr"
+    const loadSutTarifeleri = async () => {
+        sutTableBody.innerHTML = `<tr><td colspan="4" class="p-4 text-center">Yükleniyor...</td></tr>`;
+        try {
+            const data = await apiCall('/api/tarifeler/sut');
+            renderSutTable(data.tarifeler);
+        } catch (error) {
+            showToast(`Süt tarifeleri yüklenemedi: ${error.message}`, 'error');
+        }
     };
 
-    // Yeni Tarife Formu
-    yeniBaslangicTarihi = flatpickr("#baslangic-tarihi-input", {
-        ...flatpickrConfig,
-        onChange: function(selectedDates, dateStr, instance) {
-            // Başlangıç tarihi seçildiğinde, bitiş tarihinin minimumunu ayarla
-            if (yeniBitisTarihi && selectedDates.length > 0) {
-                yeniBitisTarihi.set('minDate', selectedDates[0]);
-            }
-        }
-    });
-    yeniBitisTarihi = flatpickr("#bitis-tarihi-input", flatpickrConfig);
-
-    // Düzenleme Modalı Formu
-    duzenleBaslangicTarihi = flatpickr("#edit-baslangic-tarihi-input", {
-        ...flatpickrConfig,
-        onChange: function(selectedDates, dateStr, instance) {
-            if (duzenleBitisTarihi && selectedDates.length > 0) {
-                duzenleBitisTarihi.set('minDate', selectedDates[0]);
-            }
-        }
-    });
-    duzenleBitisTarihi = flatpickr("#edit-bitis-tarihi-input", flatpickrConfig);
-
-    // Form gönderim olayını yakala
-    const yeniTarifeForm = document.getElementById('yeni-tarife-formu');
-    if (yeniTarifeForm) {
-        yeniTarifeForm.addEventListener('submit', tarifeEkle);
-    }
-
-    // Mevcut tarifeleri yükle
-    tarifeleriYukle();
-};
-
-/**
- * Mevcut fiyat tarifelerini sunucudan çeker ve tabloyu doldurur.
- */
-async function tarifeleriYukle() {
-    const tabloBody = document.getElementById('tarife-tablosu');
-    const veriYokMesaji = document.getElementById('tarife-veri-yok');
-    if (!tabloBody || !veriYokMesaji) return;
-
-    tabloBody.innerHTML = '<tr><td colspan="5" class="text-center"><div class="spinner-border spinner-border-sm"></div> Yükleniyor...</td></tr>';
-    veriYokMesaji.style.display = 'none';
-
-    try {
-        // api.js'teki merkezi request fonksiyonunu kullan
-        tumTarifeler = await api.request('/tarife/api/listele'); // Global değişkene ata
-        
-        tabloBody.innerHTML = ''; // Tabloyu temizle
-        
-        if (!tumTarifeler || tumTarifeler.length === 0) {
-            veriYokMesaji.style.display = 'block';
+    const renderSutTable = (tarifeler) => {
+        sutTableBody.innerHTML = '';
+        if (!tarifeler || tarifeler.length === 0) {
+            sutTableBody.innerHTML = `<tr><td colspan="4" class="p-4 text-center">Kayıt bulunamadı.</td></tr>`;
             return;
         }
-
-        tumTarifeler.forEach(tarife => {
-            // Tarihleri 'GG.AA.YYYY' formatına çevir
-            // Gelen tarih YYYY-MM-DD formatında, timezone sorunu yaşamamak için 'T00:00:00' ekleyerek parse et
-            const baslangic = new Date(tarife.baslangic_tarihi + 'T00:00:00').toLocaleDateString('tr-TR', {timeZone: 'UTC'});
-            const bitis = tarife.bitis_tarihi ? new Date(tarife.bitis_tarihi + 'T00:00:00').toLocaleDateString('tr-TR', {timeZone: 'UTC'}) : 'Süresiz';
-            
-            // YENİ: alis_fiyati ve satis_fiyati alanlarını kullan
-            const alis_fiyat = parseFloat(tarife.alis_fiyati).toFixed(2);
-            const satis_fiyat = parseFloat(tarife.satis_fiyati).toFixed(2);
-            
-            // Satırı oluştur
-            const row = `
-                <tr id="tarife-satir-${tarife.id}">
-                    <td><strong>${baslangic}</strong></td>
-                    <td>${bitis}</td>
-                    <td class="text-end fw-bold">${alis_fiyat} TL</td>
-                    <td class="text-end fw-bold">${satis_fiyat} TL</td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-outline-primary me-1" onclick="duzenlemeModaliniAc(${tarife.id})" title="Düzenle">
-                            <i class="bi bi-pencil"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="silmeOnayiAc(${tarife.id})" title="Sil">
-                            <i class="bi bi-trash"></i>
-                        </button>
+        tarifeler.forEach(t => {
+            sutTableBody.innerHTML += `
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="table-cell">${formatDate(t.baslangic_tarihi)}</td>
+                    <td class="table-cell">${formatCurrency(t.alis_fiyati)}</td>
+                    <td class="table-cell">${formatCurrency(t.satis_fiyati)}</td>
+                    <td class="table-cell">
+                        <button class="btn-warning-sm js-edit-sut-tarife" data-id="${t.id}"><i class="fas fa-edit"></i></button>
+                        <button class="btn-danger-sm js-delete-sut-tarife" data-id="${t.id}"><i class="fas fa-trash"></i></button>
                     </td>
                 </tr>
             `;
-            tabloBody.innerHTML += row;
         });
-
-    } catch (error) {
-        tabloBody.innerHTML = '';
-        // gosterMesaj (ui.js'den) fonksiyonunu kullan
-        gosterMesaj(error.message || 'Tarifeler yüklenirken bir hata oluştu.', 'danger');
-    }
-}
-
-/**
- * Yeni tarife ekleme formunu sunucuya gönderir.
- */
-async function tarifeEkle(event) {
-    event.preventDefault(); // Formun normal submit olmasını engelle
-    const kaydetButton = document.getElementById('kaydet-tarife-btn');
-    if (!kaydetButton) return;
-    const originalButtonText = kaydetButton.innerHTML;
-    
-    // Flatpickr'dan tarihleri al
-    const baslangicTarihi = formatDateToYYYYMMDD(yeniBaslangicTarihi.selectedDates[0]);
-    const bitisTarihi = formatDateToYYYYMMDD(yeniBitisTarihi.selectedDates[0]);
-
-    // YENİ: alis_fiyati ve satis_fiyati alanlarını al
-    const veri = {
-        baslangic_tarihi: baslangicTarihi,
-        bitis_tarihi: bitisTarihi, // null olabilir, backend bunu handle ediyor
-        alis_fiyati: document.getElementById('alis-fiyat-input').value,
-        satis_fiyati: document.getElementById('satis-fiyat-input').value
     };
 
-    if (!veri.baslangic_tarihi || !veri.alis_fiyati || !veri.satis_fiyati) {
-        gosterMesaj("Başlangıç tarihi, alış fiyatı ve satış fiyatı alanları zorunludur.", "warning");
-        return;
-    }
+    openSutModalBtn.addEventListener('click', () => {
+        sutForm.reset();
+        sutTarifeIdInput.value = '';
+        sutModalTitle.textContent = 'Yeni Süt Tarifesi';
+        window.openModal('sut-tarife-modal');
+    });
 
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
+    sutForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(sutForm);
+        const body = Object.fromEntries(formData.entries());
+        
+        const tarifeId = body.tarife_id;
+        const method = tarifeId ? 'PUT' : 'POST';
+        const endpoint = tarifeId ? `/api/tarife/sut/${tarifeId}` : '/api/tarifeler/sut';
 
-    try {
-        const result = await api.request('/tarife/api/ekle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
-        });
+        try {
+            const response = await apiCall(endpoint, method, body);
+            showToast(response.mesaj, 'success');
+            window.closeModal('sut-tarife-modal');
+            loadSutTarifeleri();
+        } catch (error) {
+            showToast(`Hata: ${error.message}`, 'error');
+        }
+    });
 
-        gosterMesaj(result.message, 'success');
-        document.getElementById('yeni-tarife-formu').reset(); // Formu temizle
-        yeniBaslangicTarihi.clear(); // Tarih seçicileri temizle
-        yeniBitisTarihi.clear();
-        await tarifeleriYukle(); // Tabloyu yenile
-
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-    } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = originalButtonText;
-    }
-}
-
-/**
- * Silme onay modalını açar.
- */
-function silmeOnayiAc(id) {
-    const idInput = document.getElementById('silinecek-tarife-id');
-    if (idInput) idInput.value = id;
-    if (silmeOnayModal) silmeOnayModal.show();
-}
-
-/**
- * API'yi çağırarak tarifeyi siler.
- */
-async function tarifeSil() {
-    const idInput = document.getElementById('silinecek-tarife-id');
-    if (!idInput) return;
-    const id = idInput.value;
-    if (silmeOnayModal) silmeOnayModal.hide();
-
-    // İyimser UI (Satırı hemen sil)
-    const silinecekSatir = document.getElementById(`tarife-satir-${id}`);
-    const originalHTML = silinecekSatir ? silinecekSatir.outerHTML : null;
-    const parent = silinecekSatir ? silinecekSatir.parentNode : null;
-    const nextSibling = silinecekSatir ? silinecekSatir.nextSibling : null;
-
-    if (silinecekSatir) {
-        silinecekSatir.style.transition = 'opacity 0.4s ease';
-        silinecekSatir.style.opacity = '0';
-        setTimeout(() => {
-            if (silinecekSatir.parentNode) silinecekSatir.remove();
-            if (parent && parent.children.length === 0) {
-                document.getElementById('tarife-veri-yok').style.display = 'block';
-            }
-        }, 300);
-    }
-
-    try {
-        const result = await api.request(`/tarife/api/sil/${id}`, { method: 'DELETE' });
-        gosterMesaj(result.message, 'success');
-        // Listeyi yenile (iyimsere ek olarak global diziyi de temizler)
-        await tarifeleriYukle();
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-        // Hata durumunda silinen satırı geri yükle
-        if (originalHTML && parent) {
-            const temp = document.createElement('tbody');
-            temp.innerHTML = originalHTML;
-            const restoredRow = temp.firstChild;
-            if (restoredRow) {
-                restoredRow.style.opacity = '1';
-                parent.insertBefore(restoredRow, nextSibling);
-                document.getElementById('tarife-veri-yok').style.display = 'none';
+    sutTableBody.addEventListener('click', async (e) => {
+        if (e.target.closest('.js-edit-sut-tarife')) {
+            const btn = e.target.closest('.js-edit-sut-tarife');
+            const tarifeId = btn.dataset.id;
+            try {
+                const tarife = await apiCall(`/api/tarife/sut/${tarifeId}`);
+                sutTarifeIdInput.value = tarife.id;
+                document.getElementById('sut-baslangic-tarihi').value = tarife.baslangic_tarihi.split('T')[0];
+                document.getElementById('sut-alis-fiyati').value = tarife.alis_fiyati;
+                document.getElementById('sut-satis-fiyati').value = tarife.satis_fiyati;
+                sutModalTitle.textContent = 'Süt Tarifesini Düzenle';
+                window.openModal('sut-tarife-modal');
+            } catch (error) { showToast(`Tarife yüklenemedi: ${error.message}`, 'error'); }
+        }
+        if (e.target.closest('.js-delete-sut-tarife')) {
+            const btn = e.target.closest('.js-delete-sut-tarife');
+            if (confirm('Bu süt tarifesini silmek istediğinizden emin misiniz?')) {
+                try {
+                    await apiCall(`/api/tarife/sut/${btn.dataset.id}`, 'DELETE');
+                    showToast('Süt tarifesi silindi.', 'success');
+                    loadSutTarifeleri();
+                } catch (error) { showToast(`Hata: ${error.message}`, 'error'); }
             }
         }
-    }
-}
+    });
 
-/**
- * Düzenleme modalını açar ve verileri doldurur.
- */
-function duzenlemeModaliniAc(id) {
-    // Global diziden veriyi bul
-    const tarife = tumTarifeler.find(t => t.id === id);
-    
-    if (!tarife) {
-        gosterMesaj("Düzenlenecek tarife verisi bulunamadı.", "danger");
-        return;
-    }
+    // --- YEM İŞLEMLERİ ---
 
-    // Modaldaki formları doldur
-    document.getElementById('edit-tarife-id').value = tarife.id;
-    
-    // YENİ: alis_fiyati ve satis_fiyati alanlarını doldur
-    document.getElementById('edit-alis-fiyat-input').value = parseFloat(tarife.alis_fiyati).toFixed(2);
-    document.getElementById('edit-satis-fiyat-input').value = parseFloat(tarife.satis_fiyati).toFixed(2);
-    
-    // Tarih seçicileri ayarla (timezone UTC varsayarak)
-    duzenleBaslangicTarihi.setDate(tarife.baslangic_tarihi, true);
-    duzenleBitisTarihi.setDate(tarife.bitis_tarihi || null, true); // Bitiş tarihi null olabilir
-
-    if (duzenleModal) duzenleModal.show();
-}
-
-/**
- * Düzenleme modalındaki "Kaydet" butonuna basıldığında çalışır.
- */
-async function tarifeGuncelle() {
-    const guncelleButton = document.getElementById('guncelle-tarife-btn');
-    if (!guncelleButton) return;
-    
-    const id = document.getElementById('edit-tarife-id').value;
-    const originalButtonText = guncelleButton.innerHTML;
-    
-    // Flatpickr'dan tarihleri al
-    const baslangicTarihi = formatDateToYYYYMMDD(duzenleBaslangicTarihi.selectedDates[0]);
-    const bitisTarihi = formatDateToYYYYMMDD(duzenleBitisTarihi.selectedDates[0]);
-
-    // YENİ: alis_fiyati ve satis_fiyati alanlarını al
-    const veri = {
-        baslangic_tarihi: baslangicTarihi,
-        bitis_tarihi: bitisTarihi, // null olabilir
-        alis_fiyati: document.getElementById('edit-alis-fiyat-input').value,
-        satis_fiyati: document.getElementById('edit-satis-fiyat-input').value
+    const loadYemTarifeleri = async () => {
+        yemTableBody.innerHTML = `<tr><td colspan="4" class="p-4 text-center">Yükleniyor...</td></tr>`;
+        try {
+            const data = await apiCall('/api/tarifeler/yem');
+            renderYemTable(data.tarifeler);
+        } catch (error) {
+            showToast(`Yem tarifeleri yüklenemedi: ${error.message}`, 'error');
+        }
     };
 
-    if (!veri.baslangic_tarihi || !veri.alis_fiyati || !veri.satis_fiyati) {
-        gosterMesaj("Başlangıç tarihi, alış fiyatı ve satış fiyatı alanları zorunludur.", "warning");
-        return;
-    }
-
-    guncelleButton.disabled = true;
-    guncelleButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Güncelleniyor...`;
-
-    try {
-        const result = await api.request(`/tarife/api/guncelle/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
+    const renderYemTable = (tarifeler) => {
+        yemTableBody.innerHTML = '';
+        if (!tarifeler || tarifeler.length === 0) {
+            yemTableBody.innerHTML = `<tr><td colspan="4" class="p-4 text-center">Kayıt bulunamadı.</td></tr>`;
+            return;
+        }
+        tarifeler.forEach(t => {
+            yemTableBody.innerHTML += `
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="table-cell">${t.yem_tipi}</td>
+                    <td class="table-cell">${formatCurrency(t.alis_fiyati)}</td>
+                    <td class="table-cell">${formatCurrency(t.satis_fiyati)}</td>
+                    <td class="table-cell">
+                        <button class="btn-warning-sm js-edit-yem-tarife" data-id="${t.id}"><i class="fas fa-edit"></i></button>
+                        <button class="btn-danger-sm js-delete-yem-tarife" data-id="${t.id}"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `;
         });
+    };
 
-        gosterMesaj(result.message, 'success');
-        if (duzenleModal) duzenleModal.hide();
-        await tarifeleriYukle(); // Tabloyu yenile
+    openYemModalBtn.addEventListener('click', () => {
+        yemForm.reset();
+        yemTarifeIdInput.value = '';
+        yemModalTitle.textContent = 'Yeni Yem Tarifesi';
+        window.openModal('yem-tarife-modal');
+    });
 
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-    } finally {
-        guncelleButton.disabled = false;
-        guncelleButton.innerHTML = originalButtonText;
-    }
-}
+    yemForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(yemForm);
+        const body = Object.fromEntries(formData.entries());
+        
+        const tarifeId = body.tarife_id;
+        const method = tarifeId ? 'PUT' : 'POST';
+        const endpoint = tarifeId ? `/api/tarife/yem/${tarifeId}` : '/api/tarifeler/yem';
+
+        try {
+            const response = await apiCall(endpoint, method, body);
+            showToast(response.mesaj, 'success');
+            window.closeModal('yem-tarife-modal');
+            loadYemTarifeleri();
+        } catch (error) {
+            showToast(`Hata: ${error.message}`, 'error');
+        }
+    });
+
+    yemTableBody.addEventListener('click', async (e) => {
+        if (e.target.closest('.js-edit-yem-tarife')) {
+            const btn = e.target.closest('.js-edit-yem-tarife');
+            const tarifeId = btn.dataset.id;
+            try {
+                const tarife = await apiCall(`/api/tarife/yem/${tarifeId}`);
+                yemTarifeIdInput.value = tarife.id;
+                document.getElementById('yem-tipi').value = tarife.yem_tipi;
+                document.getElementById('yem-alis-fiyati').value = tarife.alis_fiyati;
+                document.getElementById('yem-satis-fiyati').value = tarife.satis_fiyati;
+                yemModalTitle.textContent = 'Yem Tarifesini Düzenle';
+                window.openModal('yem-tarife-modal');
+            } catch (error) { showToast(`Tarife yüklenemedi: ${error.message}`, 'error'); }
+        }
+        if (e.target.closest('.js-delete-yem-tarife')) {
+            const btn = e.target.closest('.js-delete-yem-tarife');
+            if (confirm('Bu yem tarifesini silmek istediğinizden emin misiniz?')) {
+                try {
+                    await apiCall(`/api/tarife/yem/${btn.dataset.id}`, 'DELETE');
+                    showToast('Yem tarifesi silindi.', 'success');
+                    loadYemTarifeleri();
+                } catch (error) { showToast(`Hata: ${error.message}`, 'error'); }
+            }
+        }
+    });
+
+
+    // Sayfa Yüklendiğinde
+    loadSutTarifeleri();
+    loadYemTarifeleri();
+});

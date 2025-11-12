@@ -1,78 +1,88 @@
-// ====================================================================================
-// ARAYÜZ YÖNETİMİ (ui.js) - RLS/AUTH GÜNCELLENDİ
-// Sadece temel UI yardımcıları (mesaj gösterme) kaldı.
-// 'checkOfflineLicense' fonksiyonu, yeni sunucu tabanlı Auth sistemiyle
-// uyumsuz olduğu için kaldırıldı.
-// ====================================================================================
+// Bu dosya, base.html içindeki genel UI elemanlarını (navbar, sidebar) yönetir.
+document.addEventListener('DOMContentLoaded', () => {
 
-// Bu kontrollerin (renderUtils, utils) 'render-utils.js' ve 'utils.js' 
-// dosyalarından geldiğini varsayıyoruz.
-if (typeof renderUtils === 'undefined') {
-    console.error("ui.js: renderUtils objesi bulunamadı. render-utils.js yüklendi mi?");
-}
-if (typeof utils === 'undefined') {
-    console.error("ui.js: utils objesi bulunamadı. utils.js yüklendi mi?");
-}
-
-
-/**
- * Kullanıcıya dinamik olarak bir mesaj gösterir.
- * @param {string} mesaj - Gösterilecek mesaj (HTML içerebilir).
- * @param {string} tip - Alert tipi ('success', 'info', 'warning', 'danger').
- * @param {number} sure - Mesajın ekranda kalma süresi (milisaniye).
- * @param {boolean} allowHTML - Mesajın HTML olarak yorumlanıp yorumlanmayacağı.
- */
-function gosterMesaj(mesaj, tip = 'info', sure = 5000, allowHTML = false) { // YENİ: allowHTML eklendi
-    const alertContainer = document.getElementById('alert-container');
-    if (!alertContainer) {
-        console.error("'alert-container' ID'li element bulunamadı.");
-        // Eğer ana panelde değilsek (login vb) ve bu ID yoksa, 
-        // global bir fallback (örn. konsol) kullanalım.
-        console.log(`MESAJ (${tip}): ${mesaj}`);
-        return;
-    }
+    // --- 1. Kullanıcı Menüsü (Sağ Üst Köşe) ---
+    const userMenuBtn = document.getElementById('user-menu-btn');
+    const userMenuDropdown = document.getElementById('user-menu-dropdown');
     
-    const alertId = 'alert-' + Date.now();
-    let alertMessage = mesaj;
-    
-    // allowHTML true değilse, metni güvenli hale getir (XSS koruması)
-    if (!allowHTML) {
-        const tempDiv = document.createElement('div');
-        tempDiv.textContent = mesaj;
-        alertMessage = tempDiv.innerHTML;
-    }
-
-    const alert = `
-        <div id="${alertId}" class="alert alert-${tip} alert-dismissible fade show" role="alert">
-            ${alertMessage}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    `;
-    
-    // Eski mesajları temizleyip yenisini ekle
-    alertContainer.innerHTML = alert;
-
-    // Belirli bir süre sonra otomatik kapat
-    // (Eğer 'sure' parametresi 0'dan büyükse)
-    if (sure > 0) {
-        setTimeout(() => {
-            const alertElement = document.getElementById(alertId);
-            if (alertElement) {
-                // Bootstrap 5'in 'close' metodunu programatik olarak tetikle
-                const bsAlert = bootstrap.Alert.getOrCreateInstance(alertElement);
-                if (bsAlert) {
-                    bsAlert.close();
-                } else {
-                    alertElement.remove(); // Fallback
-                }
+    if (userMenuBtn && userMenuDropdown) {
+        userMenuBtn.addEventListener('click', () => {
+            userMenuDropdown.classList.toggle('hidden');
+        });
+        
+        // Dışarıya tıklandığında kullanıcı menüsünü kapat
+        document.addEventListener('click', (event) => {
+            if (!userMenuBtn.contains(event.target) && !userMenuDropdown.classList.contains('hidden')) {
+                userMenuDropdown.classList.add('hidden');
             }
-        }, sure);
+        });
     }
-}
 
-// Global scope'a ekle
-window.gosterMesaj = gosterMesaj;
+    // --- 2. Mobil Sidebar (Soldan Açılan) ---
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const sidebar = document.querySelector('aside');
+    
+    if (mobileMenuBtn && sidebar) {
+        // Mobil menü açıldığında arkaplanı karartmak için bir backdrop oluşturalım
+        let backdrop = document.createElement('div');
+        backdrop.className = 'fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden hidden';
+        document.body.appendChild(backdrop);
+        
+        const toggleMobileMenu = () => {
+            // Sidebar'ı 'hidden' (gizli) durumundan çıkarıp 'fixed' (sabit) hale getir
+            sidebar.classList.toggle('hidden'); 
+            sidebar.classList.toggle('fixed');
+            sidebar.classList.toggle('inset-y-0');
+            sidebar.classList.toggle('left-0');
+            sidebar.classList.toggle('z-40');
+            
+            // Arkaplanı (backdrop) göster/gizle
+            backdrop.classList.toggle('hidden');
+        }
+        
+        mobileMenuBtn.addEventListener('click', toggleMobileMenu);
+        backdrop.addEventListener('click', toggleMobileMenu); // Arkaplana tıklayınca da kapat
+    }
 
-// ESKİ 'checkOfflineLicense' fonksiyonu, yeni Auth (sunucu tabanlı)
-// sistemiyle (localStorage yerine cookie/token kullanır) artık uyumsuz 
-// olduğu için KALDIRILDI.
+    // --- 3. Hızlı İşlem Modallarını Tetikleme ---
+    // (Masaüstü Header'daki ve Mobil Alt Bar'daki '+' butonu)
+    const quickActionsBtn = document.getElementById('quick-actions-btn');
+    const mobileQuickActionsBtn = document.getElementById('mobile-quick-actions-btn');
+    
+    // Hızlı İşlem menüsünü açan fonksiyon
+    const openQuickActions = (e) => {
+        e.preventDefault();
+        if(window.openModal) {
+            window.openModal('hizli-islemler-modal');
+        }
+    };
+
+    if (quickActionsBtn) quickActionsBtn.addEventListener('click', openQuickActions);
+    if (mobileQuickActionsBtn) mobileQuickActionsBtn.addEventListener('click', openQuickActions);
+    
+    // Hızlı İşlem *içindeki* menü butonları (Süt, Yem, Ödeme)
+    // Bu butonlar ana menüyü kapatıp ilgili modalı açmalı.
+    const openSutModalBtn = document.getElementById('open-hizli-sut-ekle-modal-btn');
+    const openYemModalBtn = document.getElementById('open-hizli-yem-ekle-modal-btn');
+    const openOdemeModalBtn = document.getElementById('open-hizli-odeme-ekle-modal-btn');
+
+    if (openSutModalBtn) {
+        openSutModalBtn.addEventListener('click', () => {
+            window.closeModal('hizli-islemler-modal');
+            // Modalların çakışmaması için küçük bir gecikme ekliyoruz
+            setTimeout(() => window.openModal('hizli-sut-ekle-modal'), 350);
+        });
+    }
+    if (openYemModalBtn) {
+        openYemModalBtn.addEventListener('click', () => {
+            window.closeModal('hizli-islemler-modal');
+            setTimeout(() => window.openModal('hizli-yem-ekle-modal'), 350);
+        });
+    }
+    if (openOdemeModalBtn) {
+        openOdemeModalBtn.addEventListener('click', () => {
+            window.closeModal('hizli-islemler-modal');
+            setTimeout(() => window.openModal('hizli-odeme-ekle-modal'), 350);
+        });
+    }
+});

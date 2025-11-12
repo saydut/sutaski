@@ -1,212 +1,134 @@
-<!-- ====================================================== -->
-<!-- YENİ KULLANICI EKLEME MODALI -->
-<!-- ====================================================== -->
-<div class="modal fade" id="yeniKullaniciModal" tabindex="-1" aria-labelledby="yeniKullaniciModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="yeniKullaniciModalLabel">Yeni Kullanıcı Ekle</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
-            </div>
-            <div class="modal-body">
-                <form id="yeni-kullanici-form">
-                    <div class="row">
-                        <!-- Sol Sütun -->
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="yeni-kullanici-ad" class="form-label">Ad Soyad <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="yeni-kullanici-ad" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="yeni-kullanici-email" class="form-label">E-posta <span class="text-danger">*</span></label>
-                                <input type="email" class="form-control" id="yeni-kullanici-email" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="yeni-kullanici-telefon" class="form-label">Telefon</label>
-                                <input type="tel" class="form-control" id="yeni-kullanici-telefon" placeholder="örn: 5321234567">
-                            </div>
-                        </div>
-                        
-                        <!-- Sağ Sütun -->
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="yeni-kullanici-rol" class="form-label">Rol <span class="text-danger">*</span></label>
-                                <select class="form-select" id="yeni-kullanici-rol" required>
-                                    <option value="" selected disabled>Lütfen bir rol seçin...</option>
-                                    <option value="{{ UserRole.TOPLAYICI.value }}">Toplayıcı</option>
-                                    <option value="{{ UserRole.MUHASEBECI.value }}">Muhasebeci</option>
-                                    <option value="{{ UserRole.CIFCI.value }}">Çiftçi (Tedarikçi)</option>
-                                </select>
-                            </div>
-                             <div class="mb-3">
-                                <label for="yeni-kullanici-sifre" class="form-label">Şifre <span class="text-danger">*</span></label>
-                                <input type="password" class="form-control" id="yeni-kullanici-sifre" required minlength="6">
-                            </div>
-                            <div class="mb-3">
-                                <label for="yeni-kullanici-sifre-tekrar" class="form-label">Şifre Tekrar <span class="text-danger">*</span></label>
-                                <input type="password" class="form-control" id="yeni-kullanici-sifre-tekrar" required minlength="6">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Tedarikçi Atama Alanı (Dinamik) -->
-                    <div class="mb-3" id="yeni-kullanici-tedarikci-alan" style="display: none;">
-                        <label for="yeni-kullanici-tedarikciler" class="form-label">Atanan Tedarikçi(ler)</label>
-                        <select id="yeni-kullanici-tedarikciler" multiple autocomplete="off"></select>
-                        <div class="form-text" id="yeni-kullanici-tedarikci-yardim">
-                            Rol 'Toplayıcı' ise, bu toplayıcının hangi tedarikçilerden süt alacağını seçin.
-                            Rol 'Çiftçi' ise, bu kullanıcının hangi tedarikçi hesabına bağlanacağını seçin (Sadece 1 adet).
-                        </div>
-                    </div>
+<!-- 
+Bu dosya 'tedarikciler.html' ve 'tedarikci_detay.html' içine dahil edilmiştir.
+Tedarikçi Ekleme ve Düzenleme modallarını barındırır.
+-->
 
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
-                        <button type="submit" class="btn btn-primary" id="yeni-kullanici-kaydet-btn">
-                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                            Kaydet
-                        </button>
-                    </div>
-                </form>
-            </div>
+<!-- Yeni Tedarikçi Ekleme Modalı -->
+<div id="add-supplier-modal" class="modal-backdrop">
+    <div class="modal-container max-w-2xl">
+        <div class="modal-header">
+            <h3 class="modal-title">Yeni Tedarikçi Ekle</h3>
+            <button class="modal-close-btn" data-modal-id="add-supplier-modal">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
-    </div>
-</div>
-
-<!-- ====================================================== -->
-<!-- KULLANICI DÜZENLEME MODALI -->
-<!-- ====================================================== -->
-<div class="modal fade" id="kullaniciDuzenleModal" tabindex="-1" aria-labelledby="kullaniciDuzenleModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="kullaniciDuzenleModalLabel">Kullanıcıyı Düzenle</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
-            </div>
+        <form id="add-supplier-form">
             <div class="modal-body">
-                <form id="edit-kullanici-form">
-                    <!-- Gizli ID alanları -->
-                    <input type="hidden" id="edit-kullanici-id">
-                    <input type="hidden" id="edit-kullanici-auth-id">
-
-                    <div class="row">
-                        <!-- Sol Sütun -->
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="edit-kullanici-ad" class="form-label">Ad Soyad <span class="text-danger">*</span></label>
-                                <input type="text" class="form-control" id="edit-kullanici-ad" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="edit-kullanici-email" class="form-label">E-posta <span class="text-danger">*</span></label>
-                                <input type="email" class="form-control" id="edit-kullanici-email" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="edit-kullanici-telefon" class="form-label">Telefon</label>
-                                <input type="tel" class="form-control" id="edit-kullanici-telefon">
-                            </div>
-                        </div>
-                        
-                        <!-- Sağ Sütun -->
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="edit-kullanici-rol" class="form-label">Rol <span class="text-danger">*</span></label>
-                                <select class="form-select" id="edit-kullanici-rol" required>
-                                    <option value="{{ UserRole.TOPLAYICI.value }}">Toplayıcı</option>
-                                    <option value="{{ UserRole.MUHASEBECI.value }}">Muhasebeci</option>
-                                    <option value="{{ UserRole.CIFCI.value }}">Çiftçi (Tedarikçi)</option>
-                                </select>
-                            </div>
-                            <div class="mb-3 form-check form-switch">
-                                <input class="form-check-input" type="checkbox" role="switch" id="edit-kullanici-aktif">
-                                <label class="form-check-label" for="edit-kullanici-aktif">Kullanıcı Aktif</label>
-                                <div class="form-text">İşaret kaldırılırsa kullanıcı sisteme giriş yapamaz.</div>
-                            </div>
-                        </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="mb-4">
+                        <label for="add-tedarikci-kodu" class="block text-sm font-medium mb-2">Tedarikçi Kodu</label>
+                        <input type="text" id="add-tedarikci-kodu" name="tedarikci_kodu" class="input-field" required 
+                               placeholder="Örn: 101">
                     </div>
-                    
-                    <!-- Tedarikçi Atama Alanı (Dinamik) -->
-                    <div class="mb-3" id="edit-kullanici-tedarikci-alan" style="display: none;">
-                        <label for="edit-kullanici-tedarikciler" class="form-label">Atanan Tedarikçi(ler)</label>
-                        <select id="edit-kullanici-tedarikciler" multiple autocomplete="off"></select>
-                        <div class="form-text" id="edit-kullanici-tedarikci-yardim">
-                            Rol 'Toplayıcı' ise, bu toplayıcının hangi tedarikçilerden süt alacağını seçin.
-                            Rol 'Çiftçi' ise, bu kullanıcının hangi tedarikçi hesabına bağlanacağını seçin (Sadece 1 adet).
-                        </div>
+                    <div class="mb-4">
+                        <label for="add-ad-soyad" class="block text-sm font-medium mb-2">Ad Soyad</label>
+                        <input type="text" id="add-ad-soyad" name="ad_soyad" class="input-field" required>
                     </div>
-
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
-                        <button type="submit" class="btn btn-primary" id="edit-kullanici-kaydet-btn">
-                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                            Güncelle
-                        </button>
+                    <div class="mb-4">
+                        <label for="add-tc-kimlik" class="block text-sm font-medium mb-2">TC Kimlik No (İsteğe bağlı)</label>
+                        <input type="text" id="add-tc-kimlik" name="tc_kimlik" class="input-field">
                     </div>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ====================================================== -->
-<!-- KULLANICI ŞİFRE AYARLAMA MODALI -->
-<!-- ====================================================== -->
-<div class="modal fade" id="kullaniciSifreAyarlaModal" tabindex="-1" aria-labelledby="kullaniciSifreAyarlaModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="kullaniciSifreAyarlaModalLabel">Şifre Ayarla: <span id="sifre-modal-baslik" class="fw-bold"></span></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
-            </div>
-            <div class="modal-body">
-                <form id="sifre-ayarla-form">
-                    <input type="hidden" id="sifre-kullanici-id">
-                    <div class="mb-3">
-                        <label for="yeni-sifre" class="form-label">Yeni Şifre <span class="text-danger">*</span></label>
-                        <input type="password" class="form-control" id="yeni-sifre" required minlength="6">
-                        <div class="form-text">En az 6 karakter olmalıdır.</div>
+                     <div class="mb-4">
+                        <label for="add-telefon" class="block text-sm font-medium mb-2">Telefon (İsteğe bağlı)</label>
+                        <input type="tel" id="add-telefon" name="telefon" class="input-field">
                     </div>
-                    <div class="mb-3">
-                        <label for="yeni-sifre-tekrar" class="form-label">Yeni Şifre (Tekrar) <span class="text-danger">*</span></label>
-                        <input type="password" class="form-control" id="yeni-sifre-tekrar" required minlength="6">
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
-                        <button type="submit" class="btn btn-primary" id="sifre-kaydet-btn">
-                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                            Şifreyi Güncelle
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-
-<!-- ====================================================== -->
-<!-- SİLME ONAY MODALI (Genel) -->
-<!-- ====================================================== -->
-<div class="modal fade" id="silmeOnayModal" tabindex="-1" aria-labelledby="silmeOnayModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="silmeOnayModalLabel">Silme Onayı</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Kapat"></button>
-            </div>
-            <div class="modal-body">
-                <p><strong><span id="silinecek-oge-adi"></span></strong> adlı kullanıcıyı silmek üzeresiniz.</p>
-                <p class="text-danger">
-                    <i class="fas fa-exclamation-triangle"></i> Bu işlem geri alınamaz! 
-                    Bu kullanıcıya ait tüm süt, yem, finans ve diğer kayıtlar da kalıcı olarak silinecektir.
-                </p>
-                <p>Devam etmek istediğinizden emin misiniz?</p>
+                </div>
+                <div class="mb-4">
+                    <label for="add-adres" class="block text-sm font-medium mb-2">Adres (İsteğe bağlı)</label>
+                    <textarea id="add-adres" name="adres" rows="3" class="input-field"></textarea>
+                </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</tamam>
-                <button type="button" class="btn btn-danger" id="onayla-sil-btn">
-                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-                    Evet, Sil
-                </button>
+                <button type="button" class="btn-secondary" data-modal-id="add-supplier-modal">İptal</button>
+                <button type="submit" class="btn-primary-filled">Kaydet</button>
             </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tedarikçi Düzenleme Modalı -->
+<div id="edit-supplier-modal" class="modal-backdrop">
+    <div class="modal-container max-w-2xl">
+        <div class="modal-header">
+            <h3 class="modal-title">Tedarikçi Bilgilerini Düzenle</h3>
+            <button class="modal-close-btn" data-modal-id="edit-supplier-modal">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
+        <form id="edit-supplier-form">
+            <input type="hidden" id="edit-supplier-id" name="supplier_id">
+            <div class="modal-body">
+                <!-- Temel Bilgiler -->
+                <h4 class="text-lg font-semibold mb-3">Temel Bilgiler</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="mb-4">
+                        <label for="edit-tedarikci-kodu" class="block text-sm font-medium mb-2">Tedarikçi Kodu</label>
+                        <input type="text" id="edit-tedarikci-kodu" name="tedarikci_kodu" class="input-field" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit-ad-soyad" class="block text-sm font-medium mb-2">Ad Soyad</label>
+                        <input type="text" id="edit-ad-soyad" name="ad_soyad" class="input-field" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="edit-tc-kimlik" class="block text-sm font-medium mb-2">TC Kimlik No</label>
+                        <input type="text" id="edit-tc-kimlik" name="tc_kimlik" class="input-field">
+                    </div>
+                     <div class="mb-4">
+                        <label for="edit-telefon" class="block text-sm font-medium mb-2">Telefon</label>
+                        <input type="tel" id="edit-telefon" name="telefon" class="input-field">
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label for="edit-adres" class="block text-sm font-medium mb-2">Adres</label>
+                    <textarea id="edit-adres" name="adres" rows="3" class="input-field"></textarea>
+                </div>
+                <div class="mb-4">
+                     <label for="edit-durum" class="block text-sm font-medium mb-2">Tedarikçi Durumu</label>
+                    <select id="edit-durum" name="durum" class="input-field" required>
+                        <option value="aktif">Aktif</option>
+                        <option value="pasif">Pasif</option>
+                    </select>
+                </div>
+
+                <!-- Çiftçi Panel Erişimi -->
+                <hr class="my-6 dark:border-gray-600">
+                <h4 class="text-lg font-semibold mb-3">Çiftçi Panel Erişimi</h4>
+                
+                <div id="ciftci-panel-loading" class="text-center p-4">
+                    <i class="fas fa-spinner fa-spin mr-2"></i> Kullanıcı bilgisi yükleniyor...
+                </div>
+                
+                <!-- Panel erişimi yoksa -->
+                <div id="ciftci-panel-yok" class_ ="hidden space-y-4">
+                    <p class="text-sm">Bu tedarikçinin henüz çiftçi paneline erişimi yok. Erişim vermek için yeni bir kullanıcı oluşturun.</p>
+                    <div class="mb-4">
+                        <label for="ciftci-email" class="block text-sm font-medium mb-2">E-posta Adresi</label>
+                        <input type="email" id="ciftci-email" name="ciftci_email" class="input-field" 
+                               placeholder="ornek@ciftci.com">
+                    </div>
+                    <div class="mb-4">
+                        <label for="ciftci-password" class="block text-sm font-medium mb-2">Geçici Şifre</label>
+                        <input type="password" id="ciftci-password" name="ciftci_password" class="input-field"
+                               placeholder="En az 6 karakter">
+                    </div>
+                    <p class="text-xs text-gray-500">Kaydet'e bastığınızda bu e-posta ile 'ciftci' rolünde bir kullanıcı oluşturulur ve bu tedarikçiye bağlanır.</p>
+                </div>
+
+                <!-- Panel erişimi varsa -->
+                <div id="ciftci-panel-var" class="hidden">
+                    <p class="text-sm mb-4">Bu tedarikçi, aşağıdaki e-posta adresi ile çiftçi paneline giriş yapabilir:</p>
+                    <input type="text" id="ciftci-mevcut-email" class="input-field bg-gray-100 dark:bg-gray-700" readonly>
+                    <button type="button" id="ciftci-erisim-kaldir-btn" class="btn-danger-outlined mt-4">
+                        <i class="fas fa-unlink mr-2"></i> Panel Erişimini Kaldır
+                    </button>
+                    <p class="text-xs text-gray-500 mt-2">Erişimi kaldırmak, kullanıcıyı silmez, sadece bu tedarikçi ile olan bağlantısını koparır.</p>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-modal-id="edit-supplier-modal">İptal</button>
+                <button type="submit" class="btn-primary-filled">Bilgileri Güncelle</button>
+            </div>
+        </form>
     </div>
 </div>

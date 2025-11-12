@@ -1,296 +1,161 @@
-// static/js/finans_yonetimi.js
-
-let finansSilmeOnayModal, finansEkleModal;
-let mevcutSayfa = 1;
-let seciliTarih = null;
-let seciliIslemTipi = null;
-let tedarikciSecici, toplayiciSecici;
-let tumTedarikciler = [], tumToplayicilar = []; // Verileri saklamak için
-
-const ISLEMLER_SAYFA_BASI = 15;
-
-window.onload = function() {
-    finansSilmeOnayModal = new bootstrap.Modal(document.getElementById('finansSilmeOnayModal'));
-    finansEkleModal = new bootstrap.Modal(document.getElementById('finansEkleModal'));
-
-    // TomSelect başlat
-    tedarikciSecici = new TomSelect("#islem-tedarikci-sec", { create: false, sortField: { field: "text", direction: "asc" } });
-    toplayiciSecici = new TomSelect("#islem-toplayici-sec", { create: false, sortField: { field: "text", direction: "asc" } });
-
-    // Olay dinleyicileri
-    const islemTipiSelect = document.getElementById('islem-tipi-sec');
-    if(islemTipiSelect) {
-        islemTipiSelect.addEventListener('change', ilgiliKullaniciAlaniniGoster);
-    }
-    const ekleFormu = document.getElementById('finans-ekle-formu');
-    if(ekleFormu) {
-        ekleFormu.addEventListener('submit', finansIslemiEkle);
-    }
-    const tarihFiltreInput = document.getElementById('tarih-filtre');
-    if(tarihFiltreInput) {
-        flatpickr(tarihFiltreInput, {
-            dateFormat: "Y-m-d",
-            altInput: true,
-            altFormat: "d.m.Y",
-            locale: "tr",
-            onChange: function(selectedDates, dateStr, instance) {
-                seciliTarih = dateStr;
-                filtreleVeYukle();
-            }
-        });
-    }
-    const islemTipiFiltre = document.getElementById('islem-tipi-filtre');
-    if(islemTipiFiltre) {
-        islemTipiFiltre.addEventListener('change', (e) => {
-            seciliIslemTipi = e.target.value;
-            filtreleVeYukle();
-        });
-    }
-
-    islemleriYukle(1);
-    dropdownlariDoldur();
-};
-
-function filtreleVeYukle() {
-    mevcutSayfa = 1;
-    islemleriYukle(mevcutSayfa);
-}
-
-function tarihiTemizle() {
-    const tarihInput = document.getElementById('tarih-filtre');
-    if (tarihInput && tarihInput._flatpickr) {
-        tarihInput._flatpickr.clear();
-    }
-    seciliTarih = null;
-    filtreleVeYukle();
-}
-
-async function dropdownlariDoldur() {
-    try {
-        // Verileri store.js'den (veya API'den) çek
-        tumTedarikciler = await store.getTedarikciler();
-        tumToplayicilar = await store.getToplayicilar(); 
-        
-        tedarikciSecici.clearOptions();
-        tedarikciSecici.addOptions(tumTedarikciler.map(t => ({ value: t.id, text: utils.sanitizeHTML(t.isim) })));
-        
-        toplayiciSecici.clearOptions();
-        toplayiciSecici.addOptions(tumToplayicilar.map(t => ({ value: t.id, text: utils.sanitizeHTML(t.kullanici_adi) })));
-
-    } catch (error) {
-        gosterMesaj('Tedarikçi veya toplayıcı listesi yüklenemedi.', 'danger');
-    }
-}
-
-function ilgiliKullaniciAlaniniGoster() {
-    const tip = document.getElementById('islem-tipi-sec').value;
-    const tedarikciAlani = document.getElementById('tedarikci-sec-alani');
-    const toplayiciAlani = document.getElementById('toplayici-sec-alani');
-
-    // Her şeyi sıfırla
-    tedarikciAlani.style.display = 'none';
-    toplayiciAlani.style.display = 'none';
-    tedarikciSecici.clear();
-    toplayiciSecici.clear();
-
-    if (tip === 'Ödeme' || tip === 'Masraf' || tip === 'Diğer Gider') {
-        tedarikciAlani.style.display = 'block';
-    } else if (tip === 'Prim') {
-        toplayiciAlani.style.display = 'block';
-    }
-}
-
-async function islemleriYukle(sayfa = 1) {
-    mevcutSayfa = sayfa;
-    const liste = document.getElementById('finans-islemleri-listesi');
-    const veriYok = document.getElementById('finans-veri-yok');
-    const sayfalama = document.getElementById('finans-sayfalama');
+// Bu script, finans_yonetimi.html sayfasının mantığını yönetir.
+// Kayıt ekleme/düzenleme 'islem_yonetimi.js' tarafından yapılır.
+// Bu script listeleme, filtreleme, sayfalama ve silme yapar.
+document.addEventListener('DOMContentLoaded', () => {
     
-    if (!liste || !veriYok || !sayfalama) return;
-
-    liste.innerHTML = '<tr><td colspan="5" class="text-center"><div class="spinner-border spinner-border-sm"></div> Yükleniyor...</td></tr>';
-    veriYok.style.display = 'none';
-    
-    try {
-        const params = new URLSearchParams({
-            sayfa: mevcutSayfa,
-            tarih: seciliTarih || '',
-            tip: seciliIslemTipi || ''
-        });
-
-        const result = await api.request(`/finans/api/listele?${params.toString()}`);
-
-        const islemler = result.data;
-        const toplamKayit = result.count;
-        
-        liste.innerHTML = ''; // Listeyi temizle
-
-        if (!islemler || islemler.length === 0) {
-            veriYok.style.display = 'block';
-        } else {
-            veriYok.style.display = 'none';
-            renderIslemler(islemler);
-        }
-        
-        // Sayfalama
-        ui.renderPagination(sayfalama, mevcutSayfa, toplamKayit, ISLEMLER_SAYFA_BASI, (yeniSayfa) => {
-            islemleriYukle(yeniSayfa);
-        });
-
-    } catch (error) {
-        liste.innerHTML = '';
-        gosterMesaj(error.message, 'danger');
-    }
-}
-
-function renderIslemler(islemler) {
-    const liste = document.getElementById('finans-islemleri-listesi');
-    if (!liste) return;
-
-    islemler.forEach(islem => {
-        // GÜNCELLENDİ: 'Yem Satışı'nı 'GELİR' olarak ekledik
-        const isGelir = islem.islem_tipi === 'Ödeme' || islem.islem_tipi === 'Süt Alımı' || islem.islem_tipi === 'Yem Satışı';
-        
-        const tarih = new Date(islem.islem_tarihi).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
-        const tutar = parseFloat(islem.tutar).toFixed(2);
-        
-        const turEtiketi = isGelir 
-            ? `<span class="badge text-bg-success">GELİR</span>` 
-            : `<span class="badge text-bg-danger">GİDER</span>`;
-
-        let aciklama = utils.sanitizeHTML(islem.aciklama || '');
-        let kimdenKime = '';
-
-        if (islem.tedarikci_isim) {
-            kimdenKime = `<small class="text-secondary d-block">Tedarikçi: ${utils.sanitizeHTML(islem.tedarikci_isim)}</small>`;
-        } else if (islem.kullanici_adi) {
-            kimdenKime = `<small class="text-secondary d-block">Personel: ${utils.sanitizeHTML(islem.kullanici_adi)}</small>`;
-        }
-        
-        // Açıklama yoksa, işlem tipini açıklama yap
-        if (!aciklama) {
-            aciklama = islem.islem_tipi;
-        }
-
-        // Silme butonu (sadece manuel eklenenler için)
-        const silButonu = (islem.islem_tipi === 'Ödeme' || islem.islem_tipi === 'Masraf' || islem.islem_tipi === 'Prim' || islem.islem_tipi === 'Diğer Gider' || islem.islem_tipi === 'Diğer Gelir')
-            ? `<button class="btn btn-sm btn-outline-danger" onclick="finansSilmeOnayiAc(${islem.id})" title="Sil">
-                 <i class="bi bi-trash"></i>
-               </button>`
-            : `<button class="btn btn-sm btn-outline-secondary" disabled title="Otomatik kayıt (Süt/Yem) silinemez">
-                 <i class="bi bi-lock-fill"></i>
-               </button>`;
-
-        const row = `
-            <tr id="finans-islem-${islem.id}">
-                <td>
-                    ${turEtiketi}
-                    <strong class="d-block">${aciklama}</strong>
-                    ${kimdenKime}
-                </td>
-                <td class="text-end fw-bold ${isGelir ? 'text-success' : 'text-danger'}">
-                    ${isGelir ? '+' : '-'}${tutar} TL
-                </td>
-                <td class="text-end text-secondary">${tarih}</td>
-                <td class="text-center">
-                    ${silButonu}
-                </td>
-            </tr>
-        `;
-        liste.innerHTML += row;
-    });
-}
-
-function yeniFinansIslemiAc() {
-    document.getElementById('finans-ekle-formu').reset();
-    document.getElementById('edit-islem-id').value = '';
-    tedarikciSecici.clear();
-    toplayiciSecici.clear();
-    ilgiliKullaniciAlaniniGoster();
-    finansEkleModal.show();
-}
-
-async function finansIslemiEkle(event) {
-    event.preventDefault();
-    const kaydetButton = document.getElementById('kaydet-finans-btn');
-    const originalButtonText = kaydetButton.innerHTML;
-
-    const veri = {
-        islem_tipi: document.getElementById('islem-tipi-sec').value,
-        tutar: document.getElementById('islem-tutar-input').value,
-        aciklama: document.getElementById('islem-aciklama-input').value,
-        tedarikci_id: tedarikciSecici.getValue() || null,
-        kullanici_id: toplayiciSecici.getValue() || null
+    // Sayfa durumu (State)
+    let state = {
+        currentPage: 1,
+        totalPages: 1,
+        startDate: '',
+        endDate: '',
+        search: '',
+        islemTipi: ''
     };
 
-    if (!veri.islem_tipi || !veri.tutar || parseFloat(veri.tutar) <= 0) {
-        gosterMesaj('Lütfen işlem tipi ve pozitif bir tutar girin.', 'warning');
-        return;
-    }
-    if (veri.islem_tipi === 'Ödeme' && !veri.tedarikci_id) {
-        gosterMesaj('Lütfen ödeme yapılacak tedarikçiyi seçin.', 'warning');
-        return;
-    }
-    if (veri.islem_tipi === 'Prim' && !veri.kullanici_id) {
-        gosterMesaj('Lütfen prim ödenecek personeli seçin.', 'warning');
-        return;
-    }
-
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
+    // DOM Elementleri
+    const tableBody = document.getElementById('finans-table-body');
+    const filterBtn = document.getElementById('finans-filter-btn');
+    const startDateInput = document.getElementById('finans-tarih-baslangic');
+    const endDateInput = document.getElementById('finans-tarih-bitis');
+    const searchInput = document.getElementById('finans-tedarikci-arama');
+    const islemTipiSelect = document.getElementById('finans-islem-tipi');
     
-    try {
-        const result = await api.request('/finans/api/ekle', {
-            method: 'POST',
-            body: JSON.stringify(veri),
-            headers: { 'Content-Type': 'application/json' }
-        });
+    const prevPageBtn = document.getElementById('prev-page-btn-finans');
+    const nextPageBtn = document.getElementById('next-page-btn-finans');
+    const paginationInfo = document.getElementById('pagination-info-finans');
+
+    /**
+     * API'den Finans kayıtlarını çeker ve tabloyu günceller.
+     */
+    const loadFinansKayitlari = async () => {
+        tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center"><i class="fas fa-spinner fa-spin mr-2"></i> Yükleniyor...</td></tr>`;
         
-        gosterMesaj(result.message, 'success');
-        finansEkleModal.hide();
-        await islemleriYukle(1); // Listeyi yenile
+        try {
+            const params = new URLSearchParams({
+                page: state.currentPage,
+                search: state.search,
+                start_date: state.startDate,
+                end_date: state.endDate,
+                islem_tipi: state.islemTipi
+            });
+            const endpoint = `/api/finans?${params.toString()}`;
+            const data = await apiCall(endpoint);
+            
+            renderFinansTable(data.kayitlar);
+            updatePagination(data.pagination);
+            
+        } catch (error) {
+            showToast(`Finans kayıtları yüklenemedi: ${error.message}`, 'error');
+            tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-red-500">Veri yüklenemedi.</td></tr>`;
+        }
+    };
 
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-    } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = originalButtonText;
-    }
-}
-
-function finansSilmeOnayiAc(id) {
-    document.getElementById('silinecek-finans-id').value = id;
-    finansSilmeOnayModal.show();
-}
-
-async function finansIslemiSil() {
-    const id = document.getElementById('silinecek-finans-id').value;
-    finansSilmeOnayModal.hide();
-
-    // İyimser UI
-    const satir = document.getElementById(`finans-islem-${id}`);
-    if (satir) satir.style.opacity = '0.5';
-
-    try {
-        const result = await api.request(`/finans/api/sil/${id}`, { method: 'DELETE' });
-        gosterMesaj(result.message, 'success');
-        
-        // İyimser UI - Başarılı olunca satırı kaldır
-        if (satir) {
-            satir.style.transition = 'opacity 0.3s ease';
-            satir.style.opacity = '0';
-            setTimeout(() => { 
-                satir.remove();
-                if (document.getElementById('finans-islemleri-listesi').children.length === 0) {
-                    document.getElementById('finans-veri-yok').style.display = 'block';
-                }
-            }, 300);
-        } else {
-            await islemleriYukle(mevcutSayfa); // Satır bulunamadıysa listeyi yeniden yükle
+    /**
+     * Gelen finans kayıtlarını HTML tabloya dönüştürür.
+     */
+    const renderFinansTable = (kayitlar) => {
+        tableBody.innerHTML = ''; 
+        if (kayitlar.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center">Kayıt bulunamadı.</td></tr>`;
+            return;
         }
 
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-        if (satir) satir.style.opacity = '1'; // Hata olursa görünür yap
-    }
-}
+        kayitlar.forEach(kayit => {
+            const tutarClass = kayit.islem_tipi === 'Odeme' ? 'text-green-500' : 'text-red-500';
+            const row = `
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="table-cell">${formatDate(kayit.tarih)}</td>
+                    <td class="table-cell font-medium">${kayit.tedarikci_ad}</td>
+                    <td class="table-cell">${kayit.islem_tipi}</td>
+                    <td class="table-cell font-medium ${tutarClass}">${formatCurrency(kayit.tutar)}</td>
+                    <td class_ ="table-cell">${kayit.aciklama || '-'}</td>
+                    <td class="table-cell">
+                        <button class="btn-warning-sm js-edit-finans-btn" data-id="${kayit.id}">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-danger-sm js-delete-finans-btn" data-id="${kayit.id}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+            tableBody.innerHTML += row;
+        });
+    };
+
+    /**
+     * Sayfalama bilgilerini ve butonlarını günceller.
+     */
+    const updatePagination = (pagination) => {
+        state.currentPage = pagination.page;
+        state.totalPages = pagination.total_pages;
+        paginationInfo.textContent = `Sayfa ${pagination.page} / ${pagination.total_pages} (${pagination.total_items} kayıt)`;
+        prevPageBtn.disabled = !pagination.has_prev;
+        nextPageBtn.disabled = !pagination.has_next;
+    };
+
+    // --- Event Listeners ---
+
+    // Filtrele Butonu
+    filterBtn.addEventListener('click', () => {
+        state.currentPage = 1;
+        state.search = searchInput.value;
+        state.startDate = startDateInput.value;
+        state.endDate = endDateInput.value;
+        state.islemTipi = islemTipiSelect.value;
+        loadFinansKayitlari();
+    });
+
+    // Sayfalama Butonları
+    prevPageBtn.addEventListener('click', () => {
+        if (state.currentPage > 1) {
+            state.currentPage--;
+            loadFinansKayitlari();
+        }
+    });
+    nextPageBtn.addEventListener('click', () => {
+        if (state.currentPage < state.totalPages) {
+            state.currentPage++;
+            loadFinansKayitlari();
+        }
+    });
+
+    // Tablo içi Düzenle ve Sil Butonları (Event Delegation)
+    tableBody.addEventListener('click', async (e) => {
+        const target = e.target;
+
+        // Düzenle Butonu
+        const editButton = target.closest('.js-edit-finans-btn');
+        if (editButton) {
+            e.preventDefault();
+            const kayitId = editButton.dataset.id;
+            // Düzenleme fonksiyonunu islem_yonetimi.js'den çağır
+            if (typeof window.editOdemeKaydi === 'function') {
+                window.editOdemeKaydi(kayitId);
+            }
+        }
+
+        // Sil Butonu
+        const deleteButton = target.closest('.js-delete-finans-btn');
+        if (deleteButton) {
+            e.preventDefault();
+            const kayitId = deleteButton.dataset.id;
+            if (confirm('Bu finans kaydını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
+                try {
+                    const response = await apiCall(`/api/finans/${kayitId}`, 'DELETE');
+                    showToast(response.mesaj, 'success');
+                    loadFinansKayitlari(); // Listeyi yenile
+                } catch (error) {
+                    showToast(`Hata: ${error.message}`, 'error');
+                }
+            }
+        }
+    });
+
+    // Sayfa ilk yüklendiğinde kayıtları çek
+    loadFinansKayitlari();
+    
+    // Global yenileme fonksiyonu (islem_yonetimi.js tarafından kullanılır)
+    window.loadFinansKayitlari = loadFinansKayitlari;
+});

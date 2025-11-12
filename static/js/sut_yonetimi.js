@@ -1,4 +1,4 @@
-// Bu script, yem_yonetimi.html sayfasının mantığını yönetir.
+// Bu script, sut_yonetimi.html sayfasının mantığını yönetir.
 // Kayıt ekleme/düzenleme 'islem_yonetimi.js' tarafından yapılır.
 // Bu script listeleme, filtreleme, sayfalama ve silme yapar.
 document.addEventListener('DOMContentLoaded', () => {
@@ -13,21 +13,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // DOM Elementleri
-    const tableBody = document.getElementById('yem-table-body');
-    const filterBtn = document.getElementById('yem-filter-btn');
-    const startDateInput = document.getElementById('yem-tarih-baslangic');
-    const endDateInput = document.getElementById('yem-tarih-bitis');
-    const searchInput = document.getElementById('yem-tedarikci-arama');
+    const tableBody = document.getElementById('sut-table-body');
+    const filterBtn = document.getElementById('sut-filter-btn');
+    const startDateInput = document.getElementById('sut-tarih-baslangic');
+    const endDateInput = document.getElementById('sut-tarih-bitis');
+    const searchInput = document.getElementById('sut-tedarikci-arama');
     
-    const prevPageBtn = document.getElementById('prev-page-btn-yem');
-    const nextPageBtn = document.getElementById('next-page-btn-yem');
-    const paginationInfo = document.getElementById('pagination-info-yem');
+    const prevPageBtn = document.getElementById('prev-page-btn-sut');
+    const nextPageBtn = document.getElementById('next-page-btn-sut');
+    const paginationInfo = document.getElementById('pagination-info-sut');
 
     /**
-     * API'den Yem kayıtlarını çeker ve tabloyu günceller.
+     * API'den Süt kayıtlarını çeker ve tabloyu günceller.
      */
-    const loadYemKayitlari = async () => {
-        tableBody.innerHTML = `<tr><td colspan="7" class="p-4 text-center"><i class="fas fa-spinner fa-spin mr-2"></i> Yükleniyor...</td></tr>`;
+    const loadSutKayitlari = async () => {
+        tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center"><i class="fas fa-spinner fa-spin mr-2"></i> Yükleniyor...</td></tr>`;
         
         try {
             const params = new URLSearchParams({
@@ -36,25 +36,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 start_date: state.startDate,
                 end_date: state.endDate
             });
-            const endpoint = `/api/yem?${params.toString()}`;
+            const endpoint = `/api/sut?${params.toString()}`;
             const data = await apiCall(endpoint);
             
-            renderYemTable(data.kayitlar);
+            renderSutTable(data.kayitlar);
             updatePagination(data.pagination);
             
         } catch (error) {
-            showToast(`Yem kayıtları yüklenemedi: ${error.message}`, 'error');
-            tableBody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-red-500">Veri yüklenemedi.</td></tr>`;
+            showToast(`Süt kayıtları yüklenemedi: ${error.message}`, 'error');
+            tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-red-500">Veri yüklenemedi.</td></tr>`;
         }
     };
 
     /**
-     * Gelen yem kayıtlarını HTML tabloya dönüştürür.
+     * Gelen süt kayıtlarını HTML tabloya dönüştürür.
      */
-    const renderYemTable = (kayitlar) => {
+    const renderSutTable = (kayitlar) => {
         tableBody.innerHTML = ''; 
         if (kayitlar.length === 0) {
-            tableBody.innerHTML = `<tr><td colspan="7" class="p-4 text-center">Kayıt bulunamadı.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center">Kayıt bulunamadı.</td></tr>`;
             return;
         }
 
@@ -63,15 +63,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td class="table-cell">${formatDate(kayit.tarih)}</td>
                     <td class="table-cell font-medium">${kayit.tedarikci_ad}</td>
-                    <td class_ ="table-cell">${kayit.yem_tipi}</td>
-                    <td class="table-cell">${kayit.miktar}</td>
+                    <td class="table-cell">${kayit.litre} Litre</td>
                     <td class="table-cell">${formatCurrency(kayit.birim_fiyat)}</td>
-                    <td class="table-cell font-medium text-green-500">${formatCurrency(kayit.toplam_tutar)}</td>
+                    <td class="table-cell font-medium text-red-500">${formatCurrency(kayit.toplam_tutar)}</td>
                     <td class="table-cell">
-                        <button class="btn-warning-sm js-edit-yem-btn" data-id="${kayit.id}">
+                        <button class="btn-warning-sm js-edit-sut-btn" data-id="${kayit.id}">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button class="btn-danger-sm js-delete-yem-btn" data-id="${kayit.id}">
+                        <button class="btn-danger-sm js-delete-sut-btn" data-id="${kayit.id}">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
@@ -100,20 +99,20 @@ document.addEventListener('DOMContentLoaded', () => {
         state.search = searchInput.value;
         state.startDate = startDateInput.value;
         state.endDate = endDateInput.value;
-        loadYemKayitlari();
+        loadSutKayitlari();
     });
 
     // Sayfalama Butonları
     prevPageBtn.addEventListener('click', () => {
         if (state.currentPage > 1) {
             state.currentPage--;
-            loadYemKayitlari();
+            loadSutKayitlari();
         }
     });
     nextPageBtn.addEventListener('click', () => {
         if (state.currentPage < state.totalPages) {
             state.currentPage++;
-            loadYemKayitlari();
+            loadSutKayitlari();
         }
     });
 
@@ -122,26 +121,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = e.target;
 
         // Düzenle Butonu
-        const editButton = target.closest('.js-edit-yem-btn');
+        const editButton = target.closest('.js-edit-sut-btn');
         if (editButton) {
             e.preventDefault();
             const kayitId = editButton.dataset.id;
             // Düzenleme fonksiyonunu islem_yonetimi.js'den çağır
-            if (typeof window.editYemKaydi === 'function') {
-                window.editYemKaydi(kayitId);
+            if (typeof window.editSutKaydi === 'function') {
+                window.editSutKaydi(kayitId);
             }
         }
 
         // Sil Butonu
-        const deleteButton = target.closest('.js-delete-yem-btn');
+        const deleteButton = target.closest('.js-delete-sut-btn');
         if (deleteButton) {
             e.preventDefault();
             const kayitId = deleteButton.dataset.id;
-            if (confirm('Bu yem kaydını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
+            // 'confirm' yerine daha güzel bir modal yapılabilir, şimdilik bu yeterli
+            if (confirm('Bu süt kaydını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
                 try {
-                    const response = await apiCall(`/api/yem/${kayitId}`, 'DELETE');
+                    const response = await apiCall(`/api/sut/${kayitId}`, 'DELETE');
                     showToast(response.mesaj, 'success');
-                    loadYemKayitlari(); // Listeyi yenile
+                    loadSutKayitlari(); // Listeyi yenile
                 } catch (error) {
                     showToast(`Hata: ${error.message}`, 'error');
                 }
@@ -150,8 +150,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Sayfa ilk yüklendiğinde kayıtları çek
-    loadYemKayitlari();
+    loadSutKayitlari();
     
     // Global yenileme fonksiyonu (islem_yonetimi.js tarafından kullanılır)
-    window.loadYemKayitlari = loadYemKayitlari;
+    window.loadSutKayitlari = loadSutKayitlari;
 });

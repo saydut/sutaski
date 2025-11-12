@@ -1,108 +1,94 @@
-// ====================================================================================
-// ANA UYGULAMA MANTIĞI (main.js) - RLS/AUTH GÜNCELLENDİ
-// Ana panelin genel işleyişini, veri akışını ve ana olayları yönetir.
-// ====================================================================================
-
-// --- Global Değişkenler ---
-window.anaPanelMevcutGorunum = localStorage.getItem('anaPanelGorunum') || 'liste';
-window.anaPanelMevcutSayfa = 1;
-const girdilerSayfaBasi = 6;
-let mevcutTedarikciIstatistikleri = null;
-let kullaniciRolu = null; // initUserRole içinde ayarlanır
-
-/**
- * Kullanıcının rolünü HTML body'deki 'data-user-role' attribute'undan okur.
- * Bu 'data-user-role' attribute'u, 'base.html' içinde Python (app.py context_processor)
- * tarafından 'user_profile.rol' kullanılarak ayarlanmalıdır.
- */
-function initUserRole() {
-    // Bu fonksiyon global `kullaniciRolu` değişkenini set eder.
-    kullaniciRolu = document.body.dataset.userRole || null; 
+// Bu script, index.html (Anasayfa) için dashboard verilerini yükler.
+document.addEventListener('DOMContentLoaded', async () => {
     
-    if (!kullaniciRolu) {
-        console.warn("Kullanıcı rolü 'data-user-role' attribute'unda bulunamadı. (Giriş yapılmamış olabilir)");
-        // Eğer 'login' sayfasında değilsek, bir sorun olabilir
-        if (!window.location.pathname.endsWith('/login') && !window.location.pathname.endsWith('/register')) {
-             // window.location.href = '/login'; // Token geçersizse @login_required zaten yönlendirir.
+    // Yüklendiğini belirtmek için varsayılan değerleri ayarla
+    const summaryElements = {
+        milk: document.getElementById('summary-total-milk'),
+        feed: document.getElementById('summary-total-feed'),
+        payment: document.getElementById('summary-total-payment'),
+        supplier: document.getElementById('summary-supplier-count')
+    };
+
+    const recentActionsBody = document.getElementById('recent-actions-body');
+
+    // Başlangıçta yükleniyor... durumunu ayarla
+    const setLoadingState = () => {
+        summaryElements.milk.textContent = '...';
+        summaryElements.feed.textContent = '...';
+        summaryElements.payment.textContent = '...';
+        summaryElements.supplier.textContent = '...';
+        recentActionsBody.innerHTML = `<tr><td class="py-2 px-4 text-center">Yükleniyor...</td></tr>`;
+    };
+
+    // Gelen veriye göre "Son İşlemler" tablosunu doldur
+    const renderRecentActions = (actions) => {
+        recentActionsBody.innerHTML = ''; // Temizle
+        if (!actions || actions.length === 0) {
+            recentActionsBody.innerHTML = `<tr><td class="py-2 px-4 text-center">Son işlem bulunamadı.</td></tr>`;
+            return;
         }
-    }
-    // Eski 'localStorage.getItem('offlineUser')' mantığı
-    // yeni Auth (cookie tabanlı) sisteminde tamamen kaldırıldı.
-}
 
-/**
- * Ana paneldeki (index.html) Süt Girdileri listesi ve Kart görünümü
- * arasındaki geçişi yönetir.
- */
-function anaPanelGorunumuAyarla(aktifGorunum) {
-    localStorage.setItem('anaPanelGorunum', aktifGorunum);
-    window.anaPanelMevcutGorunum = aktifGorunum;
-    
-    const listeDiv = document.getElementById('sut-girdi-listesi');
-    const kartDiv = document.getElementById('sut-girdi-kartlari');
-    const listeBtn = document.getElementById('btn-view-list');
-    const kartBtn = document.getElementById('btn-view-card');
-    
-    if (aktifGorunum === 'liste') {
-        if(listeDiv) listeDiv.style.display = 'block';
-        if(kartDiv) kartDiv.style.display = 'none';
-        if(listeBtn) listeBtn.classList.add('active');
-        if(kartBtn) kartBtn.classList.remove('active');
-    } else {
-        if(listeDiv) listeDiv.style.display = 'none';
-        if(kartDiv) kartDiv.style.display = 'block';
-        if(listeBtn) listeBtn.classList.remove('active');
-        if(kartBtn) kartBtn.classList.add('active');
-    }
-}
-
-/**
- * Service Worker'ı başlatır ve güncelleme olaylarını dinler.
- */
-async function initializeSW() {
-    if ('serviceWorker' in navigator) {
-        try {
-            const registration = await navigator.serviceWorker.register('/service-worker.js');
-            console.log('Service Worker kaydedildi:', registration);
-            
-            let refreshing = false;
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
-                if (refreshing) return;
-                console.log('Yeni Service Worker aktifleşti. Sayfa yenileniyor...');
-                // gosterMesaj 'ui.js' içinde tanımlı olmalı
-                if(typeof gosterMesaj === 'function') {
-                    gosterMesaj('Uygulama güncellendi, sayfa yenileniyor...', 'info', 3000);
-                }
-                refreshing = true;
-                window.location.reload(true); // Önbelleği zorla
-            });
-
-            if (registration.active) {
-                console.log('Mevcut Service Worker için güncelleme kontrol ediliyor...');
-                registration.update();
+        actions.forEach(action => {
+            let icon, color, text;
+            switch(action.tip) {
+                case 'sut':
+                    icon = 'fas fa-tint';
+                    color = 'text-blue-500';
+                    text = `<strong>${action.tedarikci_ad}</strong> için <strong>${action.detay.litre} Litre</strong> süt girdisi yapıldı.`;
+                    break;
+                case 'yem':
+                    icon = 'fas fa-seedling';
+                    color = 'text-green-500';
+                    text = `<strong>${action.tedarikci_ad}</strong> için <strong>${formatCurrency(action.tutar)}</strong> tutarında yem satışı yapıldı.`;
+                    break;
+                case 'odeme':
+                    icon = 'fas fa-lira-sign';
+                    color = 'text-yellow-500';
+                    text = `<strong>${action.tedarikci_ad}</strong> hesabına <strong>${formatCurrency(action.tutar)}</strong> ödeme yapıldı.`;
+                    break;
             }
+
+            recentActionsBody.innerHTML += `
+                <tr class="border-b dark:border-gray-700">
+                    <td class="py-3 px-4"><i class="${icon} ${color} w-6 text-center"></i></td>
+                    <td class="py-3 px-4">${text}</td>
+                    <td class="py-3 px-4 text-sm text-gray-500 dark:text-gray-400 text-right">${formatDate(action.tarih)}</td>
+                </tr>
+            `;
+        });
+    };
+
+    // Ana veri yükleme fonksiyonu
+    const loadDashboardData = async () => {
+        setLoadingState();
+        try {
+            // Tüm dashboard verilerini tek bir API çağrısı ile al
+            const data = await apiCall('/api/dashboard/all');
+
+            // 1. Özet Kartlarını Güncelle
+            summaryElements.milk.textContent = data.summary.total_sut.toLocaleString('tr-TR') || 0;
+            summaryElements.feed.textContent = formatCurrency(data.summary.total_yem || 0);
+            summaryElements.payment.textContent = formatCurrency(data.summary.total_odeme || 0);
+            summaryElements.supplier.textContent = data.summary.aktif_tedarikci || 0;
+
+            // 2. Grafikleri Çiz (chart-manager.js'deki fonksiyonları çağır)
+            if (window.ChartManager) {
+                window.ChartManager.createDailyMilkChart(data.charts.daily_milk);
+                window.ChartManager.createSupplierPieChart(data.charts.supplier_distribution);
+            } else {
+                console.error("ChartManager yüklenemedi.");
+            }
+            
+            // 3. Son İşlemler Tablosunu Doldur
+            renderRecentActions(data.recent_actions);
+
         } catch (error) {
-            console.error('Service Worker başlatılırken veya güncellenirken hata:', error);
+            showToast(`Dashboard verileri yüklenemedi: ${error.message}`, 'error');
+            // Hata durumunda tablolara hata mesajı bas
+            recentActionsBody.innerHTML = `<tr><td class="py-2 px-4 text-center text-red-500">Veri yüklenemedi.</td></tr>`;
         }
-    } else {
-        console.warn('Service Worker bu tarayıcıda desteklenmiyor.');
-    }
-}
+    };
 
-// Global scope'da olması gereken fonksiyonlar (HTML'den çağrılanlar)
-window.anaPanelGorunumuAyarla = anaPanelGorunumuAyarla;
-
-// Sayfa yüklendiğinde
-document.addEventListener('DOMContentLoaded', () => {
-    initUserRole();
-    
-    // Eğer ana paneldeysek (index.html), görünümü ayarla
-    if (window.location.pathname === '/panel' || window.location.pathname === '/') {
-        if(document.getElementById('sut-girdi-listesi')) {
-             anaPanelGorunumuAyarla(window.anaPanelMevcutGorunum);
-        }
-    }
-    
-    // Service Worker'ı başlat
-    initializeSW();
+    // Sayfa yüklendiğinde verileri çek
+    await loadDashboardData();
 });

@@ -1,184 +1,205 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
-    <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon">
-
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    
-    <!-- Font (Aynı kalabilir) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- PWA Manifest (Aynı kalabilir) -->
-    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
-    <meta name="theme-color" content="#3B82F6"/>
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icon.png') }}">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="SütTakip">
-
     <title>{% block title %}Süt Takip Sistemi{% endblock %}</title>
+    
+    <!-- PWA Manifest ve Ikonlar -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icon.png') }}">
+    <meta name="theme-color" content="#3182CE"/>
+
+    <!-- Kütüphaneler -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Yerel Stiller ve Scriptler -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}" defer></script>
+    
+    {% block head %}{% endblock %}
 </head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+    
+    <!-- Mobil için alt navigasyon -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-2 flex justify-around md:hidden z-50">
+        <a href="{{ url_for('main.index') }}" class="flex flex-col items-center text-gray-600 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400">
+            <i class="fas fa-home"></i>
+            <span class="text-xs">Anasayfa</span>
+        </a>
+        <a href="{{ url_for('tedarikci.tedarikciler') }}" class="flex flex-col items-center text-gray-600 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400">
+            <i class="fas fa-users"></i>
+            <span class="text-xs">Tedarikçiler</span>
+        </a>
+        <!-- Mobil Hızlı İşlem Butonu -->
+        <button id="mobile-quick-actions-btn" class="flex flex-col items-center justify-center bg-blue-600 text-white rounded-full w-12 h-12 -mt-6 shadow-lg">
+            <i class="fas fa-plus"></i>
+        </button>
+        <a href="{{ url_for('finans.finans_yonetimi') }}" class="flex flex-col items-center text-gray-600 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400">
+            <i class="fas fa-lira-sign"></i>
+            <span class="text-xs">Finans</span>
+        </a>
+        <a href="{{ url_for('profil.profil_sayfasi') }}" class="flex flex-col items-center text-gray-600 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400">
+            <i class="fas fa-user"></i>
+            <span class="text-xs">Profil</span>
+        </a>
+    </nav>
 
-<!-- =================================================================== -->
-<!-- GÜNCELLEME: 
-     'app.py' (context_processor) artık 'user_profile' objesini buraya gönderiyor.
-     'main.js' (initUserRole) fonksiyonunun okuyabilmesi için
-     rolü 'data-user-role' içine yazıyoruz.
--->
-<body data-user-role="{{ user_profile.rol if user_profile else '' }}">
-<!-- =================================================================== -->
-
-    <div class="d-flex" id="wrapper">
-        
-        <!-- =================================================================== -->
-        <!-- GÜNCELLEME: 
-             Menü kontrolleri artık 'session['user']' yerine 'user_profile' objesi
-             ve 'firma_admin' (constants.py'deki yeni ad) rolü ile yapılıyor.
-        -->
-        {% if user_profile %} <!-- Eski: 'if session.user' -->
-        <div class="bg-light border-right" id="sidebar-wrapper">
-            <div class="sidebar-heading">
-                <a href="{{ url_for('main.panel') }}" class="text-decoration-none text-dark d-flex align-items-center">
-                    <img src="{{ url_for('static', filename='images/icon.png') }}" alt="Logo" width="30" height="30" class="me-2">
-                    <strong>SütTakip</strong>
+    <div class="flex h-screen">
+        <!-- Sidebar (Desktop) -->
+        <aside class="w-64 bg-white dark:bg-gray-800 shadow-md hidden md:block flex-shrink-0">
+            <div class="p-4">
+                <h1 class="text-2xl font-bold text-blue-600 dark:text-blue-400">SütTakip</h1>
+            </div>
+            <nav class="mt-6">
+                <a href="{{ url_for('main.index') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-home w-6 text-center"></i>
+                    <span class="ml-3">Anasayfa</span>
                 </a>
-            </div>
-            <div class="list-group list-group-flush">
-                <!-- Ana Panel (Toplayıcı ve Adminler) -->
-                {% if user_profile.rol in ['firma_admin', 'toplayici', 'admin'] %}
-                    <a href="{{ url_for('main.panel') }}" class="list-group-item list-group-item-action bg-light"><i class="bi bi-house-door-fill me-2"></i> Ana Panel</a>
+                <a href="{{ url_for('tedarikci.tedarikciler') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-users w-6 text-center"></i>
+                    <span class="ml-3">Tedarikçiler</span>
+                </a>
+                <a href="{{ url_for('sut.sut_yonetimi') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-tint w-6 text-center"></i>
+                    <span class="ml-3">Süt Yönetimi</span>
+                </a>
+                <a href="{{ url_for('yem.yem_yonetimi') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-seedling w-6 text-center"></i>
+                    <span class="ml-3">Yem Yönetimi</span>
+                </a>
+                <a href="{{ url_for('finans.finans_yonetimi') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-lira-sign w-6 text-center"></i>
+                    <span class="ml-3">Finans Yönetimi</span>
+                </a>
+                <a href="{{ url_for('masraf.masraf_yonetimi') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-file-invoice-dollar w-6 text-center"></i>
+                    <span class="ml-3">Masraf Yönetimi</span>
+                </a>
+                <a href="{{ url_for('tanker.tanker_yonetimi') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-truck w-6 text-center"></i>
+                    <span class="ml-3">Tanker Yönetimi</span>
+                </a>
+                <a href="{{ url_for('tarife.tarife_yonetimi') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-tags w-6 text-center"></i>
+                    <span class="ml-3">Fiyat Tarifeleri</span>
+                </a>
+                <a href="{{ url_for('rapor.raporlar') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-chart-line w-6 text-center"></i>
+                    <span class="ml-3">Raporlar</span>
+                </a>
+                <a href="{{ url_for('firma.firma_yonetimi') }}" class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-building w-6 text-center"></i>
+                    <span class="ml-3">Firma Yönetimi</span>
+                </a>
+                <!-- Admin linki sadece adminler için görünür olmalı -->
+                {% if current_user.rol == 'super_admin' %}
+                <a href="{{ url_for('admin.admin_paneli') }}" class="flex items-center px-4 py-3 text-red-500 dark:text-red-400 hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <i class="fas fa-user-shield w-6 text-center"></i>
+                    <span class="ml-3">Admin Paneli</span>
+                </a>
                 {% endif %}
+            </nav>
+        </aside>
 
-                <!-- Çiftçi Paneli (Sadece Çiftçi) -->
-                {% if user_profile.rol == 'ciftci' %}
-                     <a href="{{ url_for('ciftci.ciftci_paneli') }}" class="list-group-item list-group-item-action bg-light"><i class="bi bi-house-door-fill me-2"></i> Panelim</a>
-                {% endif %}
-
-                <!-- Tedarikçiler (Admin ve Toplayıcı) -->
-                {% if user_profile.rol in ['firma_admin', 'toplayici'] %}
-                    <a href="{{ url_for('main.tedarikciler_sayfasi') }}" class="list-group-item list-group-item-action bg-light"><i class="bi bi-people-fill me-2"></i> Tedarikçiler</a>
-                {% endif %}
-
-                <!-- Yem Yönetimi (Sadece Admin) -->
-                {% if user_profile.rol == 'firma_admin' %}
-                    <a href="{{ url_for('yem.yem_yonetimi_sayfasi') }}" class="list-group-item list-group-item-action bg-light"><i class="bi bi-archive-fill me-2"></i> Yem Yönetimi</a>
-                {% endif %}
+        <!-- Ana İçerik Alanı -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Üst Header -->
+            <header class="bg-white dark:bg-gray-800 shadow-sm p-4 flex justify-between items-center">
+                <!-- Mobil Sidebar Açma Butonu -->
+                <button id="mobile-menu-btn" class="text-gray-500 dark:text-gray-400 focus:outline-none md:hidden">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
                 
-                <!-- Finans Yönetimi (Sadece Admin) -->
-                {% if user_profile.rol == 'firma_admin' %}
-                    <a href="{{ url_for('finans.finans_sayfasi') }}" class="list-group-item list-group-item-action bg-light"><i class="bi bi-cash-coin me-2"></i> Finans Yönetimi</a>
-                {% endif %}
-
-                <!-- Masraf Yönetimi (Sadece Admin) -->
-                {% if user_profile.rol == 'firma_admin' %}
-                    <a href="{{ url_for('masraf.masraf_yonetim_sayfasi') }}" class="list-group-item list-group-item-action bg-light"><i class="bi bi-receipt me-2"></i> Masraf Yönetimi</a>
-                {% endif %}
+                <!-- Masaüstü Hızlı İşlemler Butonu -->
+                <button id="quick-actions-btn" class="hidden md:inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300">
+                    <i class="fas fa-plus mr-2"></i>
+                    Hızlı İşlem
+                </button>
                 
-                <!-- Tanker Yönetimi (Sadece Admin) -->
-                {% if user_profile.rol == 'firma_admin' %}
-                    <a href="{{ url_for('tanker.tanker_yonetimi_sayfasi') }}" class="list-group-item list-group-item-action bg-light"><i class="bi bi-truck me-2"></i> Tanker Yönetimi</a>
-                {% endif %}
-                
-                <!-- Fiyat Tarifesi (Sadece Admin) -->
-                {% if user_profile.rol == 'firma_admin' %}
-                    <a href="{{ url_for('tarife.tarife_yonetim_sayfasi') }}" class="list-group-item list-group-item-action bg-light"><i class="bi bi-tag-fill me-2"></i> Fiyat Tarifesi</a>
-                {% endif %}
+                <!-- Arama Çubuğu (Opsiyonel) -->
+                <div class="hidden md:block">
+                    <input type="text" placeholder="Ara..." class="px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                </div>
 
-                <!-- Firma Yönetimi (Sadece Admin) -->
-                {% if user_profile.rol == 'firma_admin' %}
-                    <a href="{{ url_for('firma.firma_yonetim_sayfasi') }}" class="list-group-item list-group-item-action bg-light"><i class="bi bi-person-badge-fill me-2"></i> Firma Yönetimi</a>
-                {% endif %}
-                
-                <!-- Raporlar (Sadece Admin) -->
-                {% if user_profile.rol == 'firma_admin' %}
-                    <a href="{{ url_for('main.raporlar_page') }}" class="list-group-item list-group-item-action bg-light"><i class="bi bi-file-earmark-bar-graph-fill me-2"></i> Raporlar</a>
-                {% endif %}
-
-                <!-- Süper Admin Paneli (Sadece 'admin') -->
-                {% if user_profile.rol == 'admin' %}
-                    <a href="{{ url_for('admin.admin_paneli') }}" class="list-group-item list-group-item-action bg-warning text-dark"><i class="bi bi-shield-lock-fill me-2"></i> SÜPER ADMIN</a>
-                {% endif %}
-
-            </div>
-        </div>
-        {% endif %}
-        <!-- =================================================================== -->
-        <!-- GÜNCELLEME SONU -->
-        <!-- =================================================================== -->
-
-        <div id="page-content-wrapper">
-            
-            {% if user_profile %} <!-- Eski: 'if session.user' -->
-            <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
-                <div class="container-fluid">
-                    <button class="btn btn-primary" id="menu-toggle"><i class="bi bi-list"></i></button>
-                    
-                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent">
-                        <span class="navbar-toggler-icon"></span>
+                <!-- Sağ Taraf Kullanıcı Menüsü -->
+                <div class="flex items-center space-x-4">
+                    <button id="theme-toggle-btn" class="text-gray-500 dark:text-gray-400">
+                        <i class="fas fa-sun" id="theme-icon-sun"></i>
+                        <i class="fas fa-moon hidden" id="theme-icon-moon"></i>
                     </button>
-                    <div class="collapse navbar-collapse" id="navbarSupportedContent">
-                        <ul class="navbar-nav ms-auto mt-2 mt-lg-0">
-                            <!-- GÜNCELLEME: 'session.user.kullanici_adi' -> 'user_profile.kullanici_adi' -->
-                            <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
-                                    <i class="bi bi-person-circle me-1"></i>
-                                    {{ user_profile.kullanici_adi | default('Kullanıcı') }}
-                                </a>
-                                <ul class="dropdown-menu dropdown-menu-end">
-                                    <li><a class="dropdown-item" href="{{ url_for('profil.profil_sayfasi') }}"><i class="bi bi-gear-fill me-2"></i> Profil ve Şirket</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right me-2"></i> Çıkış Yap</a></li>
-                                </ul>
-                            </li>
-                        </ul>
+                    
+                    <!-- Bildirimler (Daha sonra eklenebilir) -->
+                    <button class="text-gray-500 dark:text-gray-400 relative">
+                        <i class="fas fa-bell"></i>
+                        <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">3</span>
+                    </button>
+
+                    <div class="relative">
+                        <button id="user-menu-btn" class="flex items-center">
+                            <img src="https://ui-avatars.com/api/?name={{ current_user.kullanici_adi|urlencode if current_user.is_authenticated else 'K' }}&background=random" alt="Profil" class="w-8 h-8 rounded-full">
+                            <span class="hidden md:inline-block ml-2">{{ current_user.kullanici_adi if current_user.is_authenticated else 'Misafir' }}</span>
+                        </button>
+                        <!-- User Dropdown Menü -->
+                        <div id="user-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-700 rounded-md shadow-lg py-1 z-50">
+                            <a href="{{ url_for('profil.profil_sayfasi') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600">Profil</a>
+                            <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-sm text-red-500 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-600">Çıkış Yap</a>
+                        </div>
                     </div>
                 </div>
-            </nav>
-            {% endif %}
+            </header>
 
-            <main class="container-fluid p-3 p-md-4">
+            <!-- Asıl Sayfa İçeriği -->
+            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 dark:bg-gray-900 p-6 pb-24 md:pb-6">
+                
+                <!-- Flash Mesajları -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="mb-4 space-y-2">
+                        {% for category, message in messages %}
+                            <div class="p-4 rounded-md 
+                                {% if category == 'success' %} bg-green-100 border border-green-400 text-green-700 dark:bg-green-900 dark:border-green-700 dark:text-green-100
+                                {% elif category == 'error' %} bg-red-100 border border-red-400 text-red-700 dark:bg-red-900 dark:border-red-700 dark:text-red-100
+                                {% else %} bg-blue-100 border border-blue-400 text-blue-700 dark:bg-blue-900 dark:border-blue-700 dark:text-blue-100
+                                {% endif %}"
+                                role="alert">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+
                 {% block content %}{% endblock %}
             </main>
         </div>
     </div>
-
-    <!-- Modallar (Bu kısım aynı kalabilir, 'profil.js' güncellenecek) -->
-    <div class="modal fade" id="sifreDegistirModal" tabindex="-1">
-        <!-- ... (modal içeriği) ... -->
-    </div>
-
-    <!-- Script'ler -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     
-    <!-- Tema ve PWA (Aynı kalabilir) -->
-    <script src="{{ url_for('static', filename='theme.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/ios-install-prompt.js') }}"></script>
-
-    <!-- Uygulama JS Dosyaları -->
-    <!-- 'ui.js' ve 'api.js' gibi temel dosyalar önce yüklenmeli -->
-    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <!-- Hızlı İşlemler Modalı (Partial'dan gelecek) -->
+    {% include '_hizli_islemler.html' %}
+    
+    <!-- Genel JS Dosyaları -->
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
-    
-    <!-- Sayfaya özel script'ler (Aynı kalabilir) -->
-    {% block scripts %}{% endblock %}
+    <script src="{{ url_for('static', filename='js/modal_handler.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
 
+    <!-- PWA Service Worker Kaydı -->
     <script>
-        // Sidebar toggle script'i (Aynı kalabilir)
-        document.getElementById("menu-toggle").addEventListener("click", function(e) {
-            e.preventDefault();
-            document.getElementById("wrapper").classList.toggle("toggled");
-        });
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register("{{ url_for('main.service_worker') }}")
+                .then(registration => {
+                    console.log('Service Worker registered with scope:', registration.scope);
+                })
+                .catch(error => {
+                    console.error('Service Worker registration failed:', error);
+                });
+        }
     </script>
+    
+    <!-- Sayfaya özel scriptler -->
+    {% block scripts %}{% endblock %}
 </body>
 </html>

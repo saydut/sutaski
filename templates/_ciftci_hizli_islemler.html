@@ -1,19 +1,38 @@
-{# Sadece Çiftçi Rolü İçin Hızlı İşlemler Menüsü #}
-<div class="btn-group">
-    <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-        <i class="bi bi-lightning-charge-fill"></i> İşlemler
-    </button>
-    <ul class="dropdown-menu dropdown-menu-end">
-        {# Ana Panele Dön linkine gerek yok, zaten oradalar #}
-        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#hakkindaModal"><i class="bi bi-info-circle-fill me-2"></i>Uygulama Hakkında</a></li>
-        <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="#" onclick="askForNotificationPermission()"><i class="bi bi-bell-fill me-2"></i>Bildirimleri Aç</a></li>
-        <li><a class="dropdown-item text-danger" href="#" onclick="guvenliCikis()"><i class="bi bi-box-arrow-right me-2"></i>Güvenli Çıkış</a></li>
-    </ul>
-</div>
+<!-- 
+Bu dosya 'ciftci_panel.html' içerisine dahil edilmiştir.
+Çiftçinin taleplerini girmesi için kullanılır.
+-->
 
-{# Tema değiştirme butonu kalabilir #}
-<button id="theme-toggle" class="btn btn-sm">
-    <i id="sun-icon" class="bi bi-sun-fill"></i>
-    <i id="moon-icon" class="bi bi-moon-fill"></i>
-</button>
+<!-- Talep Gönderme Modalı -->
+<div id="talep-modal" class="modal-backdrop">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3 class="modal-title">Talep Gönder</h3>
+            <button class="modal-close-btn" data-modal-id="talep-modal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="talep-form">
+            <div class="modal-body">
+                <div class="mb-4">
+                    <label for="talep-tipi" class="block text-sm font-medium mb-2">Talep Tipi</label>
+                    <select id="talep-tipi" name="talep_tipi" class="input-field" required>
+                        <option value="">Seçiniz...</option>
+                        <option value="Yem Talebi">Yem Talebi</option>
+                        <option value="Odeme Talebi">Ödeme Talebi</option>
+                        <option value="Diger">Diğer</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="talep-aciklama" class="block text-sm font-medium mb-2">Açıklama</label>
+                    <textarea id="talep-aciklama" name="aciklama" rows="4" class="input-field" 
+                              placeholder="Lütfen talebinizi detaylandırın (örn: 10 çuval süt yemi)" required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-modal-id="talep-modal">İptal</button>
+                <button type="submit" class="btn-primary-filled">Talebi Gönder</button>
+            </div>
+        </form>
+    </div>
+</div>

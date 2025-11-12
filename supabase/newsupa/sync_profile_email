@@ -1,0 +1,9 @@
+
+BEGIN
+  -- 'profiller' tablosundaki 'eposta' sütununu
+  -- 'auth.users' tablosundaki 'email' sütunu ile güncelle
+  UPDATE public.profiller
+  SET eposta = NEW.email
+  WHERE id = NEW.id;
+  RETURN NEW;
+END;

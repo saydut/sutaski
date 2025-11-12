@@ -1,49 +1,56 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // Tema değiştirme düğmesine olay dinleyicisi ekler
-    const themeToggle = document.getElementById('theme-toggle');
-    if (themeToggle) {
-        themeToggle.addEventListener('click', () => {
-            // Animasyon için class ekle
-            themeToggle.classList.add('rotating');
+// Bu script, Açık/Koyu Mod (Light/Dark Mode) geçişini yönetir.
+// base.html ve ciftci_panel.html'e 'defer' ile dahil edilmiştir.
 
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            setTheme(currentTheme === 'dark' ? 'light' : 'dark');
-            
-            // Animasyon bittikten sonra class'ı kaldır ki tekrar tetiklenebilsin
-            themeToggle.addEventListener('transitionend', () => {
-                themeToggle.classList.remove('rotating');
-            }, { once: true });
+(function() {
+    const themeToggleBtn = document.getElementById('theme-toggle-btn');
+    const sunIcon = document.getElementById('theme-icon-sun');
+    const moonIcon = document.getElementById('theme-icon-moon');
+    const htmlElement = document.documentElement; // <html> etiketi
+
+    /**
+     * Temayı ve ikonları günceller
+     * @param {string} theme - 'dark' veya 'light'
+     */
+    function applyTheme(theme) {
+        if (theme === 'dark') {
+            htmlElement.classList.add('dark');
+            htmlElement.dataset.theme = 'dark';
+            if (sunIcon) sunIcon.classList.add('hidden');
+            if (moonIcon) moonIcon.classList.remove('hidden');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            htmlElement.classList.remove('dark');
+            htmlElement.dataset.theme = 'light';
+            if (sunIcon) sunIcon.classList.remove('hidden');
+            if (moonIcon) moonIcon.classList.add('hidden');
+            localStorage.setItem('theme', 'light');
+        }
+    }
+
+    /**
+     * Sayfa yüklendiğinde kaydedilen veya varsayılan temayı uygular
+     */
+    function initializeTheme() {
+        const savedTheme = localStorage.getItem('theme');
+        const osPreference = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        
+        // 1. Öncelik: localStorage
+        // 2. Öncelik: OS Ayarı
+        // 3. Varsayılan: 'dark' (bizim tercihimiz)
+        const currentTheme = savedTheme || osPreference || 'dark';
+        
+        applyTheme(currentTheme);
+    }
+
+    // Tema Değiştirme Butonu Dinleyicisi
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', () => {
+            const newTheme = htmlElement.classList.contains('dark') ? 'light' : 'dark';
+            applyTheme(newTheme);
         });
     }
 
-    // Sayfa yüklendiğinde temayı uygular
-    const storedTheme = localStorage.getItem('theme');
-    if (storedTheme) {
-        setTheme(storedTheme);
-    } else {
-        setTheme('light');
-    }
-});
+    // Başlangıç teması
+    initializeTheme();
 
-function setTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-
-    const sunIcon = document.getElementById('sun-icon');
-    const moonIcon = document.getElementById('moon-icon');
-
-    if (sunIcon && moonIcon) {
-        if (theme === 'dark') {
-            sunIcon.style.display = 'inline-block';
-            moonIcon.style.display = 'none';
-        } else {
-            sunIcon.style.display = 'none';
-            moonIcon.style.display = 'inline-block';
-        }
-    }
-    
-    // DEĞİŞİKLİK: Merkezi grafik yöneticisini çağırır
-    if (typeof updateAllChartThemes === 'function') {
-        updateAllChartThemes();
-    }
-}
+})();

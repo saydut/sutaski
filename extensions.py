@@ -1,25 +1,77 @@
-# extensions.py
 import os
 from supabase import create_client, Client
 from dotenv import load_dotenv
+import pytz  # Hatanın sebebi buydu, bu satır eksikti
+from flask import g, session
+from models import Kullanici
 
-# .env dosyasındaki ortam değişkenlerini yükle
+# .env dosyasını yükle
 load_dotenv()
 
-# Ortam değişkenlerini al
-SUPABASE_URL = os.environ.get("https://qghlefwfrmqvgcivkwtk.supabase.co")
-SUPABASE_ANON_KEY = os.environ.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnaGxlZndmcm1xdmdjaXZrd3RrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyMjM2NDgsImV4cCI6MjA3Mzc5OTY0OH0.5hEhIhB1sTYzIGnQNoyeimnOTbA0wdfCy67cxdrG68U")
-SUPABASE_SERVICE_KEY = os.environ.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFnaGxlZndmcm1xdmdjaXZrd3RrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODIyMzY0OCwiZXhwIjoyMDczNzk5NjQ4fQ.svH9DbeVVnT8LObVj0LSnkFb8KYi4rRetq0cYxLU0xo")
+supabase_url = os.environ.get("SUPABASE_URL")
+# .env dosyamızdaki 'SUPABASE_KEY'i okuyoruz
+supabase_service_key = os.environ.get("SUPABASE_KEY") 
+supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY") 
+secret_key = os.environ.get("SECRET_KEY")
+vapid_public = os.environ.get("VAPID_PUBLIC_KEY")
+vapid_private = os.environ.get("VAPID_PRIVATE_KEY")
 
-if not SUPABASE_URL or not SUPABASE_ANON_KEY or not SUPABASE_SERVICE_KEY:
-    raise EnvironmentError("SUPABASE_URL, SUPABASE_ANON_KEY, ve SUPABASE_SERVICE_KEY ortam değişkenleri ayarlanmalıdır.")
+# Tüm anahtarların .env dosyasında olduğundan emin ol
+if not all([
+    supabase_url, 
+    supabase_service_key, 
+    supabase_anon_key, 
+    secret_key,
+    vapid_public,
+    vapid_private
+]):
+    raise EnvironmentError(
+        "Lütfen .env dosyanızda şunların ayarlandığından emin olun: "
+        "SUPABASE_URL, SUPABASE_KEY, SUPABASE_ANON_KEY, "
+        "SECRET_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY"
+    )
 
-# 1. Kullanıcı İstemcisi (ANON KEY ile)
-# Bu istemci, RLS (Satır Seviyesi Güvenlik) politikalarına tabidir.
-# Decorator'lar aracılığıyla kullanıcının token'ı ile yetkilendirilecektir.
-supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+# RLS (Row Level Security) için anonim client
+# Bu, blueprints/main.py'nin import ettiği 'supabase_client'
+supabase_client: Client = create_client(supabase_url, supabase_anon_key)
 
-# 2. Servis İstemcisi (SERVICE ROLE KEY ile)
-# Bu istemci, RLS politikalarını bypass eder (görmezden gelir).
-# Sadece backend'de, admin yetkisi gerektiren işlemler (yeni firma kaydı gibi) için kullanılmalıdır.
-supabase_service: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+# RLS'i bypass etmek için service_role client'ı
+# Bu, blueprints/main.py'nin import ettiği 'supabase_service'
+supabase_service: Client = create_client(supabase_url, supabase_service_key) 
+
+# Bu, blueprints/main.py'nin import ettiği 'turkey_tz'
+turkey_tz = pytz.timezone('Europe/Istanbul')
+
+def init_app(app):
+    # Flask 'app.config' içerisine anahtarları yükle
+    app.config['SECRET_KEY'] = secret_key
+    app.config['SUPABASE_URL'] = supabase_url
+    app.config['SUPABASE_KEY'] = supabase_service_key # service key
+    app.config['SUPABASE_ANON_KEY'] = supabase_anon_key
+    app.config['VAPID_PUBLIC_KEY'] = vapid_public
+    app.config['VAPID_PRIVATE_KEY'] = vapid_private
+
+    @app.before_request
+    def before_request():
+        """
+        Her istekten önce çalışır ve g.user'ı ayarlar.
+        """
+        g.user = None
+        user_id = session.get('user_id')
+        
+        if user_id:
+            try:
+                # Kullanıcıyı 'profiller' tablosundan çekiyoruz
+                user_data = supabase_client.table('profiller').select('*, sirketler(*)').eq('id', user_id).single().execute()
+                if user_data.data:
+                    g.user = Kullanici(user_data.data)
+                else:
+                    session.clear() # Profil bulunamadıysa session'ı temizle
+            except Exception as e:
+                print(f"Oturumdaki kullanıcı yüklenirken hata: {e}")
+                session.clear()
+
+    @app.context_processor
+    def inject_user():
+        # Tüm template'lere (HTML) 'current_user' değişkenini gönderir
+        return dict(current_user=g.user)

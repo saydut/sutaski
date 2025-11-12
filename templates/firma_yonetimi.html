@@ -1,43 +1,37 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Firma Yönetimi{% endblock %}
+{% block title %}Kullanıcı Yönetimi - Süt Takip Sistemi{% endblock %}
 
 {% block content %}
-<div class="container-fluid px-4">
-    <h1 class="mt-4">Firma Yönetimi</h1>
-    <ol class="breadcrumb mb-4">
-        <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Ana Panel</a></li>
-        <li class="breadcrumb-item active">Firma Yönetimi</li>
-    </ol>
+<div class="container mx-auto">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-3xl font-semibold">Kullanıcı Yönetimi</h2>
+        <button id="open-add-user-modal-btn" 
+                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300">
+            <i class="fas fa-plus mr-2"></i>
+            Yeni Kullanıcı Ekle
+        </button>
+    </div>
 
-    <div class="card mb-4">
-        <div class="card-header">
-            <i class="fas fa-users me-1"></i>
-            Şirket Kullanıcıları
-            <button class="btn btn-primary btn-sm float-end" data-bs-toggle="modal" data-bs-target="#yeniKullaniciModal">
-                <i class="fas fa-plus"></i> Yeni Kullanıcı Ekle
-            </button>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table id="kullanici-tablosu" class="table table-striped table-bordered" width="100%">
-                    <thead>
+    <!-- Kullanıcı Listesi -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead class="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                            <th>Ad Soyad</th>
-                            <th>Rol</th>
-                            <th>E-posta</th>
-                            <th>Telefon</th>
-                            <th>Durum</th>
-                            <th class="text-center" style="width: 150px;">İşlemler</th>
+                            <th scope="col" class="table-header">Ad Soyad</th>
+                            <th scope="col" class="table-header">E-posta</th>
+                            <th scope="col" class_ ="table-header">Rol</th>
+                            <th scope="col" class="table-header">Durum</th>
+                            <th scope="col" class="table-header">İşlemler</th>
                         </tr>
                     </thead>
-                    <tbody id="kullanici-listesi-body">
-                        <!-- Kullanıcılar buraya JS ile yüklenecek -->
-                         <tr>
-                            <td colspan="6" class="text-center">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Yükleniyor...</span>
-                                </div>
+                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700" id="user-table-body">
+                        <!-- Veriler JS ile buraya yüklenecek -->
+                        <tr>
+                            <td colspan="5" class="p-4 text-center">
+                                <i class="fas fa-spinner fa-spin mr-2"></i> Kullanıcılar yükleniyor...
                             </td>
                         </tr>
                     </tbody>
@@ -47,14 +41,96 @@
     </div>
 </div>
 
-<!-- Modalları Include Et -->
-{% include '_firma_modals.html' %}
+<!-- Yeni Kullanıcı Ekleme Modalı -->
+<div id="add-user-modal" class="modal-backdrop">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3 class="modal-title">Yeni Kullanıcı Ekle</h3>
+            <button class="modal-close-btn" data-modal-id="add-user-modal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="add-user-form">
+            <div class="modal-body">
+                <div class="mb-4">
+                    <label for="add-kullanici_adi" class="block text-sm font-medium mb-2">Ad Soyad</label>
+                    <input type="text" id="add-kullanici_adi" name="kullanici_adi" class="input-field" required>
+                </div>
+                <div class="mb-4">
+                    <label for="add-email" class="block text-sm font-medium mb-2">E-posta</label>
+                    <input type="email" id="add-email" name="email" class="input-field" required>
+                </div>
+                <div class="mb-4">
+                    <label for="add-password" class="block text-sm font-medium mb-2">Şifre</label>
+                    <input type="password" id="add-password" name="password" class="input-field" required>
+                </div>
+                <div class="mb-4">
+                    <label for="add-rol" class="block text-sm font-medium mb-2">Kullanıcı Rolü</label>
+                    <select id="add-rol" name="rol" class="input-field" required>
+                        <option value="firma_admin">Firma Admin (Yönetici)</option>
+                        <option value="firma_calisan">Firma Çalışanı (Sınırlı Yetki)</option>
+                        <!-- 'ciftci' rolü buradan eklenmemeli, tedarikçi detayından atanmalı -->
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-modal-id="add-user-modal">İptal</button>
+                <button type="submit" class="btn-primary-filled">Kaydet</button>
+            </div>
+        </form>
+    </div>
+</div>
 
+<!-- Kullanıcı Düzenleme Modalı -->
+<div id="edit-user-modal" class="modal-backdrop">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3 class="modal-title">Kullanıcıyı Düzenle</h3>
+            <button class="modal-close-btn" data-modal-id="edit-user-modal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="edit-user-form">
+            <input type="hidden" id="edit-user-id" name="user_id">
+            <div class="modal-body">
+                <div class="mb-4">
+                    <label for="edit-kullanici_adi" class="block text-sm font-medium mb-2">Ad Soyad</label>
+                    <input type="text" id="edit-kullanici_adi" name="kullanici_adi" class="input-field" required>
+                </div>
+                <div class="mb-4">
+                    <label for="edit-email" class="block text-sm font-medium mb-2">E-posta</label>
+                    <input type="email" id="edit-email" name="email" class="input-field bg-gray-100 dark:bg-gray-700" readonly>
+                    <p class="text-xs text-gray-500 mt-1">E-posta adresi değiştirilemez.</p>
+                </div>
+                <div class="mb-4">
+                    <label for="edit-rol" class="block text-sm font-medium mb-2">Kullanıcı Rolü</label>
+                    <select id="edit-rol" name="rol" class="input-field" required>
+                        <option value="firma_admin">Firma Admin (Yönetici)</option>
+                        <option value="firma_calisan">Firma Çalışanı (Sınırlı Yetki)</option>
+                        <option value="ciftci">Çiftçi (Tedarikçi Panel)</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="edit-durum" class="block text-sm font-medium mb-2">Durum</label>
+                    <select id="edit-durum" name="durum" class="input-field" required>
+                        <option value="aktif">Aktif</option>
+                        <option value="pasif">Pasif (Giriş Yapamaz)</option>
+                    </select>
+                </div>
+                 <div class="mb-4">
+                    <label for="edit-reset-password" class="block text-sm font-medium mb-2">Yeni Şifre (İsteğe bağlı)</label>
+                    <input type="password" id="edit-reset-password" name="password" class="input-field" placeholder="Değiştirmek istemiyorsanız boş bırakın">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-modal-id="edit-user-modal">İptal</button>
+                <button type="submit" class="btn-primary-filled">Güncelle</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
-<!-- TomSelect JS (Tedarikçi seçimi için) -->
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-<!-- Bu sayfaya özel JS -->
-<script src="{{ url_for('static', filename='js/firma_yonetimi.js') }}"></script>
+<script src="{{ url_for('static', filename='js/kullanici_yonetimi.js') }}"></script>
 {% endblock %}

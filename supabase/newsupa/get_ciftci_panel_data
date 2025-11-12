@@ -1,0 +1,48 @@
+
+DECLARE
+    v_tedarikci_id bigint;
+    v_sirket_id bigint;
+    v_summary json;
+    v_last_milk json;
+    v_last_feed json;
+BEGIN
+    -- 1. Kullanıcının UUID'sinden tedarikci_id ve sirket_id'yi bul
+    SELECT tedarikciler.id, tedarikciler.sirket_id
+    INTO v_tedarikci_id, v_sirket_id
+    FROM public.tedarikciler
+    WHERE tedarikciler.kullanici_id = p_kullanici_id;
+
+    -- Eğer bu kullanıcı bir tedarikçi ile eşleşmezse, RLS hatası yerine boş döner
+    IF v_tedarikci_id IS NULL THEN
+        RETURN '{}';
+    END IF;
+
+    -- 2. Tedarikçi özetini (firma_admin'in kullandığı) RPC ile hesapla
+    -- (Bu RPC, SECURITY DEFINER olduğu için RLS'i bypass ederek çalışır)
+    SELECT * INTO v_summary
+    FROM public.get_supplier_summary(v_sirket_id, v_tedarikci_id);
+
+    -- 3. Son süt girdisini al
+    SELECT json_build_object('tarih', taplanma_tarihi, 'litre', litre)
+    INTO v_last_milk
+    FROM public.sut_girdileri
+    WHERE tedarikci_id = v_tedarikci_id
+    ORDER BY taplanma_tarihi DESC
+    LIMIT 1;
+
+    -- 4. Son yem işlemini al
+    SELECT json_build_object('tarih', islem_tarihi, 'tutar', toplam_tutar, 'yem_adi', (SELECT yem_adi FROM yem_urunleri WHERE id = yem_urun_id))
+    INTO v_last_feed
+    FROM public.yem_islemleri
+    WHERE tedarikci_id = v_tedarikci_id
+    ORDER BY islem_tarihi DESC
+    LIMIT 1;
+
+    -- 5. Tüm verileri birleştirip döndür
+    RETURN json_build_object(
+        'summary', v_summary,
+        'last_milk', v_last_milk,
+        'last_feed', v_last_feed,
+        'tedarikci_id', v_tedarikci_id -- JS'in diğer sorgular için bilmesi gerekebilir
+    );
+END;

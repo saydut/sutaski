@@ -1,68 +1,174 @@
-// static/js/push-manager.js
+// Bu script, PWA anlık bildirim (Web Push) aboneliğini yönetir.
+// profil.html sayfasına dahil edilmiştir.
 
-// VAPID public key'i Base64'ten Uint8Array'e çeviren yardımcı fonksiyon
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
+(function() {
+    let swRegistration = null; // Service Worker kaydı
+    let isSubscribed = false;   // Abonelik durumu
+    let vapidPublicKey = null;  // Sunucudan alınan VAPID key
+
+    // DOM Elementleri
+    const subscribeBtn = document.getElementById('push-subscribe-btn');
+    const unsubscribeBtn = document.getElementById('push-unsubscribe-btn');
+    const pushStatus = document.getElementById('push-status');
+
+    /**
+     * URL-safe base64 string'i Uint8Array'e dönüştürür
+     */
+    function urlB64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
     }
-    return outputArray;
-}
 
-async function initializePushNotifications() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        console.warn('Push bildirimleri bu tarayıcıda desteklenmiyor.');
-        return;
+    /**
+     * VAPID Public Key'i sunucudan alır
+     */
+    async function getVapidKey() {
+        if (vapidPublicKey) return vapidPublicKey;
+        try {
+            const data = await apiCall('/api/push/vapid_key');
+            vapidPublicKey = data.public_key;
+            return vapidPublicKey;
+        } catch (error) {
+            showToast('Bildirim sunucusu anahtarı alınamadı.', 'error');
+            throw error;
+        }
     }
 
-    try {
-        const registration = await navigator.serviceWorker.ready;
-        let subscription = await registration.pushManager.getSubscription();
+    /**
+     * UI'ı abonelik durumuna göre günceller
+     */
+    function updateUI() {
+        if (!subscribeBtn || !unsubscribeBtn || !pushStatus) return;
 
-        if (subscription === null) {
-            // Henüz abonelik yok, yeni bir tane oluştur
-            console.log('Push aboneliği bulunamadı. Yeni abonelik oluşturuluyor...');
+        if (Notification.permission === 'denied') {
+            pushStatus.textContent = 'Bildirimlere izin vermeyi engellediniz.';
+            subscribeBtn.classList.add('hidden');
+            unsubscribeBtn.classList.add('hidden');
+            return;
+        }
+
+        if (isSubscribed) {
+            pushStatus.textContent = 'Bu cihazda anlık bildirimler aktif.';
+            subscribeBtn.classList.add('hidden');
+            unsubscribeBtn.classList.remove('hidden');
+        } else {
+            pushStatus.textContent = 'Anlık bildirimlere abone değilsiniz.';
+            subscribeBtn.classList.remove('hidden');
+            unsubscribeBtn.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Mevcut aboneliği kontrol et
+     */
+    async function checkSubscription() {
+        try {
+            const subscription = await swRegistration.pushManager.getSubscription();
+            isSubscribed = (subscription !== null);
+            updateUI();
+        } catch (error) {
+            console.error('Abonelik kontrol hatası:', error);
+        }
+    }
+
+    /**
+     * Bildirimlere Abone Ol
+     */
+    async function subscribe() {
+        if (!swRegistration) {
+            showToast('Service worker bulunamadı.', 'error');
+            return;
+        }
+
+        try {
+            const key = await getVapidKey();
+            const applicationServerKey = urlB64ToUint8Array(key);
             
-            // 1. Sunucudan VAPID public key'i al
-            const response = await fetch('/api/push/vapid_public_key');
-            const data = await response.json();
-            const applicationServerKey = urlBase64ToUint8Array(data.public_key);
-
-            // 2. Kullanıcı izniyle abonelik oluştur
-            subscription = await registration.pushManager.subscribe({
+            const subscription = await swRegistration.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: applicationServerKey
             });
+            
+            // Aboneliği sunucuya gönder
+            await apiCall('/api/push/subscribe', 'POST', subscription);
+            
+            showToast('Başarıyla abone oldunuz!', 'success');
+            isSubscribed = true;
+            updateUI();
 
-            // 3. Aboneliği sunucuya kaydet
-            await fetch('/api/push/save_subscription', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(subscription)
-            });
-
-            gosterMesaj('Bildirimler için başarıyla abone olundu!', 'success');
-        } else {
-            console.log('Mevcut bir push aboneliği bulundu.');
+        } catch (error) {
+            if (Notification.permission === 'denied') {
+                showToast('Bildirim izni engellendi.', 'error');
+            } else {
+                showToast('Abonelik başarısız oldu.', 'error');
+            }
+            console.error('Abonelik hatası:', error);
+            updateUI();
         }
-
-    } catch (error) {
-        console.error('Push aboneliği sırasında hata:', error);
-        gosterMesaj('Bildirimlere abone olunurken bir hata oluştu.', 'danger');
     }
-}
 
-function askForNotificationPermission() {
-    Notification.requestPermission().then(permission => {
-        if (permission === 'granted') {
-            console.log('Bildirim izni verildi.');
-            initializePushNotifications();
-        } else {
-            console.warn('Bildirim izni verilmedi.');
-            gosterMesaj('Bildirimlere izin vermediğiniz için bu özelliği kullanamazsınız.', 'warning');
+    /**
+     * Abonelikten Çık
+     */
+    async function unsubscribe() {
+        if (!swRegistration) {
+            showToast('Service worker bulunamadı.', 'error');
+            return;
         }
-    });
-}
+
+        try {
+            const subscription = await swRegistration.pushManager.getSubscription();
+            if (subscription) {
+                // Sunucudan aboneliği sil
+                await apiCall('/api/push/unsubscribe', 'POST', { 
+                    endpoint: subscription.endpoint 
+                });
+                
+                // Cihazdan aboneliği kaldır
+                await subscription.unsubscribe();
+                
+                showToast('Abonelikten çıktınız.', 'info');
+                isSubscribed = false;
+                updateUI();
+            }
+        } catch (error) {
+            showToast('Abonelikten çıkma başarısız oldu.', 'error');
+            console.error('Abonelikten çıkma hatası:', error);
+            updateUI();
+        }
+    }
+
+    // --- Başlangıç ---
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+        navigator.serviceWorker.ready.then(registration => {
+            swRegistration = registration;
+            
+            // Butonları şimdi bağla
+            if(subscribeBtn) subscribeBtn.addEventListener('click', subscribe);
+            if(unsubscribeBtn) unsubscribeBtn.addEventListener('click', unsubscribe);
+
+            // Mevcut durumu kontrol et
+            checkSubscription();
+        });
+    } else {
+        if(pushStatus) {
+            pushStatus.textContent = 'Anlık bildirimler bu tarayıcıda desteklenmiyor.';
+            pushStatus.className = 'text-sm mt-2 text-red-500';
+        }
+        if(subscribeBtn) subscribeBtn.classList.add('hidden');
+        if(unsubscribeBtn) unsubscribeBtn.classList.add('hidden');
+    }
+    
+    // Global'e ekle (opsiyonel, debug için)
+    window.PushManager = {
+        subscribe,
+        unsubscribe
+    };
+
+})();

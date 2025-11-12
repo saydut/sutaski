@@ -1,66 +1,79 @@
-// Bu dosya, register.html sayfasının tüm JavaScript mantığını içerir.
+// Bu script SADECE register.html'de çalışır.
+// utils.js veya api.js'e erişimi YOKTUR (çünkü base.html'e dahil değil).
+document.addEventListener('DOMContentLoaded', () => {
+    const registerForm = document.getElementById('register-form');
 
-async function kayitOl() {
-    const kullaniciAdi = document.getElementById('kullanici-input').value;
-    const sifre = document.getElementById('sifre-input').value;
-    const sirketAdi = document.getElementById('sirket-input').value;
-    const kayitButton = document.querySelector('.btn-primary');
-    const originalButtonText = kayitButton.innerHTML;
-
-    if (!kullaniciAdi || !sifre || !sirketAdi) {
-        gosterMesaj("Lütfen tüm alanları doldurun.", "danger");
-        return;
-    }
-
-    kayitButton.disabled = true;
-    kayitButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kayıt Olunuyor...`;
-
-    try {
-        const response = await fetch('/api/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                kullanici_adi: kullaniciAdi,
-                sifre: sifre,
-                sirket_adi: sirketAdi
-            })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            gosterMesaj("Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz...", "success");
-            setTimeout(() => {
-                window.location.href = '/login';
-            }, 2000);
-        } else {
-            gosterMesaj(result.error || "Bir hata oluştu.", "danger");
+    // Hata mesajlarını göstermek için özel bir fonksiyon
+    const showRegisterError = (message) => {
+        let errorContainer = document.getElementById('register-error-toast');
+        if (!errorContainer) {
+            errorContainer = document.createElement('div');
+            errorContainer.id = 'register-error-toast';
+            errorContainer.className = "p-4 rounded-md bg-red-100 border border-red-400 text-red-700 mb-4";
             
-            // --- YENİ EKLENEN BLOK ---
-            // Eğer sunucu bakım modu nedeniyle "redirect_to_landing" bayrağını gönderirse,
-            // kullanıcıyı ana sayfaya yönlendir.
-            if (result.redirect_to_landing === true) {
-                setTimeout(() => {
-                    window.location.href = '/'; // Ana landing sayfasına git
-                }, 2000); // Mesajı okuması için 2 saniye bekle
-            }
-            // --- YENİ BLOK SONU ---
-
-            kayitButton.disabled = false;
-            kayitButton.innerHTML = originalButtonText;
+            const heading = registerForm.parentElement.querySelector('h2');
+            heading.insertAdjacentElement('afterend', errorContainer);
         }
-    } catch (error) {
-        console.error("Kayıt olurken hata oluştu:", error);
-        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
-        kayitButton.disabled = false;
-        kayitButton.innerHTML = originalButtonText;
-    }
-}
+        errorContainer.textContent = message;
+        errorContainer.style.display = 'block';
+    };
 
-// Enter tuşuna basıldığında da kayıt olmayı sağla
-document.getElementById('sifre-input').addEventListener('keypress', function(event) {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        kayitOl();
-    }
+    // Kullanıcı forma yazmaya başlarsa hataları temizle
+    registerForm.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', () => {
+            // Flask flash mesajlarını gizle
+            const flashMessages = document.querySelector('.mb-4 > .p-4');
+            if (flashMessages) flashMessages.style.display = 'none';
+            
+            // JS hata mesajını gizle
+            const errorToast = document.getElementById('register-error-toast');
+            if (errorToast) errorToast.style.display = 'none';
+        });
+    });
+
+    // Form gönderildiğinde (submit)
+    registerForm.addEventListener('submit', async (e) => {
+        e.preventDefault(); // Sayfanın yeniden yüklenmesini engelle
+
+        const sirket_adi = document.getElementById('sirket_adi').value;
+        const kullanici_adi = document.getElementById('kullanici_adi').value;
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const actionUrl = registerForm.action;
+
+        // Basit şifre kontrolü
+        if (password.length < 6) {
+            showRegisterError('Şifre en az 6 karakter olmalıdır.');
+            return;
+        }
+
+        try {
+            const response = await fetch(actionUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    sirket_adi, 
+                    kullanici_adi, 
+                    email, 
+                    password 
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                // Kayıt başarılıysa, backend'in söylediği URL'ye yönlendir
+                window.location.href = data.redirect_url || '/'; 
+            } else {
+                // Kayıt başarısızsa, hatayı ekranda göster
+                showRegisterError(data.hata || 'Bilinmeyen bir hata oluştu.');
+            }
+        } catch (error) {
+            console.error('Kayıt hatası:', error);
+            showRegisterError('Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.');
+        }
+    });
 });

@@ -1,173 +1,207 @@
-# blueprints/tedarikci.py
-
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, g
-from services.tedarikci_service import tedarikci_service, paged_data_service
+from flask import Blueprint, render_template, request, jsonify, g, current_app
 from decorators import login_required, role_required
-from utils import sanitize_input
+from services.tedarikci_service import tedarikci_service, paged_data_service
+from utils import parse_int_or_none, parse_decimal_or_none
 import logging
 
 tedarikci_bp = Blueprint('tedarikci', __name__)
 
-@tedarikci_bp.route('/tedarikciler')
+
+# --- 1. HTML Sayfa Rotaları ---
+
+@tedarikci_bp.route('/')
 @login_required
-@role_required('firma_admin', 'toplayici') # Tedarikçi listesini admin ve toplayıcı görebilir
-def tedarikciler_page():
-    """Tedarikçi yönetim sayfasını render eder."""
-    # Sayfa yüklenirken veri çekmiyoruz, 
-    # veriler (tedarikçi listesi) JavaScript ile API'dan çekilecek.
+@role_required('firma_admin', 'firma_calisan')
+def tedarikciler_sayfasi():
+    """Tedarikçi listesi sayfasını render eder."""
     return render_template('tedarikciler.html')
 
-@tedarikci_bp.route('/tedarikci/<int:tedarikci_id>')
+
+@tedarikci_bp.route('/<int:tedarikci_id>')
 @login_required
-@role_required('firma_admin', 'toplayici') # Detayı admin ve toplayıcı görebilir
-def tedarikci_detay_page(tedarikci_id):
+@role_required('firma_admin', 'firma_calisan', 'toplayici')
+def tedarikci_detay_sayfasi(tedarikci_id):
+    """Tedarikçi detay sayfasını render eder.
+    NOT: Bu rota sadece sayfayı yükler, veriyi API ile JS çeker."""
+    
+    # Tedarikçinin varlığını ve yetkisini kontrol et
+    # Bu, RLS (Row Level Security) ile otomatik yapılır
+    tedarikci_data, error = tedarikci_service.get_by_id(tedarikci_id)
+    
+    if error or not tedarikci_data:
+        current_app.logger.warning(f"Kullanıcı {g.user.id}, yetkisi olmayan veya varolmayan tedarikçi ID {tedarikci_id} detayına erişmeye çalıştı.")
+        return render_template('404.html'), 404
+        
+    return render_template('tedarikci_detay.html', tedarikci_id=tedarikci_id, tedarikci_isim=tedarikci_data.get('isim', ''))
+
+
+# --- 2. API ROTALARI ---
+
+@tedarikci_bp.route('/api/list', methods=['GET'])
+@login_required
+@role_required('firma_admin', 'firma_calisan')
+def get_tedarikciler_listesi():
     """
-    Tedarikçi detay sayfasını render eder.
-    Temel tedarikçi bilgilerini ve finansal özeti sayfaya gömer.
+    Tedarikçi listesi sayfasını doldurmak için tedarikçileri
+    filtreli/sayfalı olarak getirir. (RPC çağırır)
     """
     try:
-        # Servis fonksiyonlarından sirket_id parametresi KALDIRILDI.
-        # RLS (Satır Seviyesi Güvenlik) bu kaydın bizim şirketimize ait olduğunu doğrular.
-        tedarikci_data, ozet_data, error = tedarikci_service.get_summary_by_id(tedarikci_id)
+        # Sayfalama ve arama parametreleri
+        sayfa = parse_int_or_none(request.args.get('sayfa')) or 1
+        limit = parse_int_or_none(request.args.get('limit')) or 10
+        arama_terimi = request.args.get('arama', '')
+        
+        # sirket_id'yi g.user'dan al (decorator'da eklenmişti)
+        sirket_id = g.user.sirket_id
+        
+        # RPC'yi (Database Fonksiyonu) çağır
+        # 'get_paginated_suppliers'
+        data, count, error = tedarikci_service.get_paginated_list(sirket_id, sayfa, limit, arama_terimi)
         
         if error:
-            flash(error, 'danger')
-            return redirect(url_for('tedarikci.tedarikciler_page'))
-            
-        if not tedarikci_data:
-            flash('Tedarikçi bulunamadı veya bu kaydı görme yetkiniz yok.', 'warning')
-            return redirect(url_for('tedarikci.tedarikciler_page'))
-
-        return render_template('tedarikci_detay.html', tedarikci=tedarikci_data, ozet=ozet_data)
+            raise Exception(error)
         
+        return jsonify({
+            'tedarikciler': data,
+            'toplam_kayit': count,
+            'sayfa': sayfa,
+            'limit': limit
+        })
+
     except Exception as e:
-        logging.error(f"Tedarikçi detay sayfası {tedarikci_id} yüklenirken hata: {str(e)}")
-        flash(f"Sayfa yüklenirken bir hata oluştu: {str(e)}", 'danger')
-        return redirect(url_for('tedarikci.tedarikciler_page'))
+        current_app.logger.error(f"Tedarikçi listesi API hatası: {e}", exc_info=True)
+        return jsonify(hata=f"Tedarikçi listesi alınırken hata: {str(e)}"), 500
 
-# --- API ROTALARI ---
 
-@tedarikci_bp.route('/api/tedarikciler_dropdown', methods=['GET'])
+@tedarikci_bp.route('/api/dropdown', methods=['GET'])
 @login_required
-def get_tedarikciler_dropdown_api():
+@role_required('firma_admin', 'firma_calisan', 'toplayici')
+def get_tedarikciler_dropdown():
     """
-    Süt girdisi vb. formlar için tedarikçi listesini (id, isim) JSON olarak döndürür.
-    RLS ve servis mantığı, toplayıcılar için listeyi otomatik filtreler.
+    Hızlı İşlem modallarındaki dropdown'lar için tedarikçi listesi.
+    Rol tabanlı (RLS) filtreleme (toplayıcı sadece kendi çiftçisini görür).
     """
     try:
-        # sirket_id parametresi KALDIRILDI
+        # Servis, g.user.rol'e göre RLS'i otomatik uygular
         data, error = tedarikci_service.get_all_for_dropdown()
         if error:
-            return jsonify({'error': error}), 500
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+            raise Exception(error)
+            
+        return jsonify(data), 200
 
-@tedarikci_bp.route('/api/tedarikciler', methods=['GET'])
+    except Exception as e:
+        current_app.logger.error(f"Tedarikçi dropdown API hatası: {e}", exc_info=True)
+        return jsonify(hata=f"Dropdown için liste alınamadı: {str(e)}"), 500
+
+
+@tedarikci_bp.route('/api/<int:tedarikci_id>/detay', methods=['GET'])
 @login_required
-@role_required('firma_admin') # Tüm listeyi sadece admin çekebilir
-def get_all_tedarikciler_api():
+@role_required('firma_admin', 'firma_calisan', 'toplayici')
+def get_tedarikci_detay_api(tedarikci_id):
     """
-    Tedarikçiler sayfasındaki tablo için tüm tedarikçileri JSON olarak döndürür.
+    Tedarikçi detay sayfasındaki tüm verileri (özet, tablolar) getirir.
     """
     try:
-        # sirket_id parametresi KALDIRILDI
-        data, error = tedarikci_service.get_all()
-        if error:
-            return jsonify({'error': error}), 500
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@tedarikci_bp.route('/api/tedarikci/<int:tedarikci_id>/detay_girdileri', methods=['GET'])
-@login_required
-@role_required('firma_admin', 'toplayici')
-def get_tedarikci_detay_girdileri_api(tedarikci_id):
-    """
-    Tedarikçi detay sayfasındaki birleşik (süt, yem, finans) girdi
-    listesini sayfalı olarak JSON formatında döndürür.
-    """
-    try:
-        sayfa = request.args.get('sayfa', 1, type=int)
-        limit = request.args.get('limit', 10, type=int)
+        sayfa = parse_int_or_none(request.args.get('sayfa')) or 1
+        limit = 10 # Detay sayfasında sabit 10'luk gruplar
         
-        # sirket_id parametresi KALDIRILDI.
-        # Servis, g objesinden sirket_id'yi alıp RPC'ye iletecek.
+        # Servis, g.user'dan sirket_id'yi alır ve RLS'i kullanır
+        # Tek RPC ile (get_tedarikci_detay_page_data) hem özeti hem de işlem listesini çeker
         ozet, girdiler, toplam_kayit = paged_data_service.get_detay_page_data(tedarikci_id, sayfa, limit)
         
         return jsonify({
             'ozet': ozet,
             'girdiler': girdiler,
             'toplam_kayit': toplam_kayit,
-            'sayfa': sayfa,
-            'limit': limit
-        })
-    except Exception as e:
-        logging.error(f"Tedarikçi {tedarikci_id} detay girdileri API hatası: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+            'sayfa': sayfa
+        }), 200
 
-@tedarikci_bp.route('/api/tedarikci', methods=['POST'])
+    except Exception as e:
+        current_app.logger.error(f"Tedarikçi detay API hatası (ID: {tedarikci_id}): {e}", exc_info=True)
+        return jsonify(hata=f"Tedarikçi detayları alınamadı: {str(e)}"), 500
+
+
+@tedarikci_bp.route('/api/olustur', methods=['POST'])
 @login_required
-@role_required('firma_admin') # Sadece admin yeni tedarikçi ekleyebilir
-def add_tedarikci_api():
+@role_required('firma_admin')
+def tedarikci_olustur():
     """
-    Yeni tedarikçi ekler. Artık çiftçi hesabı oluşturmaz.
+    Yeni tedarikçi oluşturur (Modal'dan gelen veri).
     """
-    data = request.json
     try:
-        # sirket_id parametresi KALDIRILDI.
-        # Servis, g.profile['sirket_id']'yi otomatik ekleyecek.
+        data = request.json
+        if not data or 'isim' not in data:
+            return jsonify(hata="Geçersiz veri: 'isim' zorunludur."), 400
+        
+        # Servis, g.user'dan sirket_id'yi alır
         yeni_tedarikci, error = tedarikci_service.create(data)
         
         if error:
-            return jsonify({'error': error}), 400
+            return jsonify(hata=error), 500
             
-        # YENİ YANIT: Artık ciftci_kullanici_adi vs. DÖNMÜYORUZ.
-        return jsonify(yeni_tedarikci), 201
-        
-    except ValueError as ve:
-        return jsonify({'error': str(ve)}), 400
-    except Exception as e:
-        logging.error(f"Yeni tedarikçi API hatası: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify(mesaj="Tedarikçi başarıyla oluşturuldu.", tedarikci=yeni_tedarikci), 201
 
-@tedarikci_bp.route('/api/tedarikci/<int:tedarikci_id>', methods=['PUT'])
+    except Exception as e:
+        current_app.logger.error(f"Tedarikçi oluşturma hatası: {e}", exc_info=True)
+        return jsonify(hata=f"Tedarikçi oluşturulamadı: {str(e)}"), 500
+
+
+@tedarikci_bp.route('/api/<int:tedarikci_id>/guncelle', methods=['PUT'])
 @login_required
-@role_required('firma_admin') # Sadece admin güncelleyebilir
-def update_tedarikci_api(tedarikci_id):
-    """Mevcut bir tedarikçiyi günceller."""
-    data = request.json
+@role_required('firma_admin')
+def tedarikci_guncelle(tedarikci_id):
+    """
+    Mevcut tedarikçiyi günceller (Modal'dan).
+    """
     try:
-        # sirket_id parametresi KALDIRILDI.
+        data = request.json
+        if not data or 'isim' not in data:
+            return jsonify(hata="Geçersiz veri: 'isim' zorunludur."), 400
+        
+        # Servis, RLS'i kullanarak yetkiyi ve varlığı kontrol eder
         guncellenen_tedarikci, error = tedarikci_service.update(tedarikci_id, data)
         
         if error:
-            return jsonify({'error': error}), 400
-        
-        return jsonify(guncellenen_tedarikci), 200
-        
-    except ValueError as ve:
-        return jsonify({'error': str(ve)}), 400
-    except Exception as e:
-        logging.error(f"Tedarikçi {tedarikci_id} güncelleme API hatası: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+            # Hata servis katmanından geldiyse (örn: "bulunamadı")
+            if "bulunamadı" in error or "yetkiniz yok" in error:
+                return jsonify(hata=error), 404
+            return jsonify(hata=error), 500
+            
+        return jsonify(mesaj="Tedarikçi başarıyla güncellendi.", tedarikci=guncellenen_tedarikci), 200
 
-@tedarikci_bp.route('/api/tedarikci/<int:tedarikci_id>', methods=['DELETE'])
+    except Exception as e:
+        current_app.logger.error(f"Tedarikçi güncelleme hatası (ID: {tedarikci_id}): {e}", exc_info=True)
+        return jsonify(hata=f"Tedarikçi güncellenemedi: {str(e)}"), 500
+
+
+@tedarikci_bp.route('/api/<int:tedarikci_id>/sil', methods=['DELETE'])
 @login_required
-@role_required('firma_admin') # Sadece admin silebilir
-def delete_tedarikci_api(tedarikci_id):
+@role_required('firma_admin')
+def tedarikci_sil(tedarikci_id):
     """
-    Bir tedarikçiyi ve ona bağlı çiftçi/auth hesabını siler.
+    Tedarikçiyi ve bağlı çiftçi hesabını siler.
     """
     try:
-        # sirket_id parametresi KALDIRILDI.
+        # Servis, RLS'i ve service_role key'i kullanarak silme işlemi yapar
         success, error = tedarikci_service.delete(tedarikci_id)
         
         if error:
-            return jsonify({'error': error}), 400
-        
-        return jsonify({'message': 'Tedarikçi başarıyla silindi'}), 200
-        
+            if 'bulunamadı' in error:
+                return jsonify(hata=error), 404
+            if 'bağlı' in error: # Foreign key hatası
+                return jsonify(hata=error), 409 # Conflict
+            return jsonify(hata=error), 500
+            
+        return jsonify(mesaj="Tedarikçi başarıyla silindi."), 200
+
     except Exception as e:
-        logging.error(f"Tedarikçi {tedarikci_id} silme API hatası: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error(f"Tedarikçi silme hatası (ID: {tedarikci_id}): {e}", exc_info=True)
+        return jsonify(hata=f"Tedarikçi silinemedi: {str(e)}"), 500
+
+# --- HATA ÇIKIŞI YAPAN KOD ---
+# Çift tanımlandığı için çakışmaya neden olan 'decorator' fonksiyonu kaldırıldı.
+# (Eski kod)
+# @tedarikci_bp.route('/decorator')
+# @login_required
+# def decorator():
+#    ...

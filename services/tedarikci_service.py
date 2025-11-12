@@ -3,7 +3,8 @@
 from flask import g
 from decimal import Decimal
 import logging
-from extensions import supabase_client, supabase_service # HER İKİ client'ı da import et
+from datetime import datetime, timedelta # Dashboard fonksiyonları için eklendi
+from extensions import supabase_client, supabase_service, turkey_tz # turkey_tz eklendi
 from utils import sanitize_input
 
 logger = logging.getLogger(__name__)
@@ -309,6 +310,158 @@ class PagedDataService:
         except Exception as e:
             logger.error(f"get_detay_page_data hatası (Tedarikçi ID: {tedarikci_id}): {e}", exc_info=True)
             raise Exception("Tedarikçi detay verileri alınırken bir hata oluştu.")
+
+
+# --- YENİ EKLENEN DASHBOARD FONKSİYONLARI ---
+# (main.py'nin ihtiyaç duyduğu fonksiyonlar)
+
+def get_supplier_stats(sirket_id):
+    """
+    Anasayfa (Dashboard) için temel istatistik kartlarını hesaplar.
+    Bu, RLS'e tabidir (sadece g.user'ın sirket_id'si üzerinden çalışır).
+    """
+    try:
+        # RPC'yi çağır (Bu RPC'nin RLS'e tabi olması gerekir)
+        # VEYA daha iyisi, RPC'nin sirket_id parametresi alması
+        response = supabase_client.rpc('get_supplier_stats', {'p_sirket_id': sirket_id}).execute()
+        
+        if response.data:
+            return response.data[0]
+        else:
+            logger.warning(f"get_supplier_stats RPC'si sirket_id {sirket_id} için veri döndürmedi.")
+            return {"total_sut": 0, "total_yem": 0, "total_odeme": 0, "aktif_tedarikci": 0}
+            
+    except Exception as e:
+        logger.error(f"get_supplier_stats hatası: {e}", exc_info=True)
+        return {"total_sut": 0, "total_yem": 0, "total_odeme": 0, "aktif_tedarikci": 0}
+
+def get_dashboard_charts(sirket_id):
+    """
+    Anasayfa (Dashboard) için grafik verilerini çeker.
+    """
+    try:
+        # 1. Son 30 günlük süt toplama (Line chart)
+        # (Bu RPC'nin RLS'e tabi olması veya sirket_id alması gerekir)
+        line_chart_res = supabase_client.rpc(
+            'get_weekly_summary', 
+            {'p_sirket_id': sirket_id}
+        ).execute()
+        
+        daily_milk_data = {
+            "labels": [formatDate(item['gun']) for item in line_chart_res.data],
+            "values": [item['toplam_litre'] for item in line_chart_res.data]
+        }
+        
+        # 2. Tedarikçi dağılımı (Pie chart)
+        # (Bu RPC'nin RLS'e tabi olması veya sirket_id alması gerekir)
+        pie_chart_res = supabase_client.rpc(
+            'get_supplier_distribution', 
+            {'p_sirket_id': sirket_id}
+        ).execute()
+        
+        supplier_dist_data = {
+            "labels": [item['isim'] for item in pie_chart_res.data],
+            "values": [item['toplam_litre'] for item in pie_chart_res.data]
+        }
+        
+        return {
+            "daily_milk": daily_milk_data,
+            "supplier_distribution": supplier_dist_data
+        }
+        
+    except Exception as e:
+        logger.error(f"get_dashboard_charts hatası: {e}", exc_info=True)
+        return {"daily_milk": {"labels": [], "values": []}, "supplier_distribution": {"labels": [], "values": []}}
+
+def get_recent_actions_for_dashboard(sirket_id, limit=5):
+    """
+    Anasayfa (Dashboard) için "Son İşlemler" listesini oluşturur.
+    (Bu fonksiyon, SQL'de bir RPC ile daha verimli hale getirilebilir.)
+    """
+    try:
+        # Son 5 süt girdisi
+        sut_res = supabase_client.table('sut_girdileri') \
+            .select('id, taplanma_tarihi, tedarikciler(isim), litre, fiyat') \
+            .eq('sirket_id', sirket_id) \
+            .order('taplanma_tarihi', desc=True) \
+            .limit(limit) \
+            .execute()
+            
+        # Son 5 yem işlemi
+        yem_res = supabase_client.table('yem_islemleri') \
+            .select('id, islem_tarihi, tedarikciler(isim), toplam_tutar, yem_urunleri(yem_adi)') \
+            .eq('sirket_id', sirket_id) \
+            .order('islem_tarihi', desc=True) \
+            .limit(limit) \
+            .execute()
+
+        # Son 5 ödeme
+        odeme_res = supabase_client.table('finansal_islemler') \
+            .select('id, islem_tarihi, tedarikciler(isim), tutar, aciklama') \
+            .eq('sirket_id', sirket_id) \
+            .in_('islem_tipi', ['Odeme', 'Tahsilat']) \
+            .order('islem_tarihi', desc=True) \
+            .limit(limit) \
+            .execute()
+        
+        combined_list = []
+
+        for item in sut_res.data:
+            combined_list.append({
+                'tip': 'sut',
+                'tarih': item['taplanma_tarihi'],
+                'tutar': float(item['litre']) * float(item.get('fiyat') or 0),
+                'tedarikci_ad': item['tedarikciler']['isim'] if item.get('tedarikciler') else 'Bilinmeyen',
+                'detay': {'litre': item['litre']}
+            })
+            
+        for item in yem_res.data:
+            combined_list.append({
+                'tip': 'yem',
+                'tarih': item['islem_tarihi'],
+                'tutar': float(item['toplam_tutar']),
+                'tedarikci_ad': item['tedarikciler']['isim'] if item.get('tedarikciler') else 'Bilinmeyen',
+                'detay': {'yem_tipi': item['yem_urunleri']['yem_adi'] if item.get('yem_urunleri') else 'Bilinmeyen Yem'}
+            })
+            
+        for item in odeme_res.data:
+            combined_list.append({
+                'tip': 'odeme',
+                'tarih': item['islem_tarihi'],
+                'tutar': float(item['tutar']),
+                'tedarikci_ad': item['tedarikciler']['isim'] if item.get('tedarikciler') else 'Bilinmeyen',
+                'detay': {'aciklama': item['aciklama']}
+            })
+            
+        # Tümünü tarihe göre tersten sırala ve ilk 5'i al
+        combined_list.sort(key=lambda x: x['tarih'], reverse=True)
+        return combined_list[:limit]
+
+    except Exception as e:
+        logger.error(f"get_recent_actions_for_dashboard hatası: {e}", exc_info=True)
+        return []
+
+def formatDate(iso_date_str):
+    """
+    ISO 8601 formatındaki tarihi (2023-10-27T10:00:00+00:00) 
+    'dd.MM.yyyy' formatına çevirir.
+    """
+    if not iso_date_str:
+        return ""
+    try:
+        # Pytz'den bağımsız olarak timezone bilgisini ayıkla
+        dt = datetime.fromisoformat(iso_date_str)
+        # Tarihi Türkiye saatine çevir
+        dt_tr = dt.astimezone(turkey_tz)
+        return dt_tr.strftime('%d.%m.%Y')
+    except Exception as e:
+        logger.warning(f"Tarih formatlama hatası (formatDate): {e}. Orjinal: {iso_date_str}")
+        try:
+            # Sadece tarihi almayı dene (örn: '2023-10-27')
+            dt = datetime.strptime(iso_date_str, '%Y-%m-%d')
+            return dt.strftime('%d.%m.%Y')
+        except:
+            return iso_date_str # Başarısız olursa orijinali döndür
 
 
 # Servisleri başlat

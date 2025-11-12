@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Çiftçi Paneli - Süt Takip Sistemi</title>
+    
+    <!-- PWA Manifest ve Ikonlar -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icon.png') }}">
+    <meta name="theme-color" content="#3182CE"/>
+
+    <!-- Kütüphaneler -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Yerel Stiller ve Scriptler -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}" defer></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+    
+    <!-- Çiftçi Panel Header -->
+    <header class="bg-white dark:bg-gray-800 shadow-sm p-4 sticky top-0 z-40">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold text-blue-600 dark:text-blue-400">SütTakip Çiftçi</h1>
+            
+            <div class="flex items-center space-x-3">
+                <button id="theme-toggle-btn" class="text-gray-500 dark:text-gray-400">
+                    <i class="fas fa-sun" id="theme-icon-sun"></i>
+                    <i class="fas fa-moon hidden" id="theme-icon-moon"></i>
+                </button>
+                <div class="relative">
+                    <button id="user-menu-btn" class="flex items-center">
+                        <img src="https://ui-avatars.com/api/?name={{ current_user.kullanici_adi|urlencode if current_user.is_authenticated else 'Ç' }}&background=random" alt="Profil" class="w-8 h-8 rounded-full">
+                    </button>
+                    <!-- User Dropdown Menü -->
+                    <div id="user-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-700 rounded-md shadow-lg py-1 z-50">
+                        <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-sm text-red-500 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-600">Çıkış Yap</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Ana İçerik -->
+    <main class="container mx-auto p-6 pb-24">
+        <h2 class="text-2xl font-semibold mb-4">Hoş Geldin, <span id="ciftci-ad-soyad">...</span></h2>
+
+        <!-- Hızlı Özet Kartı -->
+        <div class="card mb-8">
+            <div class="card-body">
+                <h4 class="text-gray-500 dark:text-gray-400 text-lg">Güncel Bakiye</h4>
+                <span id="ciftci-balance" class="text-4xl font-bold text-red-500">...</span>
+                <span class="text-2xl">TL</span>
+                <p class="text-sm mt-2">(Size olan toplam borcumuz)</p>
+            </div>
+        </div>
+
+        <!-- Son İşlemler -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="card bg-blue-50 dark:bg-blue-900/50">
+                <div class="card-body">
+                    <h4 class="font-semibold">Son Süt Girdisi</h4>
+                    <p id="ciftci-last-milk-date" class="text-sm text-gray-500 dark:text-gray-400">...</p>
+                    <span id="ciftci-last-milk-litre" class="text-2xl font-bold text-blue-600 dark:text-blue-300">... Litre</span>
+                </div>
+            </div>
+            <div class="card bg-green-50 dark:bg-green-900/50">
+                <div class="card-body">
+                    <h4 class="font-semibold">Son Yem İşlemi</h4>
+                    <p id="ciftci-last-feed-date" class="text-sm text-gray-500 dark:text-gray-400">...</p>
+                    <span id="ciftci-last-feed-tutar" class="text-2xl font-bold text-green-600 dark:text-green-300">... TL</span>
+                </div>
+            </div>
+             <div class="card bg-yellow-50 dark:bg-yellow-900/50">
+                <div class="card-body">
+                    <h4 class="font-semibold">Son Ödeme</h4>
+                    <p id="ciftci-last-payment-date" class="text-sm text-gray-500 dark:text-gray-400">...</p>
+                    <span id="ciftci-last-payment-tutar" class="text-2xl font-bold text-yellow-600 dark:text-yellow-300">... TL</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- İşlem Geçmişi -->
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="border-b border-gray-200 dark:border-gray-700">
+                    <nav class="flex -mb-px" id="supplier-tabs">
+                        <button data-tab="gecmis" class="tab-button active">
+                            <i class="fas fa-history mr-2"></i> Tüm Geçmiş
+                        </button>
+                        <button data-tab="sut" class="tab-button">
+                            <i class="fas fa-tint mr-2"></i> Sütlerim
+                        </button>
+                        <button data-tab="yem" class="tab-button">
+                            <i class="fas fa-seedling mr-2"></i> Yemlerim
+                        </button>
+                        <button data-tab="odeme" class="tab-button">
+                            <i class="fas fa-lira-sign mr-2"></i> Ödemeler
+                        </button>
+                    </nav>
+                </div>
+                
+                <!-- Tablolar -->
+                <div class="p-4">
+                    <div id="tab-content-gecmis" class="tab-content-panel active">
+                         <div class="overflow-x-auto">
+                            <table class="min-w-full">
+                                <thead class="bg-gray-50 dark:bg-gray-700">
+                                    <tr>
+                                        <th class="table-header">Tarih</th>
+                                        <th class="table-header">İşlem</th>
+                                        <th class="table-header">Tutar (TL)</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y dark:divide-gray-700" id="history-table-body">
+                                    <!-- JS ile doldurulacak -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="tab-content-sut" class="tab-content-panel">
+                         <div class="overflow-x-auto">
+                            <table class="min-w-full">
+                                <thead class="bg-gray-50 dark:bg-gray-700">
+                                    <tr>
+                                        <th class="table-header">Tarih</th>
+                                        <th class="table-header">Litre</th>
+                                        <th class="table-header">Tutar</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y dark:divide-gray-700" id="milk-table-body">
+                                    <!-- JS ile doldurulacak -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="tab-content-yem" class="tab-content-panel">
+                         <div class="overflow-x-auto">
+                            <table class="min-w-full">
+                                <thead class="bg-gray-50 dark:bg-gray-700">
+                                    <tr>
+                                        <th class="table-header">Tarih</th>
+                                        <th class="table-header">Yem Tipi</th>
+                                        <th class="table-header">Tutar</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y dark:divide-gray-700" id="feed-table-body">
+                                    <!-- JS ile doldurulacak -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                     <div id="tab-content-odeme" class="tab-content-panel">
+                         <div class="overflow-x-auto">
+                            <table class="min-w-full">
+                                <thead class="bg-gray-50 dark:bg-gray-700">
+                                    <tr>
+                                        <th class="table-header">Tarih</th>
+                                        <th class="table-header">Tutar</th>
+                                        <th class="table-header">Açıklama</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y dark:divide-gray-700" id="payment-table-body">
+                                    <!-- JS ile doldurulacak -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Mobil için alt navigasyon - ÇİFTÇİ PANELİNE ÖZEL -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-2 flex justify-around z-50">
+        <a href="#" class="flex flex-col items-center text-blue-500 dark:text-blue-400">
+            <i class="fas fa-home"></i>
+            <span class="text-xs">Anasayfa</span>
+        </a>
+        <button id="open-talep-modal-btn" class="flex flex-col items-center justify-center bg-blue-600 text-white rounded-full w-12 h-12 -mt-6 shadow-lg">
+            <i class="fas fa-plus"></i>
+        </button>
+        <a href="{{ url_for('auth.logout') }}" class="flex flex-col items-center text-gray-600 dark:text-gray-300 hover:text-red-500 dark:hover:text-red-400">
+            <i class="fas fa-sign-out-alt"></i>
+            <span class="text-xs">Çıkış Yap</span>
+        </a>
+    </nav>
+    
+    <!-- Çiftçi Modalları -->
+    {% include '_ciftci_hizli_islemler.html' %}
+
+    <!-- Genel JS Dosyaları -->
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/modal_handler.js') }}"></script>
+    
+    <!-- PWA Service Worker Kaydı -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register("{{ url_for('main.service_worker') }}")
+                .then(registration => console.log('SW registered'))
+                .catch(error => console.error('SW registration failed:', error));
+        }
+        
+        // Çiftçi paneline özel UI scriptleri
+        document.addEventListener('DOMContentLoaded', () => {
+            const userMenuBtn = document.getElementById('user-menu-btn');
+            const userMenuDropdown = document.getElementById('user-menu-dropdown');
+            
+            if(userMenuBtn) {
+                userMenuBtn.addEventListener('click', () => {
+                    userMenuDropdown.classList.toggle('hidden');
+                });
+            }
+
+            // Dışarı tıklama
+            document.addEventListener('click', (event) => {
+                if (userMenuBtn && !userMenuBtn.contains(event.target) && userMenuDropdown && !userMenuDropdown.classList.contains('hidden')) {
+                    userMenuDropdown.classList.add('hidden');
+                }
+            });
+        });
+    </script>
+    
+    <!-- Sayfaya özel script -->
+    <script src="{{ url_for('static', filename='js/ciftci_panel.js') }}"></script>
+</body>
+</html>

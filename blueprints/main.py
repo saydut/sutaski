@@ -1,217 +1,119 @@
-# blueprints/main.py
-# RLS ve yeni servis yapısına göre güncellendi.
-
 import os
 from flask import (
-    Blueprint, render_template, session, request, flash, 
-    redirect, url_for, Response, g, jsonify, make_response, current_app
+    Blueprint, render_template, session, redirect, 
+    url_for, g, current_app, jsonify, send_from_directory,
+    make_response
 )
-# 'lisans_kontrolu' kaldırıldı, 'role_required' eklendi
-from decorators import login_required, role_required
-# Hem anon (client) hem de service (service) istemcilerini import et
-from extensions import turkey_tz, supabase_client, supabase_service
 from datetime import datetime, timedelta
-from constants import UserRole # Güncellenmiş UserRole
-import pytz
-import io
-import csv
-from decimal import Decimal
-import logging
 
-# RLS'e uyumlu servisleri import et
-from services.report_service import report_service 
-from services.tedarikci_service import tedarikci_service
-from services.tanker_service import tanker_service # Toplayıcı listesi için
-from utils import parse_supabase_timestamp
+# extensions ve decorator'lar
+from decorators import login_required, role_required
+from extensions import turkey_tz
 
-logger = logging.getLogger(__name__)
+# Servisler (Backend mantığı)
+from services.tedarikci_service import (
+    get_supplier_stats, 
+    get_recent_actions_for_dashboard, 
+    get_dashboard_charts
+)
+
 main_bp = Blueprint('main', __name__)
 
-@main_bp.app_template_filter('format_tarih_str')
-def format_tarih_filter(value):
-    """String formatındaki 'YYYY-MM-DD' tarihini 'DD.MM.YYYY' formatına çevirir."""
-    if not value:
-        return ''
-    try:
-        dt_obj = datetime.strptime(value, '%Y-%m-%d')
-        return dt_obj.strftime('%d.%m.%Y')
-    except (ValueError, TypeError):
-        return value
 
-# --- ARAYÜZ SAYFALARI ---
+# --- 1. HTML Sayfa Rotaları ---
 
 @main_bp.route('/')
-def landing_page():
-    """
-    Uygulamanın ana tanıtım sayfasını (landing page) gösterir.
-    """
-    # 'user' in session -> 'access_token' in session
-    if 'access_token' in session:
-        return redirect(url_for('main.panel'))
-    return render_template('landing.html')
-
-
-@main_bp.route('/panel')
 @login_required
-# '@lisans_kontrolu' kaldırıldı (artık RLS ve rollerle yönetiliyor)
-def panel():
+def index():
     """
-    Kullanıcının rolüne göre ana paneli veya ilgili sayfayı gösterir.
-    @login_required decorator'ı 'g.profile' objesini doldurur.
+    Ana Dashboard sayfasını render eder.
+    @login_required dekoratörü sayesinde sadece giriş yapanlar görebilir.
     """
+    # Gerekli rol kontrolleri (eğer lisansı bitmişse vs. decorator'da yapılabilir)
     
-    # session['user']['rol'] -> g.profile['rol']
-    user_role = g.profile.get('rol')
-
-    if user_role == UserRole.CIFCI.value:
-        # Çiftçi rolü 'ciftci' olarak ayarlandıysa
-        # 'ciftci.py' blueprint'indeki 'ciftci_paneli' rotasına yönlendir
+    # Eğer kullanıcı 'ciftci' ise, onu kendi paneline yönlendir
+    if g.user.rol == 'ciftci':
         return redirect(url_for('ciftci.ciftci_paneli'))
-    
-    if user_role == UserRole.ADMIN.value:
-        # Süper admin rolü 'admin' ise
-        # 'admin.py' blueprint'indeki 'admin_paneli' rotasına yönlendir
+        
+    # Eğer kullanıcı 'super_admin' ise, onu admin paneline yönlendir
+    if g.user.rol == 'super_admin':
         return redirect(url_for('admin.admin_paneli'))
 
-    # Diğer roller (firma_admin, toplayici) normal ana paneli görür
-    # 'session=session' kaldırıldı. 'base.html' g.profile'ı kullanacak.
+    # Diğer roller (firma_admin, firma_calisan) normal anasayfayı görür
     return render_template('index.html')
 
-@main_bp.route('/raporlar')
-@login_required
-@role_required('firma_admin') # 'lisans_kontrolu' kaldırıldı
-def raporlar_page():
-    """Raporlar ana sayfasını render eder."""
-    try:
-        # Rapor filtreleri için toplayıcı ve tedarikçi listelerini RLS ile al
-        # sirket_id parametresi GEREKMEZ
-        tedarikciler, error1 = tedarikci_service.get_all_for_dropdown()
-        toplayicilar, error2 = tanker_service.get_collectors_for_assignment() 
-        
-        if error1 or error2:
-             flash(f"Filtre verileri yüklenemedi: {error1 or ''} {error2 or ''}", "danger")
-
-        return render_template(
-            'raporlar.html', 
-            tedarikciler=tedarikciler or [], 
-            toplayicilar=toplayicilar or []
-        )
-    except Exception as e:
-        logger.error(f"Rapor sayfası (filtreler) yüklenirken hata: {e}", exc_info=True)
-        flash(f"Rapor sayfası yüklenirken hata: {str(e)}", "danger")
-        return render_template('raporlar.html', tedarikciler=[], toplayicilar=[])
-
-@main_bp.route('/tedarikciler')
-@login_required
-@role_required('firma_admin', 'toplayici') # 'lisans_kontrolu' kaldırıldı
-def tedarikciler_sayfasi():
-    return render_template('tedarikciler.html')
-
-
-@main_bp.route('/tedarikci/<int:tedarikci_id>')
-@login_required
-@role_required('firma_admin', 'toplayici') # 'lisans_kontrolu' kaldırıldı
-def tedarikci_detay_sayfasi(tedarikci_id):
-    # 'tedarikci_detay.html' bu ID'yi alıp JS ile API'dan veri çekecek
-    return render_template('tedarikci_detay.html', tedarikci_id=tedarikci_id)
-
-@main_bp.route('/offline')
-def offline_page():
-    return render_template('offline.html')
-
-# --- ANA PANEL API ROTALARI ---
-# (Eski rapor.py dosyasından buraya taşındı ve RLS'e uyarlandı)
-
-@main_bp.route('/api/gunluk_ozet')
-@login_required
-@role_required('firma_admin', 'toplayici') # Ana paneli gören herkes
-def get_gunluk_ozet():
-    """Günlük özet verisini RLS kullanarak RPC ile çeker."""
-    try:
-        tarih_str = request.args.get('tarih')
-        target_date_str = tarih_str if tarih_str else datetime.now(turkey_tz).date().isoformat()
-
-        # sirket_id parametresi KALDIRILDI
-        summary, error = report_service.get_daily_summary(target_date_str)
-        if error:
-            return jsonify({"error": error}), 500
-            
-        return jsonify(summary)
-    except Exception as e:
-        logger.error(f"Günlük özet (API) alınırken hata: {e}", exc_info=True)
-        return jsonify({"error": "Özet hesaplanırken sunucuda bir hata oluştu."}), 500
-    
-@main_bp.route('/api/haftalik_ozet')
-@login_required
-@role_required('firma_admin', 'toplayici')
-def get_haftalik_ozet():
-    """Haftalık özet verisini (grafik) RLS kullanarak RPC ile çeker."""
-    try:
-        # Tarih aralığını belirle
-        end_date = datetime.now(turkey_tz).date()
-        start_date = end_date - timedelta(days=6) # Son 7 gün
-        
-        # sirket_id parametresi KALDIRILDI
-        data, error = report_service.get_weekly_summary(start_date.isoformat(), end_date.isoformat())
-        if error:
-             return jsonify({"error": error}), 500
-        return jsonify(data)
-    except Exception as e:
-        logger.error(f"Haftalık özet (API) alınırken hata: {e}", exc_info=True)
-        return jsonify({"error": "Haftalık özet alınırken bir sunucu hatası oluştu."}), 500
-
-@main_bp.route('/api/tedarikci_dagilimi')
-@login_required
-@role_required('firma_admin', 'toplayici')
-def get_tedarikci_dagilimi():
-    """Tedarikçi dağılımı (pasta grafik) verisini RLS kullanarak RPC ile çeker."""
-    try:
-        # Tarih aralığı (ana paneldeki gibi)
-        end_date = datetime.now(turkey_tz).date()
-        start_date = end_date - timedelta(days=6) # Son 7 gün
-        
-        # sirket_id parametresi KALDIRILDI
-        data, error = report_service.get_supplier_distribution(start_date.isoformat(), end_date.isoformat())
-        if error:
-             return jsonify({"error": error}), 500
-
-        labels = [item['name'] for item in data]
-        data = [float(item['litre']) for item in data]
-        return jsonify({'labels': labels, 'data': data})
-    except Exception as e:
-        logger.error(f"Tedarikçi dağılımı (API) alınırken hata: {e}", exc_info=True)
-        return jsonify({"error": "Tedarikçi dağılımı alınırken bir sunucu hatası oluştu."}), 500
 
 @main_bp.route('/service-worker.js')
 def service_worker():
-    """Service worker dosyasını cache versiyonu ile birlikte sunar."""
-    cache_version = "1.0.0" # Varsayılan
-    try:
-        # 'ayarlar' tablosu RLS'e tabi olmadığı ve global olduğu için,
-        # bu ayarı okumak için 'service_role' anahtarına sahip
-        # 'supabase_service' istemcisini kullanmalıyız.
-        response = supabase_service.table('ayarlar') \
-            .select('ayar_degeri') \
-            .eq('ayar_adi', 'cache_version') \
-            .limit(1) \
-            .single() \
-            .execute()
-        
-        if response.data:
-            cache_version = response.data['ayar_degeri']
-        else:
-             logger.warning("Service worker için 'cache_version' ayarı bulunamadı.")
-        
-    except Exception as e:
-        logger.error(f"Service worker için cache_version alınırken hata: {e}", exc_info=True)
-        # Hata durumunda varsayılan (eski) cache versiyonu ile devam et
-        pass
-    
-    template = render_template('service-worker.js.jinja', cache_version=cache_version)
-    response = make_response(template)
+    """
+    PWA (Progressive Web App) için service worker dosyasını
+    'templates' klasöründen render ederek sunar.
+    Bu, Jinja2 şablonlaması (örn: {{ url_for(...) }}) kullanabilmemiz içindir.
+    """
+    # templates/service-worker.js.jinja dosyasını bulur
+    response = make_response(render_template('service-worker.js.jinja'))
     response.headers['Content-Type'] = 'application/javascript'
-    response.headers['Cache-Control'] = 'no-cache'
     return response
 
-# Eski /sut_girisleri ve /sut_listesi rotaları
-# 'blueprints/sut.py' dosyasına taşınmıştı, buradan kaldırıldı.
+# --- 2. GEREKSİZ/HATALI ROTOLAR ---
+# Önceki kodda çakışmaya neden olan duplicate '/decorator' rotaları 
+# bu temizlenmiş versiyonda kaldırıldı.
+
+
+# --- 3. DASHBOARD API ROTALARI ---
+
+# DÜZELTME: 
+# static/js/main.js script'i tüm dashboard verisini TEK BİR adresten bekliyordu.
+# Backend'deki üç ayrı fonksiyonu (summary, charts, recent_actions)
+# burada birleştirip '/api/dashboard/all' altında sunuyoruz.
+
+@main_bp.route('/api/dashboard/all', methods=['GET'])
+@login_required
+@role_required('firma_admin', 'firma_calisan')
+def get_dashboard_all_data():
+    """
+    Anasayfa (index.html) için tüm dashboard verilerini (kartlar, grafikler, son işlemler)
+    tek bir JSON objesi olarak döndürür.
+    """
+    try:
+        sirket_id = g.user.sirket_id
+        
+        # 1. Özet Kart verilerini al (services/tedarikci_service.py'den)
+        summary_data = get_supplier_stats(sirket_id)
+        
+        # 2. Grafik verilerini al (services/tedarikci_service.py'den)
+        chart_data = get_dashboard_charts(sirket_id)
+        
+        # 3. Son İşlemler verisini al (services/tedarikci_service.py'den)
+        recent_actions = get_recent_actions_for_dashboard(sirket_id)
+
+        # main.js'in beklediği formatta birleştir
+        response_data = {
+            "summary": summary_data,
+            "charts": chart_data,
+            "recent_actions": recent_actions
+        }
+        
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Dashboard verileri alınırken hata: {e}", exc_info=True)
+        return jsonify(hata=f"Dashboard verileri yüklenirken bir sunucu hatası oluştu: {str(e)}"), 500
+
+
+# --- ESKİ API ROTALARI (Artık kullanılmıyor, '/all' altında birleştirildi) ---
+# @main_bp.route('/api/dashboard/summary', methods=['GET'])
+# @login_required
+# def get_dashboard_summary():
+#     # ... (Eski kod)
+#
+# @main_bp.route('/api/dashboard/charts', methods=['GET'])
+# @login_required
+# def get_dashboard_chart_data():
+#     # ... (Eski kod)
+#
+# @main_bp.route('/api/dashboard/recent-actions', methods=['GET'])
+# @login_required
+# def get_recent_actions():
+#     # ... (Eski kod)
+

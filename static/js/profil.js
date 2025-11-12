@@ -1,108 +1,52 @@
-// static/js/profil.js
+// Bu script, profil.html sayfasının mantığını yönetir.
+// (Şifre değiştirme ve anlık bildirim aboneliği)
+document.addEventListener('DOMContentLoaded', () => {
 
-window.onload = function() {
-    profilBilgileriniYukle();
-};
+    // --- Şifre Değiştirme ---
+    const passwordForm = document.getElementById('update-password-form');
+    
+    if (passwordForm) {
+        passwordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const newPassword = document.getElementById('new_password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
 
-/**
- * Sayfa yüklendiğinde sunucudan mevcut profil bilgilerini çeker ve formları doldurur.
- */
-async function profilBilgileriniYukle() {
-    try {
-        const response = await fetch('/api/profil');
-        const data = await response.json();
+            if (newPassword.length < 6) {
+                showToast('Yeni şifre en az 6 karakter olmalıdır.', 'error');
+                return;
+            }
 
-        if (!response.ok) {
-            throw new Error(data.error || 'Profil bilgileri yüklenemedi.');
-        }
+            if (newPassword !== confirmPassword) {
+                showToast('Şifreler uyuşmuyor.', 'error');
+                return;
+            }
 
-        // Gelen iç içe veriye göre form alanlarını doldur
-        if (data.kullanici) {
-            document.getElementById('kullanici-adi-input').value = data.kullanici.kullanici_adi || '';
-            document.getElementById('eposta-input').value = data.kullanici.eposta || '';
-            document.getElementById('kullanici-telefon-input').value = data.kullanici.telefon_no || '';
-        }
-
-        if (data.sirket) {
-            document.getElementById('sirket-adi-input').value = data.sirket.sirket_adi || '';
-            document.getElementById('sirket-vkn-input').value = data.sirket.vergi_kimlik_no || '';
-            document.getElementById('sirket-adres-input').value = data.sirket.adres || '';
-        }
-
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-    }
-}
-
-/**
- * "Değişiklikleri Kaydet" butonuna basıldığında çalışır, formdaki verileri sunucuya gönderir.
- */
-async function profilGuncelle() {
-    const kaydetButton = document.getElementById('kaydet-btn');
-    const originalButtonText = kaydetButton.innerHTML;
-
-    // Kullanıcı verilerini bir obje içinde grupla
-    const kullanici_data = {
-        eposta: document.getElementById('eposta-input').value.trim(),
-        telefon_no: document.getElementById('kullanici-telefon-input').value.trim()
-    };
-
-    // Şirket verilerini bir obje içinde grupla
-    const sirket_data = {
-        vergi_kimlik_no: document.getElementById('sirket-vkn-input').value.trim(),
-        adres: document.getElementById('sirket-adres-input').value.trim()
-    };
-
-    // Şifre verilerini bir obje içinde grupla
-    const sifre_data = {
-        mevcut_sifre: document.getElementById('mevcut-sifre-input').value,
-        yeni_sifre: document.getElementById('yeni-sifre-input').value,
-        yeni_sifre_tekrar: document.getElementById('yeni-sifre-tekrar-input').value
-    };
-
-    // Şifre alanı kontrolleri
-    if (sifre_data.yeni_sifre || sifre_data.yeni_sifre_tekrar) {
-        if (!sifre_data.mevcut_sifre) {
-            gosterMesaj('Yeni bir şifre belirlemek için mevcut şifrenizi girmelisiniz.', 'warning');
-            return;
-        }
-        if (sifre_data.yeni_sifre !== sifre_data.yeni_sifre_tekrar) {
-            gosterMesaj('Yeni şifreler eşleşmiyor.', 'warning');
-            return;
-        }
-    }
-
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Güncelleniyor...`;
-
-    try {
-        const response = await fetch('/api/profil', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            // Tüm veriyi gruplanmış objeler halinde gönder
-            body: JSON.stringify({
-                kullanici: kullanici_data,
-                sirket: sirket_data,
-                sifreler: sifre_data
-            })
+            try {
+                const response = await apiCall('/api/profil/sifre-guncelle', 'POST', {
+                    new_password: newPassword
+                });
+                showToast(response.mesaj, 'success');
+                passwordForm.reset();
+            } catch (error) {
+                showToast(`Hata: ${error.message}`, 'error');
+            }
         });
-
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'Güncelleme sırasında bir hata oluştu.');
-        }
-
-        gosterMesaj(result.message, 'success');
-        
-        // Sadece şifre alanlarını temizle
-        document.getElementById('mevcut-sifre-input').value = '';
-        document.getElementById('yeni-sifre-input').value = '';
-        document.getElementById('yeni-sifre-tekrar-input').value = '';
-
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-    } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = 'Değişiklikleri Kaydet';
     }
-}
+
+    // --- Anlık Bildirim ---
+    // 'push-manager.js' bu butonları ve 'push-status' p etiketini
+    // zaten dinliyor ve yönetiyor. Bu yüzden burada ekstra bir şey
+    // yapmamıza gerek yok, o dosya 'profil.html'e dahil edildiği
+    // için otomatik olarak çalışacaktır.
+    
+    // (push-manager.js yüklendiğinden emin olmak için bir kontrol eklenebilir)
+    if (typeof window.PushManager === 'undefined') {
+        console.warn('push-manager.js yüklenemedi veya bulunamadı.');
+        const pushStatus = document.getElementById('push-status');
+        if (pushStatus) {
+            pushStatus.textContent = 'Bildirim modülü yüklenemedi.';
+            pushStatus.className = 'text-sm mt-2 text-red-500';
+        }
+    }
+});

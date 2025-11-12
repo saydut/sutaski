@@ -1,68 +1,137 @@
-// static/js/chart-manager.js
+// Bu script, index.html (Anasayfa) için Chart.js grafiklerini oluşturur.
+// main.js tarafından çağrılır.
 
-// Sayfadaki tüm aktif Chart.js instance'larını tutacak olan dizi
-let registeredCharts = []; // GÜNCELLENDİ: const'tan let'e çevrildi ki yeniden atanabilsin.
+(function() {
+    // Grafik instancelarını sakla ki tekrar çizim gerektiğinde (örn: tema değişimi) eskisi silinebilsin
+    let dailyMilkChartInstance = null;
+    let supplierPieChartInstance = null;
 
-/**
- * Yeni oluşturulan bir chart'ı yönetim listesine ekler.
- * @param {Chart} chartInstance - new Chart() ile oluşturulmuş nesne.
- */
-function registerChart(chartInstance) {
-    if (chartInstance) {
-        registeredCharts.push(chartInstance);
-    }
-}
+    // Koyu tema (dark mode) için renk ayarları
+    const getChartColors = () => {
+        const isDarkMode = document.documentElement.classList.contains('dark');
+        return {
+            gridColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+            labelColor: isDarkMode ? '#E5E7EB' : '#374151', // text-gray-200 veya text-gray-700
+            primaryColor: 'rgb(59, 130, 246)', // Tailwind 'blue-500'
+            primaryBg: 'rgba(59, 130, 246, 0.2)'
+        };
+    };
 
-/**
- * Bir chart'ı yönetim listesinden kaldırır.
- * Bu fonksiyon, bir chart .destroy() edilmeden hemen önce çağrılmalıdır.
- * @param {Chart} chartInstance - Kaldırılacak chart nesnesi.
- */
-function unregisterChart(chartInstance) {
-    if (!chartInstance) return;
-    // Grafiği, ID'sine göre listeden filtreleyerek kaldırıyoruz.
-    registeredCharts = registeredCharts.filter(chart => chart.id !== chartInstance.id);
-}
+    /**
+     * Günlük Süt Toplama (Line) Grafiğini çizer.
+     * @param {object} chartData - { labels: ['Tarih1', ...], values: [100, ...] }
+     */
+    const createDailyMilkChart = (chartData) => {
+        const ctx = document.getElementById('dailyMilkChart');
+        if (!ctx) return; // Canvas bulunamadı
 
-/**
- * Kayıtlı tüm chart'ların temasını (renkler, çizgiler vb.) günceller.
- * Bu fonksiyon, tema değiştirildiğinde `theme.js` tarafından çağrılır.
- */
-function updateAllChartThemes() {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const textColor = isDark ? '#E2E8F0' : '#333333';
-    const gridColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-    const legendColor = isDark ? '#E2E8F0' : '#333333';
-    const borderColor = isDark ? '#1E293B' : '#FFFFFF';
-    
-    // Grafik tiplerine özel renkler
-    const barBgColor = isDark ? 'rgba(76, 125, 255, 0.8)' : 'rgba(74, 144, 226, 0.8)';
-    const barBorderColor = isDark ? 'rgba(76, 125, 255, 1)' : 'rgba(74, 144, 226, 1)';
-    const lineBgColor = isDark ? 'rgba(76, 125, 255, 0.3)' : 'rgba(74, 144, 226, 0.3)';
-    const lineBorderColor = isDark ? 'rgba(76, 125, 255, 1)' : 'rgba(74, 144, 226, 1)';
-
-    registeredCharts.forEach(chart => {
-        if (!chart) return; // Ekstra güvenlik kontrolü
-        // Genel ayarlar
-        if (chart.options.scales.y) chart.options.scales.y.ticks.color = textColor;
-        if (chart.options.scales.x) chart.options.scales.x.ticks.color = textColor;
-        if (chart.options.scales.y) chart.options.scales.y.grid.color = gridColor;
-        if (chart.options.plugins.legend) chart.options.plugins.legend.labels.color = legendColor;
-
-        // Grafik tipine özel ayarlar
-        const chartType = chart.config.type;
-        const dataset = chart.data.datasets[0];
-
-        if (chartType === 'bar') {
-            dataset.backgroundColor = barBgColor;
-            dataset.borderColor = barBorderColor;
-        } else if (chartType === 'line') {
-            dataset.backgroundColor = lineBgColor;
-            dataset.borderColor = lineBorderColor;
-        } else if (chartType === 'doughnut') {
-            dataset.borderColor = borderColor;
-        }
+        const colors = getChartColors();
         
-        chart.update();
-    });
-}
+        // Eğer varsa eski grafiği yok et
+        if (dailyMilkChartInstance) {
+            dailyMilkChartInstance.destroy();
+        }
+
+        dailyMilkChartInstance = new Chart(ctx.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: chartData.labels, // ['01.10', '02.10', ...]
+                datasets: [{
+                    label: 'Toplam Süt (Litre)',
+                    data: chartData.values, // [120, 150, ...]
+                    borderColor: colors.primaryColor,
+                    backgroundColor: colors.primaryBg,
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: colors.labelColor },
+                        grid: { color: colors.gridColor }
+                    },
+                    x: {
+                        ticks: { color: colors.labelColor },
+                        grid: { color: colors.gridColor }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: { color: colors.labelColor }
+                    }
+                }
+            }
+        });
+    };
+
+    /**
+     * Tedarikçi Dağılımı (Pie/Doughnut) Grafiğini çizer.
+     * @param {object} chartData - { labels: ['Ahmet', ...], values: [500, ...] }
+     */
+    const createSupplierPieChart = (chartData) => {
+        const ctx = document.getElementById('supplierDistributionChart');
+        if (!ctx) return;
+
+        const colors = getChartColors();
+
+        if (supplierPieChartInstance) {
+            supplierPieChartInstance.destroy();
+        }
+
+        supplierPieChartInstance = new Chart(ctx.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: chartData.labels, // ['Ahmet Yılmaz', 'Mehmet Kaya', ...]
+                datasets: [{
+                    label: 'Süt Dağılımı',
+                    data: chartData.values, // [3500, 2800, ...]
+                    backgroundColor: [
+                        'rgb(59, 130, 246)',  // blue-500
+                        'rgb(16, 185, 129)',  // green-500
+                        'rgb(234, 179, 8)',   // yellow-500
+                        'rgb(168, 85, 247)',  // purple-500
+                        'rgb(239, 68, 68)'    // red-500
+                    ],
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: colors.labelColor }
+                    }
+                }
+            }
+        });
+    };
+
+    // Fonksiyonları global 'window' objesine ekle ki main.js erişebilsin
+    window.ChartManager = {
+        createDailyMilkChart,
+        createSupplierPieChart
+    };
+    
+    // Tema değişikliğini dinle ve grafikleri yeniden çiz
+    const themeToggleBtn = document.getElementById('theme-toggle-btn');
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', () => {
+            // Renklerin güncellenmesi için küçük bir gecikme
+            setTimeout(() => {
+                if (dailyMilkChartInstance) dailyMilkChartInstance.update();
+                if (supplierPieChartInstance) supplierPieChartInstance.update();
+            }, 100); 
+            // Not: Daha karmaşık renk değişiklikleri için destroy() ve yeniden create() gerekebilir,
+            // ancak Chart.js 3+ genelde renkleri dinamik olarak alabilir.
+            // Şimdilik sadece renkleri güncellemeyi deneyelim.
+            // Eğer renkler (grid, label) değişmezse, destroy/create metoduna dönmeliyiz.
+        });
+    }
+
+})();

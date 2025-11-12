@@ -1,49 +1,61 @@
-import pytz
+import re
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
-import bleach # <-- YENİ: Güvenlik için HTML temizleme kütüphanesi
+import pytz # Zaman dilimi için eklendi
 
-def parse_supabase_timestamp(timestamp_str):
+# --- ZAMAN DİLİMİ ---
+# Döngüsel import'u engellemek için 'extensions.py'den buraya taşındı
+turkey_tz = pytz.timezone('Europe/Istanbul')
+
+
+def sanitize_input(value):
     """
-    Supabase'den gelen ve mikrosaniye hassasiyeti değişebilen ISO 8601 formatlarını
-    doğru bir şekilde anlayan ve timezone-aware bir datetime objesine çeviren fonksiyon.
+    Girdiyi basit XSS ve HTML enjeksiyonlarına karşı temizler.
+    (Orijinal dosyanızdan alındı)
     """
-    if not timestamp_str:
+    if value is None:
         return None
-    
+    value = str(value)
+    # Temel HTML etiketlerini ve tehlikeli karakterleri kaldır
+    value = re.sub(r'<[^>]+>', '', value)
+    value = re.sub(r'[;\'"()\[\]{}]', '', value)
+    return value.strip()
+
+
+# --- YENİ EKLENEN YARDIMCI FONKSİYONLAR ---
+# (Tüm blueprint'lerin bu fonksiyonlara ihtiyacı var)
+
+def parse_int_or_none(value):
+    """
+    Bir değeri integer'a çevirmeye çalışır. Başarısız olursa None döndürür.
+    """
+    if value is None:
+        return None
     try:
-        if '+' in timestamp_str:
-            main_part, timezone_part = timestamp_str.rsplit('+', 1)
-            timezone_part = '+' + timezone_part
-        elif 'Z' in timestamp_str:
-            main_part, timezone_part = timestamp_str.rsplit('Z', 1)
-            timezone_part = '+00:00'
-        else:
-            main_part = timestamp_str
-            timezone_part = None
-
-        if '.' in main_part:
-            time_part, microsecond_part = main_part.rsplit('.', 1)
-            main_part = f"{time_part}.{microsecond_part.ljust(6, '0')}"
-
-        full_timestamp_str = main_part + (timezone_part if timezone_part else '')
-        
-        if timezone_part:
-            return datetime.strptime(full_timestamp_str, '%Y-%m-%dT%H:%M:%S.%f%z')
-        else:
-            dt_obj = datetime.strptime(full_timestamp_str, '%Y-%m-%dT%H:%M:%S.%f')
-            return pytz.utc.localize(dt_obj)
-
-    except (ValueError, TypeError) as e:
-        print(f"!!! ZAMAN DAMGASI AYRIŞTIRMA HATASI: '{timestamp_str}' anlaşılamadı. Hata: {e}")
+        return int(str(value))
+    except (ValueError, TypeError):
         return None
 
-# YENİ: Gelen metin girdilerini XSS saldırılarına karşı temizleyen fonksiyon
-def sanitize_input(text):
+def parse_decimal_or_none(value):
     """
-    Kullanıcıdan gelen metin girdilerindeki potansiyel zararlı HTML'i temizler.
-    Sadece metnin kendisini bırakır, etiketleri kaldırır.
+    Bir değeri Decimal'e (parasal) çevirmeye çalışır. Başarısız olursa None döndürür.
     """
-    if text is None:
+    if value is None:
         return None
-    # bleach.clean() fonksiyonu tüm HTML etiketlerini kaldırır.
-    return bleach.clean(str(text))
+    try:
+        # String'deki virgülü noktaya çevir (örn: "10,50" -> "10.50")
+        value_str = str(value).replace(',', '.')
+        return Decimal(value_str)
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+def parse_date_or_none(date_str):
+    """
+    'YYYY-MM-DD' formatındaki bir string'i datetime objesine çevirir.
+    """
+    if not date_str:
+        return None
+    try:
+        return datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return None
