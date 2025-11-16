@@ -1,0 +1,21 @@
+
+DECLARE
+  new_sirket_id bigint;
+BEGIN
+  -- 1. Yeni şirketi 'sirketler' tablosuna ekle
+  INSERT INTO public.sirketler (sirket_adi, lisans_bitis_tarihi)
+  VALUES (p_sirket_adi, now() + interval '14 days') -- 14 gün deneme süresi
+  RETURNING id INTO new_sirket_id;
+  
+  -- 2. Yeni kullanıcı için 'profiller' tablosunda kayıt oluştur
+  -- Onu yeni şirkete 'firma_admin' rolüyle ata.
+  INSERT INTO public.profiller (id, sirket_id, rol, kullanici_adi, eposta)
+  VALUES (p_admin_user_id, new_sirket_id, 'firma_admin', p_kullanici_adi, p_admin_email);
+  
+  RETURN new_sirket_id;
+
+EXCEPTION
+  -- Hata olursa (örn: sirket_adi zaten varsa), tüm işlemi geri al.
+  WHEN OTHERS THEN
+    RAISE;
+END;

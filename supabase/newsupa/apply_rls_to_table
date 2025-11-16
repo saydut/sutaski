@@ -1,0 +1,25 @@
+
+BEGIN
+  EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', table_name);
+  
+  EXECUTE format('
+    CREATE POLICY "Kullanıcılar sadece kendi şirket verilerini görebilir"
+    ON public.%I FOR SELECT
+    USING ( sirket_id = public.get_current_user_sirket_id() );', table_name);
+    
+  EXECUTE format('
+    CREATE POLICY "Kullanıcılar sadece kendi şirketine veri ekleyebilir"
+    ON public.%I FOR INSERT
+    WITH CHECK ( sirket_id = public.get_current_user_sirket_id() );', table_name);
+    
+  EXECUTE format('
+    CREATE POLICY "Kullanıcılar kendi şirket verilerini güncelleyebilir"
+    ON public.%I FOR UPDATE
+    USING ( sirket_id = public.get_current_user_sirket_id() )
+    WITH CHECK ( sirket_id = public.get_current_user_sirket_id() );', table_name);
+    
+  EXECUTE format('
+    CREATE POLICY "Firma adminleri kendi şirket verilerini silebilir"
+    ON public.%I FOR DELETE
+    USING ( sirket_id = public.get_current_user_sirket_id() AND public.get_current_user_role() = ''firma_admin'' );', table_name);
+END;

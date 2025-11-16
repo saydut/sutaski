@@ -1,0 +1,2 @@
+
+  SELECT sirket_id FROM public.profiller WHERE id = auth.uid()
