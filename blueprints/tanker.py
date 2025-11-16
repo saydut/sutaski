@@ -1,113 +1,136 @@
-# blueprints/tanker.py
-# HATA DÜZELTMESİ: Tüm 'firma_id' değişkenleri 'sirket_id' olarak düzeltildi.
-# YENİ ÖZELLİK: Tanker silme API endpoint'i eklendi.
+# blueprints/tanker.py (YENİ SATIŞ ENDPOINT'İ EKLENMİŞ HALİ)
 
-from flask import Blueprint, render_template, session, jsonify, request
-from decorators import login_required, firma_yetkilisi_required
+from flask import Blueprint, request, jsonify, g, session # 'session' eklendi
 from services import tanker_service
+from decorators import login_required, firma_yetkilisi_required
 import logging
 
 logger = logging.getLogger(__name__)
 
-tanker_bp = Blueprint('tanker', __name__, url_prefix='/tanker')
+tanker_bp = Blueprint('tanker', __name__)
 
-@tanker_bp.route('/')
+@tanker_bp.route('/tanker', methods=['GET'])
 @login_required
-@firma_yetkilisi_required 
-def tanker_yonetimi_sayfasi():
-    """Tanker yönetimi ana sayfasını render eder."""
-    return render_template('tanker_yonetimi.html')
+def tanker_yonetimi_page():
+    # Bu fonksiyonun HTML render etmesi gerekiyor, app.py'de olabilir.
+    # Eğer bu blueprint HTML sayfası göstermiyorsa bu kısım gereksizdir.
+    # Şimdilik API'lere odaklanıyoruz.
+    return "Tanker Yönetimi Sayfası (Bu bir API endpoint'i değil)"
 
-# === API ENDPOINT'LERİ ===
-
-@tanker_bp.route('/api/listele', methods=['GET'])
+@tanker_bp.route('/tanker/api/listele', methods=['GET'])
 @login_required
-@firma_yetkilisi_required
-def list_tankers_api():
-    """Firmanın tüm tankerlerini JSON olarak listeler."""
+def get_tankerler_api():
     try:
-        # HATA BURADAYDI: 'firma_id' -> 'sirket_id'
-        firma_id = session['user']['sirket_id'] 
-        tankerler = tanker_service.get_tankerler(firma_id)
-        return jsonify(tankerler)
+        sirket_id = session.get('user', {}).get('sirket_id') # g.user.sirket_id yerine session
+        tankerler = tanker_service.get_tankerler(sirket_id)
+        return jsonify(tankerler), 200
     except Exception as e:
         logger.error(f"Tanker listeleme API hatası: {e}", exc_info=True)
         return jsonify({"error": "Tankerler listelenirken bir hata oluştu."}), 500
 
-@tanker_bp.route('/api/ekle', methods=['POST'])
+@tanker_bp.route('/tanker/api/ekle', methods=['POST'])
 @login_required
 @firma_yetkilisi_required
 def add_tanker_api():
-    """Yeni bir tanker ekler."""
     try:
-        # HATA BURADAYDI: 'firma_id' -> 'sirket_id'
-        firma_id = session['user']['sirket_id']
         data = request.get_json()
-        
-        yeni_tanker = tanker_service.add_tanker(firma_id, data)
-        
-        return jsonify({"message": "Tanker başarıyla eklendi.", "tanker": yeni_tanker}), 201
+        yeni_tanker = tanker_service.add_tanker(data)
+        return jsonify({"message": "Tanker başarıyla eklendi", "tanker": yeni_tanker}), 201
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 400
     except Exception as e:
         logger.error(f"Tanker ekleme API hatası: {e}", exc_info=True)
         return jsonify({"error": "Tanker eklenirken bir sunucu hatası oluştu."}), 500
 
-@tanker_bp.route('/api/toplayici-listesi', methods=['GET'])
+@tanker_bp.route('/tanker/api/guncelle/<int:tanker_id>', methods=['PUT'])
 @login_required
 @firma_yetkilisi_required
-def get_collectors_for_assignment_api():
-    """Atama sekmesi için toplayıcıları ve mevcut atamalarını listeler."""
+def update_tanker_api(tanker_id):
     try:
-        # HATA BURADAYDI: 'firma_id' -> 'sirket_id'
-        firma_id = session['user']['sirket_id']
-        toplayicilar = tanker_service.get_collectors_for_assignment(firma_id)
-        return jsonify(toplayicilar)
+        data = request.get_json()
+        guncellenen_tanker = tanker_service.update_tanker(tanker_id, data)
+        if guncellenen_tanker is None:
+             return jsonify({"error": "Tanker bulunamadı veya güncelleme başarısız."}), 404
+        return jsonify({"message": "Tanker başarıyla güncellendi", "tanker": guncellenen_tanker}), 200
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
     except Exception as e:
-        logger.error(f"Toplayıcı listeleme (atama için) API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Toplayıcı listesi alınamadı."}), 500
+        logger.error(f"Tanker güncelleme API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Tanker güncellenirken bir sunucu hatası oluştu."}), 500
 
-@tanker_bp.route('/api/ata', methods=['POST'])
+@tanker_bp.route('/tanker/api/sil/<int:tanker_id>', methods=['DELETE'])
+@login_required
+@firma_yetkilisi_required
+def delete_tanker_api(tanker_id):
+    try:
+        result = tanker_service.delete_tanker(tanker_id)
+        if not result.get("success"):
+            return jsonify({"error": result.get("message")}), 400
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Tanker silme API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Tanker silinirken bir sunucu hatası oluştu."}), 500
+
+# --- Tanker Atama API'leri ---
+
+@tanker_bp.route('/tanker/api/atamalar', methods=['GET'])
+@login_required
+@firma_yetkilisi_required
+def get_atama_listesi_api():
+    try:
+        sirket_id = session.get('user', {}).get('sirket_id')
+        atamalar = tanker_service.get_tanker_assignments(sirket_id)
+        toplayicilar = tanker_service.get_collectors_for_assignment(sirket_id)
+        return jsonify({"atamalar": atamalar, "toplayicilar": toplayicilar}), 200
+    except Exception as e:
+        logger.error(f"Tanker atama listesi API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Atama verileri alınırken bir hata oluştu."}), 500
+
+@tanker_bp.route('/tanker/api/ata', methods=['POST'])
 @login_required
 @firma_yetkilisi_required
 def assign_tanker_api():
-    """Bir toplayıcıya bir tanker atar."""
     try:
-        # HATA BURADAYDI: 'firma_id' -> 'sirket_id'
-        firma_id = session['user']['sirket_id']
         data = request.get_json()
-        
-        toplayici_id = data.get('toplayici_id')
-        tanker_id = data.get('tanker_id') # 0 gelirse 'atama kaldır' demek
-
-        if not toplayici_id:
-            raise ValueError("Toplayıcı ID'si zorunludur.")
-
-        result = tanker_service.assign_tanker(firma_id, int(toplayici_id), int(tanker_id))
-        
-        return jsonify(result), 200
+        yeni_atama = tanker_service.assign_toplayici_to_tanker(data)
+        return jsonify({"message": "Atama başarılı", "atama": yeni_atama}), 201
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 400
     except Exception as e:
         logger.error(f"Tanker atama API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Atama sırasında bir sunucu hatası oluştu."}), 500
+        return jsonify({"error": "Atama yapılırken bir sunucu hatası oluştu."}), 500
 
-# --- YENİ ÖZELLİK: TANKER SİLME ---
-@tanker_bp.route('/api/sil/<int:tanker_id>', methods=['DELETE'])
+@tanker_bp.route('/tanker/api/atama_kaldir/<int:atama_id>', methods=['DELETE'])
 @login_required
 @firma_yetkilisi_required
-def sil_tanker_api(tanker_id):
-    """Bir tankeri siler."""
+def unassign_tanker_api(atama_id):
     try:
-        firma_id = session['user']['sirket_id']
-        
-        result = tanker_service.delete_tanker(firma_id, tanker_id)
-        
-        return jsonify(result), 200
-    except PermissionError as pe:
-        return jsonify({"error": str(pe)}), 403 # Yetki Hatası
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400 # Mantık Hatası (dolu, ataması var vb.)
+        tanker_service.unassign_toplayici_from_tanker(atama_id)
+        return jsonify({"message": "Atama başarıyla kaldırıldı."}), 200
     except Exception as e:
-        logger.error(f"Tanker silme API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Silme sırasında bir sunucu hatası oluştu."}), 500
+        logger.error(f"Tanker atama kaldırma API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Atama kaldırılırken bir hata oluştu."}), 500
+
+# === YENİ SATIŞ/BOŞALTMA ENDPOINT'İ ===
+@tanker_bp.route('/tanker/api/sat_ve_bosalt/<int:tanker_id>', methods=['POST'])
+@login_required
+@firma_yetkilisi_required
+def sell_and_empty_tanker_api(tanker_id):
+    """
+    Bir tankerin satışını (boşaltılmasını) kaydeder ve doluluğunu sıfırlar.
+    """
+    try:
+        sirket_id = session['user']['sirket_id']
+        kullanici_id = session['user']['id']
+        data = request.get_json()
+        
+        yeni_satis = tanker_service.sell_and_empty_tanker(sirket_id, kullanici_id, tanker_id, data)
+        
+        return jsonify({"message": "Tanker başarıyla satıldı/boşaltıldı.", "satis": yeni_satis}), 201
+    except ValueError as ve:
+        # Kapasite, fiyat vb. bilinen hatalar
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        logger.error(f"Tanker satış API hatası: {e}", exc_info=True)
+        return jsonify({"error": "Tanker satışı sırasında bir sunucu hatası oluştu."}), 500
+# === YENİ ENDPOINT SONU ===
