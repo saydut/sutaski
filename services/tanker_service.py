@@ -4,9 +4,6 @@ from flask import g  # 'supabase' yerine 'g' import edildi
 from constants import UserRole
 from postgrest import APIError  # PostgrestAPIError yerine standart APIError kullanıldı
 import logging
-from decimal import Decimal, InvalidOperation # Dosyanın başına import edin
-from datetime import datetime # Dosyanın başına import edin
-
 
 logger = logging.getLogger(__name__) # Logger eklendi
 
@@ -157,73 +154,17 @@ def unassign_toplayici_from_tanker(assignment_id):
         logger.error(f"Tanker ataması kaldırılırken hata: {e}", exc_info=True)
         raise
 
-def sell_and_empty_tanker(sirket_id: int, kullanici_id: int, tanker_id: int, data: dict):
-    """
-    Bir tankeri 'boşaltır' (satışını yapar), finansal kayıt oluşturur
-    ve doluluğunu sıfırlar.
-    """
-    try:
-        fiyat_str = data.get('satis_birim_fiyati')
-        aciklama_str = sanitize_input(data.get('aciklama')) or None
-        islem_tarihi_str = data.get('islem_tarihi') or None # Opsiyonel
+# EKLENECEK YENİ FONKSİYON
+# services/tanker_service.py
 
-        if not fiyat_str:
-            raise ValueError("Satış birim fiyatı zorunludur.")
-        
-        satis_birim_fiyati = Decimal(fiyat_str)
-        if satis_birim_fiyati <= 0:
-            raise ValueError("Birim fiyat pozitif olmalıdır.")
+# ... diğer importlar ve fonksiyonlar ...
 
-        # 1. Tanker bilgilerini al
-        tanker_res = g.supabase.table('tankerler') \
-            .select('mevcut_doluluk, kapasite_litre') \
-            .eq('id', tanker_id) \
-            .eq('firma_id', sirket_id) \
-            .single() \
-            .execute()
+# services/tanker_service.py
 
-        if not tanker_res.data:
-            raise ValueError("Tanker bulunamadı veya yetkiniz yok.")
-            
-        mevcut_doluluk = Decimal(tanker_res.data['mevcut_doluluk'])
-        
-        if mevcut_doluluk <= 0:
-            raise ValueError("Tanker zaten boş, satış yapılamaz.")
+# ... diğer importlar ve fonksiyonlar ...
 
-        # 2. Satış işlemini kaydet
-        satis_kaydi = {
-            "sirket_id": sirket_id,
-            "kullanici_id": kullanici_id,
-            "tanker_id": tanker_id,
-            "bosaltilan_litre": str(mevcut_doluluk),
-            "satis_birim_fiyati": str(satis_birim_fiyati),
-            "aciklama": aciklama_str or f"{mevcut_doluluk} L süt satışı"
-        }
-        
-        if islem_tarihi_str:
-            satis_kaydi["islem_tarihi"] = datetime.strptime(islem_tarihi_str, '%Y-%m-%d').isoformat()
-        
-        # Bu insert işlemi, SQL trigger'ını tetikleyerek finansal kaydı da oluşturacak
-        satis_response = g.supabase.table('tanker_satis_islemleri').insert(satis_kaydi).execute()
-        
-        if not satis_response.data:
-            raise Exception("Satış kaydı oluşturulamadı.")
-
-        # 3. Tankeri boşalt (Doluluğu sıfırla)
-        g.supabase.table('tankerler') \
-            .update({'mevcut_doluluk': 0}) \
-            .eq('id', tanker_id) \
-            .execute()
-            
-        logger.info(f"Tanker (ID: {tanker_id}) başarıyla boşaltıldı/satıldı. Litre: {mevcut_doluluk}")
-        return satis_response.data[0]
-
-    except (ValueError, InvalidOperation) as ve:
-        raise ve
-    except Exception as e:
-        logger.error(f"Tanker satışı sırasında hata: {e}", exc_info=True)
-        raise Exception("Tanker satışı sırasında beklenmedik bir hata oluştu.")
-
+# EKLENECEK YENİ FONKSİYON (GÜNCELLENDİ)
+# EKLENECEK YENİ FONKSİYON (DÜZELTİLDİ)
 def get_collectors_for_assignment(sirket_id):
     """
     Tanker ataması modalı için sadece 'toplayici' rolündeki

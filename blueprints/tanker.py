@@ -111,24 +111,3 @@ def sil_tanker_api(tanker_id):
     except Exception as e:
         logger.error(f"Tanker silme API hatası: {e}", exc_info=True)
         return jsonify({"error": "Silme sırasında bir sunucu hatası oluştu."}), 500
-
-@tanker_bp.route('/api/sat_ve_bosalt/<int:tanker_id>', methods=['POST'])
-@login_required
-@firma_yetkilisi_required
-def sell_and_empty_tanker_api(tanker_id):
-    """
-    Bir tankerin satışını (boşaltılmasını) kaydeder ve doluluğunu sıfırlar.
-    """
-    try:
-        sirket_id = session['user']['sirket_id']
-        kullanici_id = session['user']['id']
-        data = request.get_json()
-        
-        yeni_satis = tanker_service.sell_and_empty_tanker(sirket_id, kullanici_id, tanker_id, data)
-        
-        return jsonify({"message": "Tanker başarıyla satıldı/boşaltıldı.", "satis": yeni_satis}), 201
-    except ValueError as ve:
-        return jsonify({"error": str(ve)}), 400
-    except Exception as e:
-        logger.error(f"Tanker satış API hatası: {e}", exc_info=True)
-        return jsonify({"error": "Tanker satışı sırasında bir sunucu hatası oluştu."}), 500
