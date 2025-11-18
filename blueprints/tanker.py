@@ -1,6 +1,6 @@
-# blueprints/tanker.py (YENİ SATIŞ ENDPOINT'İ EKLENMİŞ HALİ)
+# blueprints/tanker.py
 
-from flask import Blueprint, request, jsonify, g, session # 'session' eklendi
+from flask import Blueprint, request, jsonify, g, session
 from services import tanker_service
 from decorators import login_required, firma_yetkilisi_required
 import logging
@@ -12,16 +12,13 @@ tanker_bp = Blueprint('tanker', __name__)
 @tanker_bp.route('/tanker', methods=['GET'])
 @login_required
 def tanker_yonetimi_page():
-    # Bu fonksiyonun HTML render etmesi gerekiyor, app.py'de olabilir.
-    # Eğer bu blueprint HTML sayfası göstermiyorsa bu kısım gereksizdir.
-    # Şimdilik API'lere odaklanıyoruz.
-    return "Tanker Yönetimi Sayfası (Bu bir API endpoint'i değil)"
+    return "Tanker Yönetimi Sayfası"
 
 @tanker_bp.route('/tanker/api/listele', methods=['GET'])
 @login_required
 def get_tankerler_api():
     try:
-        sirket_id = session.get('user', {}).get('sirket_id') # g.user.sirket_id yerine session
+        sirket_id = session.get('user', {}).get('sirket_id')
         tankerler = tanker_service.get_tankerler(sirket_id)
         return jsonify(tankerler), 200
     except Exception as e:
@@ -33,8 +30,10 @@ def get_tankerler_api():
 @firma_yetkilisi_required
 def add_tanker_api():
     try:
+        sirket_id = session.get('user', {}).get('sirket_id')
         data = request.get_json()
-        yeni_tanker = tanker_service.add_tanker(data)
+        # ARTIK sirket_id PARAMETRESİ GÖNDERİLİYOR
+        yeni_tanker = tanker_service.add_tanker(sirket_id, data)
         return jsonify({"message": "Tanker başarıyla eklendi", "tanker": yeni_tanker}), 201
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 400
@@ -47,8 +46,9 @@ def add_tanker_api():
 @firma_yetkilisi_required
 def update_tanker_api(tanker_id):
     try:
+        sirket_id = session.get('user', {}).get('sirket_id')
         data = request.get_json()
-        guncellenen_tanker = tanker_service.update_tanker(tanker_id, data)
+        guncellenen_tanker = tanker_service.update_tanker(sirket_id, tanker_id, data)
         if guncellenen_tanker is None:
              return jsonify({"error": "Tanker bulunamadı veya güncelleme başarısız."}), 404
         return jsonify({"message": "Tanker başarıyla güncellendi", "tanker": guncellenen_tanker}), 200
@@ -71,8 +71,6 @@ def delete_tanker_api(tanker_id):
         logger.error(f"Tanker silme API hatası: {e}", exc_info=True)
         return jsonify({"error": "Tanker silinirken bir sunucu hatası oluştu."}), 500
 
-# --- Tanker Atama API'leri ---
-
 @tanker_bp.route('/tanker/api/atamalar', methods=['GET'])
 @login_required
 @firma_yetkilisi_required
@@ -91,8 +89,9 @@ def get_atama_listesi_api():
 @firma_yetkilisi_required
 def assign_tanker_api():
     try:
+        sirket_id = session.get('user', {}).get('sirket_id')
         data = request.get_json()
-        yeni_atama = tanker_service.assign_toplayici_to_tanker(data)
+        yeni_atama = tanker_service.assign_toplayici_to_tanker(sirket_id, data)
         return jsonify({"message": "Atama başarılı", "atama": yeni_atama}), 201
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 400
@@ -105,20 +104,17 @@ def assign_tanker_api():
 @firma_yetkilisi_required
 def unassign_tanker_api(atama_id):
     try:
-        tanker_service.unassign_toplayici_from_tanker(atama_id)
+        sirket_id = session.get('user', {}).get('sirket_id')
+        tanker_service.unassign_toplayici_from_tanker(sirket_id, atama_id)
         return jsonify({"message": "Atama başarıyla kaldırıldı."}), 200
     except Exception as e:
         logger.error(f"Tanker atama kaldırma API hatası: {e}", exc_info=True)
         return jsonify({"error": "Atama kaldırılırken bir hata oluştu."}), 500
 
-# === YENİ SATIŞ/BOŞALTMA ENDPOINT'İ ===
 @tanker_bp.route('/tanker/api/sat_ve_bosalt/<int:tanker_id>', methods=['POST'])
 @login_required
 @firma_yetkilisi_required
 def sell_and_empty_tanker_api(tanker_id):
-    """
-    Bir tankerin satışını (boşaltılmasını) kaydeder ve doluluğunu sıfırlar.
-    """
     try:
         sirket_id = session['user']['sirket_id']
         kullanici_id = session['user']['id']
@@ -128,9 +124,7 @@ def sell_and_empty_tanker_api(tanker_id):
         
         return jsonify({"message": "Tanker başarıyla satıldı/boşaltıldı.", "satis": yeni_satis}), 201
     except ValueError as ve:
-        # Kapasite, fiyat vb. bilinen hatalar
         return jsonify({"error": str(ve)}), 400
     except Exception as e:
         logger.error(f"Tanker satış API hatası: {e}", exc_info=True)
         return jsonify({"error": "Tanker satışı sırasında bir sunucu hatası oluştu."}), 500
-# === YENİ ENDPOINT SONU ===

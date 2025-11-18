@@ -10,7 +10,6 @@ from utils import sanitize_input
 logger = logging.getLogger(__name__)
 
 # --- Yardımcı Fonksiyon: Benzersiz Çiftçi Kullanıcı Adı Oluştur ---
-# Bu fonksiyon zaten 'kullanicilar' tablosuna ve 'kullanici_adi' sütununa baktığı için DOĞRUYDU.
 def _generate_unique_farmer_username(base_name: str, sirket_id: int) -> str:
     clean_name = ''.join(c for c in sanitize_input(base_name).lower() if c.isalnum() or c == '_').replace(' ', '_')
     username_base = f"{clean_name}_ciftci"
@@ -27,29 +26,19 @@ def _generate_unique_farmer_username(base_name: str, sirket_id: int) -> str:
         username = f"{username_base}_{counter}"
         counter += 1
 
-# --- Ana Servis Fonksiyonları (ŞEMAYA GÖRE GÜNCELLENDİ) ---
-
-# services/firma_service.py içindeki add_kullanici fonksiyonunu BUNUNLA DEĞİŞTİR
+# --- Ana Servis Fonksiyonları ---
 
 def add_kullanici(sirket_id, data):
     """
     Yeni bir çiftçi/toplayıcı/muhasebeci oluşturur.
-    (Firma yönetimi sayfasından gelen 'kullanici_adi'nı kabul edecek şekilde düzeltildi.)
     """
     try:
         sifre = data.get('sifre')
         rol = sanitize_input(data.get('rol'))
-        
-        # --- DÜZELTME BURADA ---
-        # 'isim' yerine 'kullanici_adi'nı oku (formdan bu geliyor)
         kullanici_adi = sanitize_input(data.get('kullanici_adi'))
-        # 'email' alanını opsiyonel yap (formda bu alan yok)
         email = sanitize_input(data.get('email')) or None 
-        # --- DÜZELTME SONU ---
-        
-        telefon = sanitize_input(data.get('telefon')) # Bu zaten opsiyoneldi
+        telefon = sanitize_input(data.get('telefon'))
 
-        # Kontrolü güncelle: 'email' zorunlu değil, 'kullanici_adi' zorunlu.
         if not kullanici_adi or not sifre or not rol:
             raise ValueError("Kullanıcı adı, şifre ve rol alanları zorunludur.")
             
@@ -58,7 +47,6 @@ def add_kullanici(sirket_id, data):
             raise ValueError(f"Geçersiz rol. Rol '{UserRole.CIFCI.value}', '{UserRole.TOPLAYICI.value}' veya '{UserRole.MUHASEBECI.value}' olmalı.")
 
         # Kullanıcı adının benzersizliğini kontrol et
-        # (Orijinal kod 'eposta'yı kontrol ediyordu, 'kullanici_adi' olarak düzeltildi)
         kullanici_var_mi = g.supabase.table('kullanicilar') \
             .select('id', count='exact') \
             .eq('kullanici_adi', kullanici_adi) \
@@ -72,9 +60,9 @@ def add_kullanici(sirket_id, data):
         kullanici_data = {
             'sirket_id': sirket_id,
             'rol': rol,
-            'kullanici_adi': kullanici_adi, # 'isim' yerine 'kullanici_adi' kaydet
+            'kullanici_adi': kullanici_adi,
             'sifre': hashed_sifre, 
-            'eposta': email, # Opsiyonel (None olabilir)
+            'eposta': email,
             'telefon_no': telefon
         }
         
@@ -90,26 +78,18 @@ def add_kullanici(sirket_id, data):
         logger.warning(f"Kullanıcı eklenirken doğrulama hatası: {str(e)}")
         if "unique constraint" in str(e).lower() and "kullanicilar_eposta_key" in str(e).lower():
             raise ValueError("Bu e-posta adresi zaten kayıtlı.")
-        # 'kullanicili_sirket_id_kullanici_adi_key' hatası zaten ValueError'da yakalanacak
         raise e
     except Exception as e:
         logger.error(f"Kullanıcı eklenirken beklenmedik hata: {e}", exc_info=True)
         raise Exception(f"Kullanıcı oluşturulurken sunucu hatası: {str(e)}")
 
-# services/firma_service.py içindeki update_kullanici fonksiyonunu BUNUNLA DEĞİŞTİR# services/firma_service.py içindeki update_kullanici fonksiyonunu BUNUNLA DEĞİŞTİR
-
 def update_kullanici(sirket_id, kullanici_db_id, data):
     """
-    Mevcut bir kullanıcının bilgilerini, şifresini ve (eğer toplayıcı ise)
-    tedarikçi atamalarını günceller.
+    Mevcut bir kullanıcının bilgilerini günceller.
     """
     try:
-        # --- 1. Kullanıcı Temel Bilgilerini Güncelle ---
-        
-        # firma_yonetimi.js'den 'kullanici_adi' geliyor
         kullanici_adi = sanitize_input(data.get('kullanici_adi')) 
         telefon = sanitize_input(data.get('telefon_no')) 
-        adres = sanitize_input(data.get('adres')) 
         yeni_sifre = data.get('sifre')
 
         update_data_kullanicilar = {}
@@ -120,10 +100,6 @@ def update_kullanici(sirket_id, kullanici_db_id, data):
         if telefon:
             update_data_kullanicilar['telefon_no'] = telefon
             
-        # NOT: 'adres' alanı 'kullanicilar' tablosunda yok. 
-        # Bu veri (adres) şu an kaydedilmiyor. 
-        # (Şimdilik sorun değil, şemayı değiştirmeyelim.)
-
         if yeni_sifre:
             hashed_sifre = bcrypt.generate_password_hash(yeni_sifre).decode('utf-8')
             update_data_kullanicilar['sifre'] = hashed_sifre
@@ -135,21 +111,18 @@ def update_kullanici(sirket_id, kullanici_db_id, data):
                 .eq('sirket_id', sirket_id) \
                 .execute()
 
-        # --- 2. Tedarikçi Atamalarını Güncelle (ASIL DÜZELTME BURADA) ---
+        # Tedarikçi Atamalarını Güncelle
         atanan_tedarikciler_ids = data.get('atanan_tedarikciler')
 
-        # Eğer 'atanan_tedarikciler' listesi frontend'den geldiyse (None değilse)
-        # (Sadece 'toplayici' rolü için gelir)
         if atanan_tedarikciler_ids is not None:
-            
-            # 2a. Bu toplayıcının mevcut tüm atamalarını (Adım 1'de eklediğimiz tablodan) sil
+            # Mevcut atamaları sil
             g.supabase.table('toplayici_tedarikci_atama') \
                 .delete() \
                 .eq('sirket_id', sirket_id) \
                 .eq('toplayici_id', kullanici_db_id) \
                 .execute()
 
-            # 2b. Yeni atamaları ekle (eğer liste boş gelmediyse)
+            # Yeni atamaları ekle
             if atanan_tedarikciler_ids:
                 yeni_atamalar_data = []
                 for tedarikci_id in atanan_tedarikciler_ids:
@@ -168,7 +141,7 @@ def update_kullanici(sirket_id, kullanici_db_id, data):
 
         logger.info(f"Kullanıcı (DB ID: {kullanici_db_id}) bilgileri güncellendi.")
         
-        return True # blueprints/firma.py bunu bekliyor
+        return True
 
     except ValueError as ve:
         raise ve 
@@ -178,35 +151,10 @@ def update_kullanici(sirket_id, kullanici_db_id, data):
 
 def delete_kullanici(kullanici_db_id):
     """
-    Bir kullanıcıyı sistemden güvenli bir şekilde siler (Toplayıcı, Çiftçi vb.).
-    ŞEMA GÜNCELLEMESİ: 
-    - 'user_id' (UUID) yerine 'kullanici_db_id' (bigint) kullanıldı.
-    - 'cleanup_user_data' RPC'si muhtemelen 'bigint' ID bekliyordur (şemadaki FK'lara göre).
-    - 'kullanici_detaylari' ve 'auth.users' silme adımları kaldırıldı.
+    Bir kullanıcıyı sistemden siler.
     """
     try:
-        # Şemadaki Foreign Key'ler (kullanici_id bigint) 'kullanicilar.id' (bigint) kullandığı için
-        # RPC'nin de Auth UUID yerine bu 'bigint' ID'yi beklemesi gerekir.
-        # EĞER RPC 'p_auth_user_id' (UUID) bekliyorsa, bu fonksiyon ÇALIŞMAZ.
-        
-        # *** ÖNEMLİ NOT: ***
-        # Eğer 'cleanup_user_data' RPC'niz hala Auth UUID bekliyorsa, 
-        # ve sizin 'kullanicilar' tablonuzda bu UUID kayıtlı değilse,
-        # 'delete_kullanici' fonksiyonunuz mevcut haliyle ÇALIŞAMAZ.
-        # Şimdilik RPC'nin de 'bigint' ID'ye göre güncellendiğini varsayıyorum.
-        
-        # 1. Adım: 'cleanup_user_data' SQL fonksiyonunu çağır (bigint ID ile)
-        # rpc_result = g.supabase.rpc('cleanup_user_data', {'p_kullanici_db_id': kullanici_db_id}).execute()
-        
-        # ... RPC hatası kontrolü ...
-
-        # 2. Adım: 'kullanici_detaylari' tablosu yok.
-        
-        # 3. Adım: 'kullanicilar' tablosundan sil (cascade delete olmalı)
         g.supabase.table('kullanicilar').delete().eq('id', kullanici_db_id).execute()
-
-        # 4. Adım: Auth kullanıcısı silme kaldırıldı.
-        
         logger.info(f"Kullanıcı (DB ID: {kullanici_db_id}) başarıyla silindi.")
         return {"success": True, "message": "Kullanıcı başarıyla silindi."}
 
@@ -220,14 +168,8 @@ def delete_kullanici(kullanici_db_id):
 def get_kullanicilar_by_sirket_id(sirket_id):
     """
     Bir şirkete bağlı tüm kullanıcıları listeler.
-    ŞEMA GÜNCELLEMESİ: 
-    - 'kullanici_detaylari' -> 'kullanicilar' tablosu oldu.
-    - 'id' (UUID) -> 'id' (bigint) oldu.
-    - 'isim' -> 'kullanici_adi' oldu.
-    - 'kullanici_db_id' kaldırıldı.
     """
     try:
-        # BU SORGUNUN BAŞARILI OLMASI GEREKİR:
         response = g.supabase.table('kullanicilar') \
             .select('id, rol, kullanici_adi') \
             .eq('sirket_id', sirket_id) \
@@ -236,15 +178,13 @@ def get_kullanicilar_by_sirket_id(sirket_id):
             .order('kullanici_adi', desc=False) \
             .execute()
         
-        # Frontend'in 'isim' ve 'kullanici_db_id' bekleme ihtimaline karşı
-        # veriyi eski formata benzeterek döndürelim:
         formatted_data = []
         for user in response.data:
             formatted_data.append({
-                'id': user.get('id'),                   # Artık bu bigint ID
+                'id': user.get('id'),
                 'rol': user.get('rol'),
-                'isim': user.get('kullanici_adi'),      # 'isim' alanı için 'kullanici_adi' kullan
-                'kullanici_db_id': user.get('id')       # 'kullanici_db_id' için de 'id' kullan
+                'isim': user.get('kullanici_adi'),
+                'kullanici_db_id': user.get('id')
             })
             
         return formatted_data
@@ -256,8 +196,7 @@ def get_kullanicilar_by_sirket_id(sirket_id):
 def reset_kullanici_sifre(kullanici_id_to_reset, yeni_sifre_plain):
     """
     Firma yetkilisinin, kendi şirketindeki bir kullanıcının şifresini sıfırlamasını sağlar.
-    Bu fonksiyon şema ile uyumluydu ('kullanicilar' tablosu ve 'id' (bigint) kullanıyor).
-    Sadece rol kontrolünü güncelledim.
+    (Mevcut fonksiyon korunuyor)
     """
     try:
         istek_yapan_sirket_id = g.user.sirket_id
@@ -272,7 +211,6 @@ def reset_kullanici_sifre(kullanici_id_to_reset, yeni_sifre_plain):
         if not kullanici_res.data:
             raise ValueError("Kullanıcı bulunamadı veya bu kullanıcı üzerinde işlem yapma yetkiniz yok.")
 
-        # Rol kontrolü (şemaya göre)
         gecerli_roller = [UserRole.CIFCI.value, UserRole.TOPLAYICI.value, UserRole.MUHASEBECI.value]
         if kullanici_res.data['rol'] not in gecerli_roller:
             raise ValueError("Sadece çiftçi, toplayıcı veya muhasebeci rolündeki kullanıcıların şifresi değiştirilebilir.")
@@ -293,17 +231,43 @@ def reset_kullanici_sifre(kullanici_id_to_reset, yeni_sifre_plain):
         logger.error(f"Kullanıcı şifresi ayarlanırken hata: {e}", exc_info=True)
         raise Exception(f"Kullanıcı şifresi sıfırlanırken sunucu hatası: {str(e)}")
 
-#
-# BU FONKSİYONU services/firma_service.py DOSYANA EKLE
-#
+# --- EKLENEN/DÜZELTİLEN FONKSİYONLAR ---
 
-#
-# BU FONKSİYONUN services/firma_service.py DOSYANDA OLDUĞUNDAN EMİN OL
-#
+def set_user_password(sirket_id, kullanici_id, yeni_sifre):
+    """
+    Senaryo 9 hatasını çözen fonksiyon. 
+    Firma yetkilisinin, alt kullanıcısının şifresini değiştirmesini sağlar.
+    """
+    try:
+        if not yeni_sifre:
+            raise ValueError("Yeni şifre boş olamaz.")
+            
+        # Kullanıcının bu şirkete ait olup olmadığını kontrol et
+        check_user = g.supabase.table('kullanicilar').select('id, rol') \
+            .eq('id', kullanici_id) \
+            .eq('sirket_id', sirket_id) \
+            .in_('rol', [UserRole.TOPLAYICI.value, UserRole.MUHASEBECI.value, UserRole.CIFCI.value]) \
+            .single() \
+            .execute()
+            
+        if not check_user.data:
+            raise ValueError("Kullanıcı bulunamadı veya bu işlem için yetkiniz yok.")
+
+        hashed_sifre = bcrypt.generate_password_hash(yeni_sifre).decode('utf-8')
+
+        g.supabase.table('kullanicilar').update({'sifre': hashed_sifre}).eq('id', kullanici_id).execute()
+        
+        return True
+    except ValueError as ve:
+        raise ve
+    except Exception as e:
+        logger.error(f"Şifre sıfırlanırken hata: {e}", exc_info=True)
+        raise Exception("Şifre sıfırlama işlemi başarısız oldu.")
 
 def get_kullanici_detaylari(sirket_id, kullanici_id):
     """
     Belirli bir kullanıcının detaylarını ve atanmış tedarikçilerini getirir.
+    (Tablo ismi hatası düzeltildi: toplayici_tedarikci_atama)
     """
     try:
         kullanici_res = g.supabase.table('kullanicilar') \
@@ -317,7 +281,8 @@ def get_kullanici_detaylari(sirket_id, kullanici_id):
         if not kullanici_data:
             return None
 
-        atananlar_res = g.supabase.table('toplayici_tedarikci_atananlari') \
+        # DÜZELTME: Tablo ismi 'toplayici_tedarikci_atama' olarak güncellendi
+        atananlar_res = g.supabase.table('toplayici_tedarikci_atama') \
             .select('tedarikci_id') \
             .eq('toplayici_id', kullanici_id) \
             .eq('sirket_id', sirket_id) \

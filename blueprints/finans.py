@@ -20,7 +20,6 @@ def finans_sayfasi():
 @login_required
 def get_finansal_islemler():
     try:
-        # GÜNCELLEME: Session'dan kullanıcı bilgilerini alıyoruz.
         user_info = session['user']
         sirket_id = user_info['sirket_id']
         kullanici_id = user_info['id']
@@ -28,7 +27,6 @@ def get_finansal_islemler():
         
         sayfa = int(request.args.get('sayfa', 1))
         
-        # GÜNCELLEME: Servis fonksiyonunu yeni parametrelerle çağırıyoruz.
         islemler, toplam_sayi = finans_service.get_paginated_transactions(sirket_id, kullanici_id, rol, sayfa, limit=15)
         
         return jsonify({"islemler": islemler, "toplam_kayit": toplam_sayi})
@@ -42,8 +40,16 @@ def add_finansal_islem():
     try:
         sirket_id = session['user']['sirket_id']
         kullanici_id = session['user']['id']
-        message = finans_service.add_transaction(sirket_id, kullanici_id, request.get_json())
-        return jsonify({"message": message}), 201
+        
+        # Servisten dönen sonucu al (artık dict dönüyor)
+        result = finans_service.add_transaction(sirket_id, kullanici_id, request.get_json())
+        
+        # Test scripti ve frontend için 'islem' verisini de yanıta ekle
+        return jsonify({
+            "message": result['message'], 
+            "islem": result['data']
+        }), 201
+        
     except ValueError as ve:
         return jsonify({"error": str(ve)}), 400
     except Exception:
