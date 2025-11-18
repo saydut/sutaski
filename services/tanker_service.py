@@ -183,3 +183,55 @@ def get_collectors_for_assignment(sirket_id):
     except Exception as e:
         logger.error(f"Atama için toplayıcılar alınırken hata: {e}", exc_info=True)
         raise
+
+def sell_and_empty_tanker(sirket_id, kullanici_id, tanker_id, data):
+    """
+    Tankeri satar (sut_satis_islemleri'ne ekler) ve boşaltır (mevcut_doluluk = 0).
+    """
+    try:
+        # 1. Verileri al ve doğrula
+        birim_fiyat = data.get('birim_fiyat')
+        aciklama = data.get('aciklama', '')
+
+        if not birim_fiyat:
+            raise ValueError("Birim satış fiyatı zorunludur.")
+            
+        try:
+            birim_fiyat = float(birim_fiyat)
+        except ValueError:
+             raise ValueError("Fiyat sayısal olmalıdır.")
+
+        # 2. Tankerin güncel doluluk bilgisini çek
+        tanker_resp = g.supabase.table('tankerler').select('*').eq('id', tanker_id).single().execute()
+        if not tanker_resp.data:
+            raise ValueError("Tanker bulunamadı.")
+            
+        tanker = tanker_resp.data
+        miktar_kg = float(tanker.get('mevcut_doluluk', 0))
+        
+        if miktar_kg <= 0:
+            raise ValueError("Boş tanker satılamaz.")
+
+        toplam_tutar = miktar_kg * birim_fiyat
+
+        # 3. Satış Kaydı Oluştur (Trigger ile Finans'a da gidecek)
+        satis_data = {
+            'firma_id': sirket_id,
+            'kullanici_id': kullanici_id,
+            'tanker_id': tanker_id,
+            'miktar_kg': miktar_kg,
+            'birim_satis_fiyati': birim_fiyat,
+            'toplam_tutar': toplam_tutar,
+            'aciklama': aciklama
+        }
+        
+        satis_resp = g.supabase.table('sut_satis_islemleri').insert(satis_data).execute()
+        
+        # 4. Tankeri Boşalt (Update)
+        g.supabase.table('tankerler').update({'mevcut_doluluk': 0}).eq('id', tanker_id).execute()
+
+        return satis_resp.data[0]
+
+    except Exception as e:
+        logger.error(f"Tanker satış/boşaltma hatası: {e}", exc_info=True)
+        raise
