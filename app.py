@@ -1,6 +1,7 @@
 # app.py
 
 import os
+import traceback  # Hatayı detaylı görmek için gerekli
 from flask import Flask, render_template, request, session, g, jsonify, flash, redirect, url_for
 from dotenv import load_dotenv
 from datetime import datetime
@@ -37,81 +38,91 @@ def create_app():
     app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "varsayilan-cok-guvenli-bir-anahtar")
     app.config['JSON_AS_ASCII'] = False
 
-    # === DEKORATÖRLER app TANIMLAMASINDAN SONRA, BURAYA TAŞINDI ===
-    # ... (app.before_request ve app.context_processor fonksiyonları aynı kalıyor) ...
+    # === HATA AYIKLAMA (500) MODU ===
+    # Bu blok, 'Internal Server Error' hatasının nedenini ekrana basar.
+    @app.errorhandler(500)
+    def internal_error(error):
+        error_trace = traceback.format_exc()
+        logging.error(f"500 Hatası Detayı: {error_trace}")
+        
+        return f"""
+        <div style="font-family: monospace; background: #fff3cd; color: #856404; padding: 20px; border: 1px solid #ffeeba; margin: 20px;">
+            <h2 style="color: #721c24;">Sistem Hatası (500)</h2>
+            <p>Aşağıdaki hata kodunu kopyalayıp geliştiriciye iletin:</p>
+            <hr>
+            <pre style="white-space: pre-wrap; background: #f8f9fa; padding: 15px; border: 1px solid #ddd;">{error_trace}</pre>
+        </div>
+        """, 500
+    # =================================
+
     @app.before_request
     def setup_supabase_client():
         if 'supabase' not in g:
             url = os.environ.get("SUPABASE_URL")
             key = os.environ.get("SUPABASE_KEY")
-            g.supabase = create_client(url, key)
+            # Hata durumunda boş client oluşturmayı dene veya logla
+            try:
+                g.supabase = create_client(url, key)
+            except Exception as e:
+                logging.error(f"Supabase bağlantı hatası: {e}")
+                # Burada hata fırlatmıyoruz, view içinde patlarsa errorhandler yakalayacak
 
     @app.before_request
     def check_for_maintenance():
-        # 1. Statik dosyaları her zaman istisna tut (CSS, JS)
+        # 1. Statik dosyaları her zaman istisna tut
         if request.path.startswith('/static'):
             return
 
         try:
             # 2. Bakım modu durumunu veritabanından çek
             if 'maintenance_mode' not in g:
-                response = g.supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'maintenance_mode').single().execute()
-                g.maintenance_mode = response.data.get('ayar_degeri', 'false') == 'true' if response.data else False
+                # Supabase bağlantısı yoksa varsayılan False olsun
+                if hasattr(g, 'supabase'):
+                    response = g.supabase.table('ayarlar').select('ayar_degeri').eq('ayar_adi', 'maintenance_mode').single().execute()
+                    g.maintenance_mode = response.data.get('ayar_degeri', 'false') == 'true' if response.data else False
+                else:
+                    g.maintenance_mode = False
 
-            # 3. Bakım modu AÇIK DEĞİLSE, hiçbir şey yapma, devam et
+            # 3. Bakım modu AÇIK DEĞİLSE, devam et
             if not g.maintenance_mode:
                 return
 
             # 4. Bakım modu AÇIKSA:
-            
-            # 5. Kullanıcının rolünü kontrol et
             user_rol = session.get('user', {}).get('rol')
 
-            # 6. EĞER KULLANICI ADMİN İSE, her şeye izin ver
+            # Admin ise geç
             if user_rol == 'admin':
-                return # Admin her yere erişebilir
+                return 
 
-            # 7. EĞER KULLANICI ADMİN DEĞİLSE (veya giriş yapmamışsa):
-            
-            # Bakım modunda bile erişilebilen yolları (Admin girişi için) tanımla
+            # İzin verilen yollar
             exempt_paths = [
-                url_for('main.landing_page'),   # '/'
-                url_for('auth.login_page'),     # '/login'
-                url_for('auth.login_api'),      # '/api/login'
-                url_for('auth.logout')          # '/logout'
+                url_for('main.landing_page'),
+                url_for('auth.login_page'),
+                url_for('auth.login_api'),
+                url_for('auth.logout')
             ]
             
-            # Eğer istek bu temel sayfalardan biriyse, izin ver (Admin de burayı kullanacak)
             if request.path in exempt_paths:
                 return
 
-            # Kayıt sayfalarını engelle
             if request.path.startswith(url_for('auth.register_page')) or request.path.startswith(url_for('auth.register_user_api')):
-                
                 flash("Uygulama şu anda bakımda. Yeni kayıt oluşturulamaz.", "warning")
-                
-                # Eğer bu bir API isteğiyse (/api/register), JSON ile yönlendirme bildir
                 if request.path.startswith(url_for('auth.register_user_api')):
-                     return jsonify({"error": "Uygulama bakımda, yeni kayıt yapılamaz.", "redirect_to_landing": True}), 403 # 403 Yasak
-                
-                # Bu bir sayfa isteğiyse (/register), ana sayfaya yönlendir
+                     return jsonify({"error": "Uygulama bakımda.", "redirect_to_landing": True}), 403
                 return redirect(url_for('main.landing_page'))
 
-            # Diğer tüm API isteklerini (/api/sut_girdisi vb.) engelle
             if request.path.startswith('/api/'):
-                return jsonify({"error": "Uygulama şu anda bakımda. Lütfen daha sonra tekrar deneyin."}), 503
+                return jsonify({"error": "Uygulama bakımda."}), 503
             
-            # Diğer tüm sayfa isteklerini (/panel, /tedarikciler vb.) bakım sayfasına yönlendir
             return render_template('maintenance.html'), 503
     
         except Exception as e:
-            logging.warning(f"Bakım modu kontrolü sırasında bir hata oluştu: {e}")
+            logging.warning(f"Bakım modu kontrolü hatası: {e}")
             pass
 
     @lru_cache(maxsize=None)
     def get_version_info():
         try:
-            # Bu fonksiyon g objesini kullanmadığı için kendi istemcisini oluşturur
             url = os.environ.get("SUPABASE_URL")
             key = os.environ.get("SUPABASE_KEY")
             temp_supabase_client = create_client(url, key)
@@ -122,7 +133,7 @@ def create_app():
             app_version = surum_notlari[0]['surum_no']
             return app_version, surum_notlari
         except Exception as e:
-            logging.error(f"Sürüm bilgileri çekilirken hata oluştu: {e}")
+            logging.error(f"Sürüm bilgileri hatası: {e}")
             return "N/A", []
 
     @app.context_processor
@@ -130,12 +141,10 @@ def create_app():
         app_version, surum_notlari = get_version_info()
         return {'APP_VERSION': app_version, 'SURUM_NOTLARI': surum_notlari}
     
-    # === DEKORATÖRLERİN SONU ===
-
     # Eklentileri başlat
     bcrypt.init_app(app)
 
-    # Tüm Blueprint'leri kaydet
+    # Blueprint'leri kaydet
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
