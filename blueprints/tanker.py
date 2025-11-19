@@ -12,7 +12,7 @@ tanker_bp = Blueprint('tanker', __name__)
 @tanker_bp.route('/tanker', methods=['GET'])
 @login_required
 def tanker_yonetimi_page():
-    return "Tanker Yönetimi Sayfası"
+    return render_template('tanker_yonetimi.html')
 
 @tanker_bp.route('/tanker/api/listele', methods=['GET'])
 @login_required
