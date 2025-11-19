@@ -1,59 +1,145 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="tr" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Süt Aşkı - Giriş Yap</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-{% block title %}Giriş Yap - Süt Takip Sistemi{% endblock %}
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { brand: { 600: '#0284c7', 500: '#0ea5e9' } }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-full flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50">
 
-{% block content %}
-<div class="main-wrapper d-flex justify-content-center align-items-center min-vh-100 p-3">
-    <div class="card p-4 p-md-5 w-100" style="max-width: 450px;">
-        <button id="theme-toggle" class="btn align-self-end">
-            <i id="sun-icon" class="bi bi-sun-fill"></i>
-            <i id="moon-icon" class="bi bi-moon-fill"></i>
-        </button>
-
-        <h2 class="text-center mb-4 fw-bold">Sisteme Giriş Yap</h2>
-        
-        <div id="alert-container"></div>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <div class="mb-3">
-            <label for="kullanici-input" class="form-label">Kullanıcı Adı</label>
-            <input type="text" class="form-control" id="kullanici-input" placeholder="Kullanıcı adınızı girin">
+    <div class="sm:mx-auto sm:w-full sm:max-w-md">
+        <div class="mx-auto h-16 w-16 bg-brand-600 rounded-full flex items-center justify-center shadow-lg mb-6">
+            <i class="fa-solid fa-cow text-white text-3xl"></i>
         </div>
-        <div class="mb-3">
-            <label for="sifre-input" class="form-label">Şifre</label>
-            <input type="password" class="form-control" id="sifre-input" placeholder="Şifrenizi girin">
-        </div>
-        <div class="d-grid mt-4">
-            <button class="btn btn-primary" onclick="girisYap()">Giriş Yap</button>
-        </div>
-        <p class="text-center mt-3 mb-0">
-            <small class="text-secondary">Hesabın yok mu? <a href="{{ url_for('auth.register_page') }}">Yeni Kayıt Oluştur</a></small>
+        <h2 class="text-center text-3xl font-bold tracking-tight text-gray-900">
+            Süt Aşkı
+        </h2>
+        <p class="mt-2 text-center text-sm text-gray-600">
+            Yönetim Paneli Girişi
         </p>
-        
-        <!-- YENİ BUTONLAR (GÜNCELLENDİ) -->
-        <div class="text-center mt-4 d-flex justify-content-center gap-3">
-            <a href="{{ url_for('main.landing_page', from_login='true') }}" class="text-secondary">
-                <i class="bi bi-house"></i> Ana Sayfa
-            </a>
-            <a href="#" class="text-secondary" data-bs-toggle="modal" data-bs-target="#hakkindaModal">
-                <i class="bi bi-info-circle"></i> Uygulama Hakkında
-            </a>
-        </div>
-
     </div>
-</div>
-{% endblock %}
 
-{% block scripts %}
-<script src="{{ url_for('static', filename='js/login.js') }}"></script>
-{% endblock %}
+    <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div class="bg-white py-8 px-4 shadow-xl sm:rounded-xl sm:px-10 border border-gray-100">
+            
+            <div id="error-box" class="hidden mb-6 rounded-lg p-4 text-sm bg-red-50 text-red-700 border border-red-200 flex items-center">
+                <i class="fa-solid fa-circle-exclamation mr-2"></i>
+                <span id="error-message">Hata mesajı</span>
+            </div>
+
+            <form id="loginForm" class="space-y-6">
+                
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700">Kullanıcı Adı</label>
+                    <div class="mt-1 relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fa-regular fa-user text-gray-400"></i>
+                        </div>
+                        <input id="username" name="username" type="text" required 
+                            class="block w-full rounded-lg border-0 py-3 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-brand-600 sm:text-sm sm:leading-6 shadow-sm"
+                            placeholder="Kullanıcı adınız">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700">Şifre</label>
+                    <div class="mt-1 relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fa-solid fa-lock text-gray-400"></i>
+                        </div>
+                        <input id="password" name="password" type="password" required 
+                            class="block w-full rounded-lg border-0 py-3 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-brand-600 sm:text-sm sm:leading-6 shadow-sm"
+                            placeholder="••••••••">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <input id="remember-me" name="remember" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600">
+                        <label for="remember-me" class="ml-2 block text-sm text-gray-900">Beni hatırla</label>
+                    </div>
+                </div>
+
+                <div>
+                    <button type="submit" id="submitBtn" class="flex w-full justify-center rounded-lg bg-brand-600 px-3 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 transition-all duration-200">
+                        Giriş Yap
+                    </button>
+                </div>
+            </form>
+
+        </div>
+        
+        <p class="mt-8 text-center text-xs text-gray-500">
+            &copy; 2025 Süt Aşkı Yazılım Sistemleri
+        </p>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault(); // Sayfanın yenilenmesini engelle
+            
+            const btn = document.getElementById('submitBtn');
+            const errorBox = document.getElementById('error-box');
+            const errorMsg = document.getElementById('error-message');
+            
+            // Butonu yükleniyor moduna al
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Giriş Yapılıyor...';
+            btn.disabled = true;
+            errorBox.classList.add('hidden');
+
+            // Form verilerini al
+            const formData = {
+                kullanici_adi: document.getElementById('username').value,
+                sifre: document.getElementById('password').value
+            };
+
+            try {
+                // Senin mevcut API adresine JSON gönderiyoruz
+                const response = await fetch("{{ url_for('auth.login_api') }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // Başarılı! Ana panele yönlendir
+                    // main.panel rotasını kullanarak adresi alıyoruz
+                    window.location.href = "{{ url_for('main.panel') }}";
+                } else {
+                    // Hata var (Şifre yanlış vb.)
+                    throw new Error(result.error || 'Giriş başarısız');
+                }
+            } catch (err) {
+                // Hatayı ekrana bas
+                errorMsg.textContent = err.message;
+                errorBox.classList.remove('hidden');
+                
+                // Butonu eski haline getir
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
