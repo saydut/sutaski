@@ -1,31 +1,41 @@
-{# templates/_hizli_islemler.html #}
+{% if request.endpoint != 'main.panel' %}
+<a href="{{ url_for('main.panel') }}" class="btn btn-secondary btn-sm">Ana Panele Dön</a>
+{% endif %}
 
-<div class="dropdown">
-    <button class="btn btn-primary dropdown-toggle btn-sm" type="button" id="hizliIslemlerDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-        <i class="bi bi-lightning-charge-fill me-1"></i> Hızlı İşlemler
+<div class="btn-group">
+    <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-lightning-charge-fill"></i> Hızlı İşlemler
     </button>
-    <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="hizliIslemlerDropdown">
+    <ul class="dropdown-menu dropdown-menu-end">
+        <li><a class="dropdown-item" href="{{ url_for('main.panel') }}"><i class="bi bi-house-door-fill me-2"></i>Ana Panele Dön</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="{{ url_for('main.tedarikciler_sayfasi') }}"><i class="bi bi-people-fill me-2"></i>Tedarikçi Yönetimi</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('yem.yem_yonetimi_sayfasi') }}"><i class="bi bi-inboxes-fill me-2"></i>Yem Yönetimi</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('finans.finans_sayfasi') }}"><i class="bi bi-cash-coin me-2"></i>Finans Yönetimi</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('main.raporlar_page') }}"><i class="bi bi-bar-chart-line-fill me-2"></i>Detaylı Raporlar</a></li>
+        <li><hr class="dropdown-divider"></li>
         
-        {% if session['user']['rol'] in ['admin', 'firma_yetkilisi'] %}
-            <li><h6 class="dropdown-header">Yönetim</h6></li>
-            <li><a class="dropdown-item" href="#" onclick="yeniTedarikciModalAc()"><i class="bi bi-person-plus-fill me-2"></i>Tedarikçi Ekle</a></li>
-            <li><a class="dropdown-item" href="#" onclick="yeniKullaniciModalAc()"><i class="bi bi-person-badge-fill me-2"></i>Personel Ekle</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('tanker.tanker_yonetimi_page') }}"><i class="bi bi-fuel-pump-fill me-2"></i>Tanker Yönetimi</a></li>
-            <li><hr class="dropdown-divider"></li>
+        {% if session.get('user', {}).get('rol') in ['admin', 'firma_yetkilisi'] %}
+        <li><a class="dropdown-item" href="{{ url_for('firma.firma_yonetim_sayfasi') }}"><i class="bi bi-person-badge me-2"></i>Kullanıcı Yönetimi</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('tarife.tarife_yonetim_sayfasi') }}"><i class="bi bi-tags-fill me-2"></i>Süt Fiyat Tarifesi</a></li>
+        
+        <li><a class="dropdown-item" href="{{ url_for('tanker.tanker_yonetimi_sayfasi') }}"><i class="bi bi-fuel-pump-fill me-2"></i>Tanker Yönetimi</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('masraf.masraf_yonetim_sayfasi') }}"><i class="bi bi-wallet-fill me-2"></i>Genel Masraf Yönetimi</a></li>
         {% endif %}
-
-        {% if session['user']['rol'] in ['admin', 'firma_yetkilisi', 'muhasebeci'] %}
-            <li><h6 class="dropdown-header">Finans & Stok</h6></li>
-            <li><a class="dropdown-item" href="#" onclick="yeniFinansIslemiModalAc()"><i class="bi bi-cash-coin me-2"></i>Ödeme/Tahsilat Ekle</a></li>
-            <li><a class="dropdown-item" href="#" onclick="yemStokGirisiModalAc()"><i class="bi bi-box-seam-fill me-2"></i>Yem Stok Girişi</a></li>
-            <li><hr class="dropdown-divider"></li>
-        {% endif %}
-
-        {% if session['user']['rol'] in ['admin', 'firma_yetkilisi', 'toplayici'] %}
-            <li><h6 class="dropdown-header">Operasyon</h6></li>
-            <li><a class="dropdown-item" href="#" onclick="sutGirisiModalAc()"><i class="bi bi-droplet-fill me-2"></i>Süt Girişi Yap</a></li>
-            <li><a class="dropdown-item" href="#" onclick="yemSatisiModalAc()"><i class="bi bi-cart-fill me-2"></i>Yem Satışı Yap</a></li>
+        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#hakkindaModal"><i class="bi bi-info-circle-fill me-2"></i>Uygulama Hakkında</a></li>
+        
+        {% if session.get('user', {}).get('rol') == 'admin' %}
+        <li><a class="dropdown-item" href="{{ url_for('admin.admin_panel') }}"><i class="bi bi-shield-lock-fill me-2"></i>Admin Paneli</a></li>
         {% endif %}
         
+        <li><a class="dropdown-item" href="{{ url_for('profil.profil_sayfasi') }}"><i class="bi bi-person-circle me-2"></i>Profilim</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="#" onclick="askForNotificationPermission()"><i class="bi bi-bell-fill me-2"></i>Bildirimleri Aç</a></li>
+        <li><a class="dropdown-item text-danger" href="#" onclick="guvenliCikis()"><i class="bi bi-box-arrow-right me-2"></i>Güvenli Çıkış</a></li>
     </ul>
 </div>
+
+<button id="theme-toggle" class="btn btn-sm">
+    <i id="sun-icon" class="bi bi-sun-fill"></i>
+    <i id="moon-icon" class="bi bi-moon-fill"></i>
+</button>

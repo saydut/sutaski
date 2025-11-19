@@ -1,6 +1,6 @@
 # blueprints/tanker.py
 
-from flask import Blueprint, request, jsonify, g, session
+from flask import Blueprint, request, jsonify, g, session, render_template # render_template eklendi
 from services import tanker_service
 from decorators import login_required, firma_yetkilisi_required
 import logging
@@ -11,8 +11,9 @@ tanker_bp = Blueprint('tanker', __name__)
 
 @tanker_bp.route('/tanker', methods=['GET'])
 @login_required
-def tanker_yonetimi_page():
-    return render_template('tanker_yonetimi.html')
+def tanker_yonetimi_sayfasi(): # İsim düzeltildi (page -> sayfasi)
+    """Tanker yönetimi sayfasını render eder."""
+    return render_template('tanker_yonetimi.html') # Düzeltildi: HTML render ediyor
 
 @tanker_bp.route('/tanker/api/listele', methods=['GET'])
 @login_required
@@ -32,7 +33,6 @@ def add_tanker_api():
     try:
         sirket_id = session.get('user', {}).get('sirket_id')
         data = request.get_json()
-        # ARTIK sirket_id PARAMETRESİ GÖNDERİLİYOR
         yeni_tanker = tanker_service.add_tanker(sirket_id, data)
         return jsonify({"message": "Tanker başarıyla eklendi", "tanker": yeni_tanker}), 201
     except ValueError as ve:
@@ -70,6 +70,8 @@ def delete_tanker_api(tanker_id):
     except Exception as e:
         logger.error(f"Tanker silme API hatası: {e}", exc_info=True)
         return jsonify({"error": "Tanker silinirken bir sunucu hatası oluştu."}), 500
+
+# --- Tanker Atama API'leri ---
 
 @tanker_bp.route('/tanker/api/atamalar', methods=['GET'])
 @login_required
@@ -111,6 +113,7 @@ def unassign_tanker_api(atama_id):
         logger.error(f"Tanker atama kaldırma API hatası: {e}", exc_info=True)
         return jsonify({"error": "Atama kaldırılırken bir hata oluştu."}), 500
 
+# === SATIŞ/BOŞALTMA ENDPOINT'İ ===
 @tanker_bp.route('/tanker/api/sat_ve_bosalt/<int:tanker_id>', methods=['POST'])
 @login_required
 @firma_yetkilisi_required
