@@ -1,108 +1,214 @@
 // static/js/profil.js
 
-window.onload = function() {
+document.addEventListener('DOMContentLoaded', () => {
     profilBilgileriniYukle();
-};
+    
+    // Eğer kullanıcı yetkiliyse personel listesini de yükle
+    const userRole = document.body.dataset.userRole;
+    if (['admin', 'firma_yetkilisi'].includes(userRole)) {
+        personelListesiniYukle();
+    }
+});
 
-/**
- * Sayfa yüklendiğinde sunucudan mevcut profil bilgilerini çeker ve formları doldurur.
- */
+// --- Profil Bilgileri ---
 async function profilBilgileriniYukle() {
     try {
-        const response = await fetch('/api/profil');
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Profil bilgileri yüklenemedi.');
-        }
-
-        // Gelen iç içe veriye göre form alanlarını doldur
+        const data = await api.fetchProfil(); // api.js'de tanımlı olmalı
         if (data.kullanici) {
-            document.getElementById('kullanici-adi-input').value = data.kullanici.kullanici_adi || '';
-            document.getElementById('eposta-input').value = data.kullanici.eposta || '';
-            document.getElementById('kullanici-telefon-input').value = data.kullanici.telefon_no || '';
+            const k = data.kullanici;
+            if(document.getElementById('profil-isim')) document.getElementById('profil-isim').value = k.kullanici_adi || '';
+            if(document.getElementById('profil-email')) document.getElementById('profil-email').value = k.eposta || '';
+            if(document.getElementById('profil-telefon')) document.getElementById('profil-telefon').value = k.telefon_no || '';
         }
-
-        if (data.sirket) {
-            document.getElementById('sirket-adi-input').value = data.sirket.sirket_adi || '';
-            document.getElementById('sirket-vkn-input').value = data.sirket.vergi_kimlik_no || '';
-            document.getElementById('sirket-adres-input').value = data.sirket.adres || '';
-        }
-
     } catch (error) {
-        gosterMesaj(error.message, 'danger');
+        console.error('Profil yükleme hatası:', error);
     }
 }
 
-/**
- * "Değişiklikleri Kaydet" butonuna basıldığında çalışır, formdaki verileri sunucuya gönderir.
- */
 async function profilGuncelle() {
-    const kaydetButton = document.getElementById('kaydet-btn');
-    const originalButtonText = kaydetButton.innerHTML;
-
-    // Kullanıcı verilerini bir obje içinde grupla
-    const kullanici_data = {
-        eposta: document.getElementById('eposta-input').value.trim(),
-        telefon_no: document.getElementById('kullanici-telefon-input').value.trim()
-    };
-
-    // Şirket verilerini bir obje içinde grupla
-    const sirket_data = {
-        vergi_kimlik_no: document.getElementById('sirket-vkn-input').value.trim(),
-        adres: document.getElementById('sirket-adres-input').value.trim()
-    };
-
-    // Şifre verilerini bir obje içinde grupla
-    const sifre_data = {
-        mevcut_sifre: document.getElementById('mevcut-sifre-input').value,
-        yeni_sifre: document.getElementById('yeni-sifre-input').value,
-        yeni_sifre_tekrar: document.getElementById('yeni-sifre-tekrar-input').value
-    };
-
-    // Şifre alanı kontrolleri
-    if (sifre_data.yeni_sifre || sifre_data.yeni_sifre_tekrar) {
-        if (!sifre_data.mevcut_sifre) {
-            gosterMesaj('Yeni bir şifre belirlemek için mevcut şifrenizi girmelisiniz.', 'warning');
-            return;
-        }
-        if (sifre_data.yeni_sifre !== sifre_data.yeni_sifre_tekrar) {
-            gosterMesaj('Yeni şifreler eşleşmiyor.', 'warning');
-            return;
-        }
+    try {
+        const data = {
+            kullanici_adi: document.getElementById('profil-isim').value,
+            eposta: document.getElementById('profil-email').value,
+            telefon_no: document.getElementById('profil-telefon').value
+        };
+        
+        await api.updateProfil(data);
+        ui.showToast('Profil başarıyla güncellendi.', 'success');
+    } catch (error) {
+        ui.showToast(error.message || 'Güncelleme başarısız.', 'error');
     }
+}
 
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Güncelleniyor...`;
+// --- Personel Listesi (EKSİK OLAN KISIM) ---
+async function personelListesiniYukle() {
+    const tbody = document.getElementById('kullanici-listesi-body');
+    const loader = document.getElementById('kullanici-yukleniyor');
+    const emptyMsg = document.getElementById('kullanici-yok-mesaji');
+
+    if (!tbody) return; // Profil sayfasında değilsek veya yetki yoksa çık
 
     try {
-        const response = await fetch('/api/profil', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            // Tüm veriyi gruplanmış objeler halinde gönder
-            body: JSON.stringify({
-                kullanici: kullanici_data,
-                sirket: sirket_data,
-                sifreler: sifre_data
-            })
-        });
+        if(loader) loader.classList.remove('hidden');
+        if(emptyMsg) emptyMsg.classList.add('hidden');
+        tbody.innerHTML = '';
 
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'Güncelleme sırasında bir hata oluştu.');
+        // API'den kullanıcıları çek (firma_yonetimi.js ile aynı endpoint)
+        // api.js'de fetchYonetimData fonksiyonu var, tüm datayı getirir.
+        // Veya direkt kullanıcıları çeken bir endpoint varsa o daha iyi olur.
+        // Şimdilik fetchYonetimData kullanalım (api.js'de var olduğunu varsayıyorum).
+        
+        const data = await api.fetchYonetimData(); 
+        // Not: data şunları içerir: { kullanicilar: [], toplayicilar: [], ... }
+
+        const personeller = data.kullanicilar || [];
+
+        if (personeller.length === 0) {
+            if(loader) loader.classList.add('hidden');
+            if(emptyMsg) emptyMsg.classList.remove('hidden');
+            return;
         }
 
-        gosterMesaj(result.message, 'success');
-        
-        // Sadece şifre alanlarını temizle
-        document.getElementById('mevcut-sifre-input').value = '';
-        document.getElementById('yeni-sifre-input').value = '';
-        document.getElementById('yeni-sifre-tekrar-input').value = '';
+        tbody.innerHTML = personeller.map(p => `
+            <tr>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center">
+                        <div class="h-8 w-8 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-bold">
+                            ${p.kullanici_adi.charAt(0).toUpperCase()}
+                        </div>
+                        <div class="ml-4">
+                            <div class="text-sm font-medium text-gray-900">${p.kullanici_adi}</div>
+                            <div class="text-xs text-gray-500">${p.eposta || '-'}</div>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                        ${p.rol === 'admin' ? 'bg-purple-100 text-purple-800' : 
+                          p.rol === 'firma_yetkilisi' ? 'bg-blue-100 text-blue-800' : 
+                          p.rol === 'toplayici' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}">
+                        ${formatRol(p.rol)}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="text-sm text-green-600"><i class="fa-solid fa-check-circle mr-1"></i>Aktif</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button onclick="sifreSifirlaModalAc(${p.id}, '${p.kullanici_adi}')" class="text-amber-600 hover:text-amber-900 mr-3" title="Şifre Sıfırla">
+                        <i class="fa-solid fa-key"></i>
+                    </button>
+                    ${p.rol !== 'firma_yetkilisi' && p.rol !== 'admin' ? `
+                    <button onclick="kullaniciSilModalAc(${p.id}, '${p.kullanici_adi}')" class="text-red-600 hover:text-red-900" title="Sil">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                    ` : ''}
+                </td>
+            </tr>
+        `).join('');
 
     } catch (error) {
-        gosterMesaj(error.message, 'danger');
+        console.error('Personel listesi hatası:', error);
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-500">Veri yüklenemedi.</td></tr>`;
     } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = 'Değişiklikleri Kaydet';
+        if(loader) loader.classList.add('hidden');
+    }
+}
+
+// --- Yardımcı Fonksiyonlar ---
+function formatRol(rol) {
+    const roller = {
+        'admin': 'Admin',
+        'firma_yetkilisi': 'Yönetici',
+        'toplayici': 'Toplayıcı',
+        'muhasebeci': 'Muhasebeci',
+        'ciftci': 'Müstahsil'
+    };
+    return roller[rol] || rol;
+}
+
+// --- Şifre Değiştirme (Kendi Şifresi) ---
+async function sifreDegistir() {
+    const eski = document.getElementById('mevcut-sifre-input').value;
+    const yeni = document.getElementById('kullanici-yeni-sifre-input').value;
+    const yeniT = document.getElementById('kullanici-yeni-sifre-tekrar-input').value;
+
+    if (yeni !== yeniT) {
+        ui.showToast('Yeni şifreler uyuşmuyor!', 'warning');
+        return;
+    }
+
+    try {
+        await api.postChangePassword({ old_password: eski, new_password: yeni });
+        ui.showToast('Şifreniz başarıyla değiştirildi.', 'success');
+        toggleModal('sifreDegistirModal', false);
+        document.getElementById('mevcut-sifre-input').value = '';
+        document.getElementById('kullanici-yeni-sifre-input').value = '';
+        document.getElementById('kullanici-yeni-sifre-tekrar-input').value = '';
+    } catch (error) {
+        ui.showToast(error.message || 'Şifre değiştirilemedi.', 'error');
+    }
+}
+
+// --- Yeni Kullanıcı Ekleme ---
+function yeniKullaniciEkleModalAc() {
+    toggleModal('yeniKullaniciModal', true);
+}
+
+async function yeniKullaniciKaydet() {
+    const adi = document.getElementById('yeni-kullanici-adi').value;
+    const sifre = document.getElementById('yeni-kullanici-sifre').value;
+    const rol = document.getElementById('yeni-kullanici-rol').value;
+
+    if(!adi || !sifre) {
+        ui.showToast('Lütfen tüm alanları doldurun', 'warning');
+        return;
+    }
+
+    try {
+        // api.js'de postToplayiciEkle var ama genel kullanıcı ekleme için de kullanılabilir
+        // veya yeni bir endpoint yazmak gerekebilir. Şimdilik toplayıcı ekle endpointini kullanıyoruz
+        // çünkü genelde toplayıcı ekleniyor. Eğer muhasebeci eklenecekse backend güncellenmeli.
+        await api.postToplayiciEkle({ kullanici_adi: adi, sifre: sifre, rol: rol });
+        
+        ui.showToast('Kullanıcı başarıyla eklendi.', 'success');
+        toggleModal('yeniKullaniciModal', false);
+        personelListesiniYukle(); // Listeyi yenile
+        
+        // Formu temizle
+        document.getElementById('yeni-kullanici-form').reset();
+    } catch (error) {
+        ui.showToast(error.message || 'Kayıt başarısız.', 'error');
+    }
+}
+
+// --- Kullanıcı Silme ---
+let silinecekKullaniciId = null;
+function kullaniciSilModalAc(id, adi) {
+    silinecekKullaniciId = id;
+    document.getElementById('silinecek-kullanici-adi').textContent = adi;
+    toggleModal('kullaniciSilOnayModal', true);
+}
+
+async function kullaniciSil() {
+    if(!silinecekKullaniciId) return;
+    try {
+        await api.deleteKullanici(silinecekKullaniciId);
+        ui.showToast('Kullanıcı silindi.', 'success');
+        toggleModal('kullaniciSilOnayModal', false);
+        personelListesiniYukle();
+    } catch (error) {
+        ui.showToast(error.message || 'Silme işlemi başarısız.', 'error');
+    }
+}
+
+// --- Şifre Sıfırlama (Yöneticinin Personele Yaptığı) ---
+function sifreSifirlaModalAc(id, adi) {
+    // Bu modal HTML'de yoksa basit bir prompt ile halledelim veya modal ekleyelim.
+    // Hızlı çözüm için Prompt:
+    const yeniSifre = prompt(`${adi} için yeni şifreyi girin:`);
+    if(yeniSifre) {
+        api.postKullaniciSifreSetle(id, { yeni_sifre: yeniSifre })
+           .then(() => ui.showToast('Şifre güncellendi.', 'success'))
+           .catch(err => ui.showToast(err.message, 'error'));
     }
 }

@@ -1,40 +1,186 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="tr" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Süt Aşkı - Kayıt Ol</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-{% block title %}Yeni Kayıt - Süt Takip Sistemi{% endblock %}
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { brand: { 600: '#0284c7', 500: '#0ea5e9' } }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-full flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50">
 
-{% block content %}
-<div class="main-wrapper d-flex justify-content-center align-items-center min-vh-100 p-3">
-    <div class="card p-4 p-md-5 w-100" style="max-width: 450px;">
-        <button id="theme-toggle" class="btn align-self-end">
-            <i id="sun-icon" class="bi bi-sun-fill"></i>
-            <i id="moon-icon" class="bi bi-moon-fill"></i>
-        </button>
-
-        <h2 class="text-center mb-4 fw-bold">Yeni Kullanıcı Kaydı</h2>
-        <div id="alert-container"></div>
-        <div class="mb-3">
-            <label for="sirket-input" class="form-label">Şirket Adı</label>
-            <input type="text" class="form-control" id="sirket-input" placeholder="Örn: Yılmaz Süt A.Ş.">
-            <small class="form-text text-secondary">Şirketiniz kayıtlıysa tam adını yazın. Yoksa yeni bir şirket oluşturulur.</small>
+    <div class="sm:mx-auto sm:w-full sm:max-w-md">
+        <div class="mx-auto h-16 w-16 bg-brand-600 rounded-full flex items-center justify-center shadow-lg mb-6">
+            <i class="fa-solid fa-user-plus text-white text-3xl"></i>
         </div>
-        <div class="mb-3">
-            <label for="kullanici-input" class="form-label">Kullanıcı Adı</label>
-            <input type="text" class="form-control" id="kullanici-input" placeholder="Yeni kullanıcı adınız">
-        </div>
-        <div class="mb-3">
-            <label for="sifre-input" class="form-label">Şifre</label>
-            <input type="password" class="form-control" id="sifre-input" placeholder="Güçlü bir şifre belirleyin">
-        </div>
-        <div class="d-grid mt-4">
-            <button class="btn btn-primary" onclick="kayitOl()">Kayıt Ol</button>
-        </div>
-        <p class="text-center mt-3 mb-0">
-            <small class="text-secondary">Zaten bir hesabın var mı? <a href="{{ url_for('auth.login_page') }}">Giriş Yap</a></small>
+        <h2 class="text-center text-3xl font-bold tracking-tight text-gray-900">
+            Aramıza Katılın
+        </h2>
+        <p class="mt-2 text-center text-sm text-gray-600">
+            Süt toplama süreçlerinizi dijitalleştirin
         </p>
     </div>
-</div>
-{% endblock %}
 
-{% block scripts %}
-<script src="{{ url_for('static', filename='js/register.js') }}"></script>
-{% endblock %}
+    <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div class="bg-white py-8 px-4 shadow-xl sm:rounded-xl sm:px-10 border border-gray-100">
+            
+            <div id="alert-box" class="hidden mb-6 rounded-lg p-4 text-sm flex items-center">
+                <i id="alert-icon" class="fa-solid mr-2"></i>
+                <span id="alert-message"></span>
+            </div>
+
+            <form id="registerForm" class="space-y-6">
+                
+                <div>
+                    <label for="sirket_adi" class="block text-sm font-medium text-gray-700">Şirket Adı</label>
+                    <div class="mt-1 relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fa-solid fa-building text-gray-400"></i>
+                        </div>
+                        <input id="sirket_adi" name="sirket_adi" type="text" required 
+                            class="block w-full rounded-lg border-0 py-3 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-brand-600 sm:text-sm sm:leading-6 shadow-sm"
+                            placeholder="Örn: Yılmaz Süt A.Ş.">
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500">Şirketiniz sistemde yeniyse sizin için oluşturulacaktır.</p>
+                </div>
+
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700">Kullanıcı Adı</label>
+                    <div class="mt-1 relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fa-regular fa-user text-gray-400"></i>
+                        </div>
+                        <input id="username" name="username" type="text" required 
+                            class="block w-full rounded-lg border-0 py-3 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-brand-600 sm:text-sm sm:leading-6 shadow-sm"
+                            placeholder="Kullanıcı adınız">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700">Şifre</label>
+                    <div class="mt-1 relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fa-solid fa-lock text-gray-400"></i>
+                        </div>
+                        <input id="password" name="password" type="password" required 
+                            class="block w-full rounded-lg border-0 py-3 pl-10 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-brand-600 sm:text-sm sm:leading-6 shadow-sm"
+                            placeholder="Güçlü bir şifre belirleyin">
+                    </div>
+                </div>
+
+                <div>
+                    <button type="submit" id="submitBtn" class="flex w-full justify-center rounded-lg bg-brand-600 px-3 py-3 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 transition-all duration-200">
+                        Hesap Oluştur
+                    </button>
+                </div>
+            </form>
+
+            <div class="mt-6">
+                <div class="relative">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-gray-300"></div>
+                    </div>
+                    <div class="relative flex justify-center text-sm">
+                        <span class="bg-white px-2 text-gray-500">Zaten hesabınız var mı?</span>
+                    </div>
+                </div>
+
+                <div class="mt-6">
+                    <a href="{{ url_for('auth.login_page') }}" class="flex w-full justify-center rounded-lg bg-white px-3 py-3 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 transition-all duration-200">
+                        Giriş Yap
+                    </a>
+                </div>
+            </div>
+
+        </div>
+        
+        <p class="mt-8 text-center text-xs text-gray-500">
+            &copy; 2025 Süt Aşkı Yazılım Sistemleri
+        </p>
+    </div>
+
+    <script>
+        // Yardımcı: Mesaj Gösterme Fonksiyonu
+        function showAlert(message, type = 'error') {
+            const box = document.getElementById('alert-box');
+            const msg = document.getElementById('alert-message');
+            const icon = document.getElementById('alert-icon');
+
+            box.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'border-red-200', 'bg-green-50', 'text-green-700', 'border-green-200');
+            icon.className = 'fa-solid mr-2';
+
+            if (type === 'success') {
+                box.classList.add('bg-green-50', 'text-green-700', 'border-green-200');
+                icon.classList.add('fa-circle-check');
+            } else {
+                box.classList.add('bg-red-50', 'text-red-700', 'border-red-200');
+                icon.classList.add('fa-circle-exclamation');
+            }
+
+            msg.textContent = message;
+            box.classList.remove('hidden');
+        }
+
+        document.getElementById('registerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const btn = document.getElementById('submitBtn');
+            const originalText = btn.innerHTML;
+            
+            // UI'ı kilitle
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Kayıt Olunuyor...';
+            btn.disabled = true;
+            document.getElementById('alert-box').classList.add('hidden');
+
+            const formData = {
+                sirket_adi: document.getElementById('sirket_adi').value,
+                kullanici_adi: document.getElementById('username').value,
+                sifre: document.getElementById('password').value
+            };
+
+            try {
+                const response = await fetch("{{ url_for('auth.register_user_api') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showAlert("Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz...", 'success');
+                    setTimeout(() => {
+                        window.location.href = "{{ url_for('auth.login_page') }}";
+                    }, 2000);
+                } else {
+                    // Bakım modu vb. durumlar için özel yönlendirme kontrolü
+                    if (result.redirect_to_landing) {
+                        showAlert(result.error, 'error');
+                        setTimeout(() => { window.location.href = '/'; }, 2000);
+                    } else {
+                        throw new Error(result.error || 'Kayıt işlemi başarısız.');
+                    }
+                }
+            } catch (err) {
+                showAlert(err.message, 'error');
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

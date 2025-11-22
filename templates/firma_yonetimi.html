@@ -1,112 +1,136 @@
-{% extends "base.html" %}
-
-{% block title %}Kullanıcı Yönetimi - Süt Takip Sistemi{% endblock %}
-
-{% block head_extra %}
-    {# TomSelect CSS'i head içine eklenir #}
+<!DOCTYPE html>
+<html lang="tr" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kullanıcı Yönetimi</title>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css" rel="stylesheet">
-{% endblock %}
 
-{% block content %}
-<div class="main-wrapper p-3 p-md-4">
-    {# Bildirimlerin gösterileceği alan #}
-    <div id="alert-container"></div>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { brand: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1' } }
+                }
+            }
+        }
+    </script>
+    <style>
+        .ts-control { border-radius: 0.5rem !important; padding: 0.5rem !important; border-color: #d1d5db !important; }
+        .ts-dropdown { border-radius: 0.5rem !important; border-color: #d1d5db !important; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="h-full flex flex-col bg-gray-50 font-sans text-gray-900 antialiased pb-20 md:pb-0" data-user-role="{{ session.get('user', {}).get('rol', '') }}">
 
-    {# Sayfa Başlığı ve Sağ Üst Butonlar #}
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h1 class="fw-bold">Kullanıcı Yönetimi</h1>
-        <div class="d-flex align-items-center gap-2">
-            {# Hızlı İşlemler menüsü ve Tema Değiştirme butonu '_hizli_islemler.html' dosyasından gelir #}
-            {% include '_hizli_islemler.html' %}
-        </div>
-    </div>
-
-    {# Ana İçerik Satırı #}
-    <div class="row g-3">
-        {# Sol Sütun: Yeni Toplayıcı Ekleme Formu #}
-        <div class="col-lg-4 col-12">
-            <div class="card">
-                <div class="card-body p-3">
-                    <h5 class="card-title mb-3">Yeni Toplayıcı Ekle</h5>
-                    {# Form submit olayı JS ile yönetilir #}
-                    <form id="yeni-kullanici-form">
-                        <div class="mb-2">
-                            <label for="kullanici-adi-input" class="form-label">Kullanıcı Adı <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control form-control-sm" id="kullanici-adi-input" placeholder="Toplayıcının kullanıcı adı" required>
-                        </div>
-                        <div class="mb-2">
-                            <label for="sifre-input" class="form-label">Şifre <span class="text-danger">*</span></label>
-                            <input type="password" class="form-control form-control-sm" id="sifre-input" placeholder="Giriş için bir şifre belirleyin" required>
-                        </div>
-                        <div class="mb-2">
-                            <label for="telefon-input" class="form-label">Telefon No (İsteğe Bağlı)</label>
-                            <input type="text" class="form-control form-control-sm" id="telefon-input" placeholder="Örn: 5xx xxx xx xx">
-                        </div>
-                        <div class="mb-2">
-                            <label for="adres-input" class="form-label">Adres (İsteğe Bağlı)</label>
-                            <textarea class="form-control form-control-sm" id="adres-input" rows="2" placeholder="Toplayıcının adresi"></textarea>
-                        </div>
-                        <div class="d-grid mt-3">
-                            <button type="submit" class="btn btn-primary" id="kaydet-btn">
-                                <i class="bi bi-plus-circle me-2"></i>Toplayıcıyı Ekle
-                            </button>
-                        </div>
-                    </form>
+    <header class="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="{{ url_for('main.panel') }}" class="mr-4 text-gray-500 hover:text-brand-600 transition-colors"><i class="fa-solid fa-arrow-left text-xl"></i></a>
+                    <div class="flex-shrink-0 flex items-center">
+                        <div class="bg-brand-600 text-white p-2 rounded-lg shadow-sm mr-3"><i class="fa-solid fa-id-card text-xl"></i></div>
+                        <h1 class="text-lg font-bold text-gray-900">Kullanıcı Yönetimi</h1>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    {% include '_hizli_islemler.html' %}
                 </div>
             </div>
         </div>
+    </header>
 
-        {# Sağ Sütun: Mevcut Kullanıcılar Tablosu #}
-        <div class="col-lg-8 col-12">
-            <div class="card">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="card-title mb-0">Mevcut Kullanıcılar</h5>
-                        {# Lisans bilgisi JS ile doldurulur #}
-                        <div id="lisans-bilgisi" class="text-end">
-                            <span class="spinner-border spinner-border-sm"></span>
+    <main class="flex-1 overflow-y-auto bg-gray-50 p-4">
+        <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
+            
+            <div id="alert-container" class="lg:col-span-12"></div>
+
+            <div class="lg:col-span-4 order-1">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="bg-brand-50 px-4 py-3 border-b border-gray-100">
+                        <h3 class="font-bold text-brand-800 flex items-center"><i class="fa-solid fa-user-plus mr-2"></i>Yeni Personel Ekle</h3>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <form id="yeni-kullanici-form" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Kullanıcı Adı <span class="text-red-500">*</span></label>
+                                <input type="text" id="kullanici-adi-input" class="block w-full rounded-lg border-gray-300 border p-2.5 text-sm focus:ring-brand-500 focus:border-brand-500" placeholder="kullaniciadi" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Şifre <span class="text-red-500">*</span></label>
+                                <input type="password" id="sifre-input" class="block w-full rounded-lg border-gray-300 border p-2.5 text-sm focus:ring-brand-500 focus:border-brand-500" placeholder="******" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Telefon No</label>
+                                <input type="text" id="telefon-input" class="block w-full rounded-lg border-gray-300 border p-2.5 text-sm focus:ring-brand-500 focus:border-brand-500" placeholder="05XX...">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Adres</label>
+                                <textarea id="adres-input" rows="2" class="block w-full rounded-lg border-gray-300 border p-2.5 text-sm focus:ring-brand-500 focus:border-brand-500"></textarea>
+                            </div>
+                            <button type="submit" id="kaydet-btn" class="w-full flex justify-center py-2.5 px-4 bg-brand-600 text-white rounded-lg shadow-sm hover:bg-brand-700 transition-colors font-medium">
+                                <i class="fa-solid fa-check mr-2 mt-0.5"></i> Personeli Ekle
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-8 order-2">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[500px]">
+                    <div class="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                        <h3 class="font-bold text-gray-700">Personel Listesi</h3>
+                        <div id="lisans-bilgisi" class="text-right">
+                            <span class="text-[10px] text-gray-400 uppercase tracking-wide">Toplayıcı Limiti</span>
+                            <div class="font-bold text-brand-600 text-lg leading-none">...</div>
                         </div>
                     </div>
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
+
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
                                 <tr>
-                                    <th>Kullanıcı Adı</th>
-                                    <th>Rol</th>
-                                    <th>Oluşturulma Tarihi</th>
-                                    <th class="text-center">İşlemler</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kullanıcı</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rol</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">İşlemler</th>
                                 </tr>
                             </thead>
-                            {# Tablo içeriği JS ile doldurulur #}
-                            <tbody id="kullanicilar-tablosu">
-                                {# Örnek Yükleniyor Satırı (JS kaldıracak) #}
-                                <tr><td colspan="4" class="text-center"><div class="spinner-border spinner-border-sm"></div> Yükleniyor...</td></tr>
-                            </tbody>
+                            <tbody id="kullanicilar-tablosu" class="bg-white divide-y divide-gray-200 text-sm">
+                                </tbody>
                         </table>
                     </div>
-                    {# Veri yok mesajı JS ile gösterilir/gizlenir #}
-                    <div id="veri-yok-mesaji" class="text-center p-4" style="display: none;">
-                        <p class="text-secondary">Kayıtlı toplayıcı veya muhasebeci bulunamadı.</p>
-                    </div>
+                    <div id="veri-yok-mesaji" class="hidden text-center py-10 text-gray-400">Kayıtlı personel bulunamadı.</div>
                 </div>
             </div>
+
         </div>
-    </div> {# Ana Row Sonu #}
+    </main>
 
-</div> {# Ana Wrapper Sonu #}
+    {% include '_firma_modals.html' %}
 
-{# --- Firma Yönetimi Sayfasına Ait Modalları Dahil Et --- #}
-{# Bu satır {% endblock %} content'ten hemen önce eklenir #}
-{% include '_firma_modals.html' %}
-{# --- /Modallar --- #}
-
-{% endblock %} {# content bloğu burada bitiyor #}
-
-{% block scripts %}
-{# Bu bloktan ÖNCE include etmeliyiz #}
-{# TomSelect JS'i scriptler bloğuna eklenir #}
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-{# Bu sayfaya özel JS dosyası #}
-<script src="{{ url_for('static', filename='js/firma_yonetimi.js') }}"></script>
-{% endblock %}
-
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    
+    <script src="{{ url_for('static', filename='js/render-utils.js') }}"></script>
+    
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/firma_yonetimi.js') }}"></script>
+    
+    <script>
+        function toggleModal(id, show) {
+            const m = document.getElementById(id);
+            if(show) m.classList.remove('hidden');
+            else m.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>

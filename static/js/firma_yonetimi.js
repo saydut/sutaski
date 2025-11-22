@@ -1,109 +1,99 @@
 // static/js/firma_yonetimi.js
 
-let silmeOnayModal;
-let kullaniciDuzenleModal;
 let tedarikciSeciciTomSelect;
-let kullaniciSifreAyarlaModal; // GÜNCELLENDİ: İsim değişti
 
-// Sayfa yüklendiğinde çalışacak ana fonksiyon
-window.onload = function() {
-    // Gerekli modalları başlat
-    silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
-    kullaniciDuzenleModal = new bootstrap.Modal(document.getElementById('kullaniciDuzenleModal'));
-    
-    // GÜNCELLENDİ: Yeni modal ID'sini başlat
-    const kullaniciModalElement = document.getElementById('kullaniciSifreAyarlaModal');
-    if (kullaniciModalElement) {
-        kullaniciSifreAyarlaModal = new bootstrap.Modal(kullaniciModalElement);
-    } else {
-        console.warn("Kullanıcı şifre ayarlama modal elementi (kullaniciSifreAyarlaModal) bulunamadı.");
-    }
+// ==========================================================
+// 1. FONKSİYON TANIMLARI (ÖNCE YÜKLENMELİ)
+// ==========================================================
 
-
-    // Yeni kullanıcı ekleme formunun gönderilme olayını dinle
-    const yeniKullaniciForm = document.getElementById('yeni-kullanici-form');
-    if(yeniKullaniciForm) yeniKullaniciForm.addEventListener('submit', yeniKullaniciEkle);
-
-    // Düzenleme modalındaki çoklu tedarikçi seçiciyi başlat
-    const editTedarikciSelect = document.getElementById('edit-tedarikci-sec');
-    if(editTedarikciSelect) {
-        tedarikciSeciciTomSelect = new TomSelect(editTedarikciSelect, {
-            plugins: ['remove_button'], // Seçilenleri kolayca kaldırmak için
-            create: false,
-            sortField: { field: "text", direction: "asc" }
-        });
-    }
-
-    // Sayfa verilerini sunucudan yükle
-    verileriYukle();
-};
-
-/**
- * Sunucudan kullanıcı listesini ve lisans limitini çeker, ardından arayüzü günceller.
- */
 async function verileriYukle() {
-    // Bu fonksiyon aynı kalıyor
-    const tabloBody = document.getElementById('kullanicilar-tablosu');
-    const lisansBilgisiElementi = document.getElementById('lisans-bilgisi');
-    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    if (!tabloBody || !lisansBilgisiElementi || !veriYokMesaji) {
-        console.error("verileriYukle: Gerekli DOM elementleri bulunamadı.");
-        return;
-    }
-
-
-    tabloBody.innerHTML = '<tr><td colspan="4" class="text-center"><div class="spinner-border spinner-border-sm"></div> Yükleniyor...</td></tr>';
-    lisansBilgisiElementi.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    veriYokMesaji.style.display = 'none';
+    const tbody = document.getElementById('kullanicilar-tablosu');
+    const lisans = document.getElementById('lisans-bilgisi');
+    const veriYok = document.getElementById('veri-yok-mesaji');
+    
+    if(!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Yükleniyor...</td></tr>';
+    if(lisans) lisans.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-gray-400"></i>';
 
     try {
-        const data = await api.request('/firma/api/yonetim_data'); // api.js kullandığımızı varsayıyoruz
-        if (data && data.kullanicilar && data.limit !== undefined) {
+        const data = await api.fetchYonetimData();
+        if (data && data.kullanicilar) {
              lisansBilgisiniGoster(data.kullanicilar, data.limit);
              kullaniciTablosunuDoldur(data.kullanicilar);
-        } else {
-            throw new Error("API'den eksik veri geldi.");
         }
-
     } catch (error) {
-        tabloBody.innerHTML = ''; // Hata durumunda yükleniyor... yazısını kaldır
-        gosterMesaj(error.message || 'Veriler yüklenirken bir hata oluştu.', 'danger');
-        lisansBilgisiElementi.innerText = 'Hata';
+        tbody.innerHTML = '';
+        gosterMesaj('Veriler yüklenemedi.', 'danger');
+        if(lisans) lisans.innerText = '-';
     }
 }
 
-/**
- * Lisans kullanım durumunu arayüzde gösterir.
- */
 function lisansBilgisiniGoster(kullanicilar, limit) {
-    // Bu fonksiyon aynı kalıyor
-    const lisansBilgisiElementi = document.getElementById('lisans-bilgisi');
-    if (!lisansBilgisiElementi) return; // Element yoksa çık
-    const toplayiciSayisi = kullanicilar.filter(k => k.rol === 'toplayici').length;
+    const el = document.getElementById('lisans-bilgisi');
+    if (!el) return;
+    const toplayici = kullanicilar.filter(k => k.rol === 'toplayici').length;
+    const renk = toplayici >= limit ? 'text-red-600 font-bold' : (toplayici >= limit * 0.8 ? 'text-yellow-600' : 'text-green-600 font-bold');
 
-    let renkSinifi = 'text-success';
-    if (toplayiciSayisi >= limit) {
-        renkSinifi = 'text-danger fw-bold';
-    } else if (toplayiciSayisi >= limit * 0.8) {
-        renkSinifi = 'text-warning';
-    }
-
-    lisansBilgisiElementi.innerHTML = `
-        <span class="text-secondary small d-block">Toplayıcı Lisansı</span>
-        <span class="${renkSinifi}">${toplayiciSayisi} / ${limit}</span>
+    el.innerHTML = `
+        <span class="text-gray-400 block text-[10px] uppercase tracking-wider">Toplayıcı Lisansı</span>
+        <span class="${renk} text-lg">${toplayici} <span class="text-gray-400 text-sm font-normal">/ ${limit}</span></span>
     `;
 }
 
+function kullaniciTablosunuDoldur(kullanicilar) {
+    const tbody = document.getElementById('kullanicilar-tablosu');
+    const veriYok = document.getElementById('veri-yok-mesaji');
+    
+    tbody.innerHTML = '';
+    if (!kullanicilar || kullanicilar.length === 0) {
+        if(veriYok) veriYok.classList.remove('hidden');
+        return;
+    }
+    if(veriYok) veriYok.classList.add('hidden');
 
-/**
- * Yeni kullanıcı ekleme formunu yönetir.
- */
-async function yeniKullaniciEkle(event) {
-    // Bu fonksiyon aynı kalıyor
-    event.preventDefault();
-    const kaydetButton = document.getElementById('kaydet-btn');
-    if (!kaydetButton) return; // Buton yoksa çık
-    const originalButtonText = kaydetButton.innerHTML;
+    kullanicilar.forEach(k => {
+        let tarih = '-';
+        try { tarih = new Date(k.created_at).toLocaleDateString('tr-TR'); } catch(e){}
+
+        let rolBadge = '';
+        let rolText = k.rol;
+        if (k.rol === 'firma_yetkilisi') { rolBadge = 'bg-purple-100 text-purple-800'; rolText = 'Yetkili'; }
+        else if (k.rol === 'toplayici') { rolBadge = 'bg-blue-100 text-blue-800'; rolText = 'Toplayıcı'; }
+        else if (k.rol === 'muhasebeci') { rolBadge = 'bg-yellow-100 text-yellow-800'; rolText = 'Muhasebe'; }
+        else if (k.rol === 'ciftci') { rolBadge = 'bg-green-100 text-green-800'; rolText = 'Çiftçi'; }
+        else if (k.rol === 'admin') { rolBadge = 'bg-gray-800 text-white'; rolText = 'Yönetici'; }
+
+        let buttons = '';
+        const safeName = (k.kullanici_adi || '').replace(/'/g, "\\'");
+        
+        if (k.rol !== 'firma_yetkilisi' && k.rol !== 'admin') {
+            buttons += `<button onclick="kullaniciSifreModaliniAc(${k.id}, '${safeName}')" class="p-1.5 bg-yellow-50 text-yellow-600 rounded hover:bg-yellow-100 mr-1" title="Şifre"><i class="fa-solid fa-key"></i></button>`;
+            
+            if (['toplayici', 'muhasebeci'].includes(k.rol)) {
+                buttons += `<button onclick="duzenlemeModaliniAc(${k.id})" class="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 mr-1" title="Düzenle"><i class="fa-solid fa-pen"></i></button>`;
+            }
+            
+            buttons += `<button onclick="silmeOnayiAc(${k.id}, '${safeName}')" class="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100" title="Sil"><i class="fa-solid fa-trash"></i></button>`;
+        } else {
+            buttons = '<span class="text-xs text-gray-400 italic">İşlem Yok</span>';
+        }
+
+        tbody.innerHTML += `
+            <tr id="kullanici-satir-${k.id}" class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 text-sm font-medium text-gray-900">${utils.sanitizeHTML(k.kullanici_adi)}</td>
+                <td class="px-6 py-4"><span class="px-2 py-1 rounded text-xs font-medium ${rolBadge}">${rolText}</span></td>
+                <td class="px-6 py-4 text-sm text-gray-500">${tarih}</td>
+                <td class="px-6 py-4 text-center">${buttons}</td>
+            </tr>
+        `;
+    });
+}
+
+async function yeniKullaniciEkle(e) {
+    e.preventDefault();
+    const btn = document.getElementById('kaydet-btn');
+    const original = btn.innerHTML;
     const veri = {
         kullanici_adi: document.getElementById('kullanici-adi-input').value.trim(),
         sifre: document.getElementById('sifre-input').value,
@@ -111,316 +101,120 @@ async function yeniKullaniciEkle(event) {
         adres: document.getElementById('adres-input').value.trim()
     };
 
-    if (!veri.kullanici_adi || !veri.sifre) {
-        gosterMesaj('Kullanıcı adı ve şifre alanları zorunludur.', 'warning');
-        return;
-    }
+    if (!veri.kullanici_adi || !veri.sifre) { gosterMesaj('Kullanıcı adı ve şifre zorunlu.', 'warning'); return; }
 
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Ekleniyor...`;
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
 
     try {
-        const result = await api.request('/firma/api/toplayici_ekle', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
-        });
-
-        gosterMesaj(result.message, 'success');
+        const res = await api.postToplayiciEkle(veri);
+        gosterMesaj(res.message, 'success');
         document.getElementById('yeni-kullanici-form').reset();
-        await verileriYukle();
-
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-    } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Toplayıcıyı Ekle';
-    }
+        verileriYukle();
+    } catch(err) { gosterMesaj(err.message, 'danger'); }
+    finally { btn.disabled = false; btn.innerHTML = original; }
 }
 
-/**
- * Kullanıcı listesini tabloya render eder. (GÜNCELLENDİ)
- * @param {Array} kullanicilar - Sunucudan gelen kullanıcı objeleri dizisi.
- */
-function kullaniciTablosunuDoldur(kullanicilar) {
-    const tabloBody = document.getElementById('kullanicilar-tablosu');
-    const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-    if (!tabloBody || !veriYokMesaji) return; // Elementler yoksa çık
-
-    tabloBody.innerHTML = ''; // Temizle
-
-    if (!kullanicilar || kullanicilar.length === 0) {
-        veriYokMesaji.style.display = 'block';
-        return;
-    }
-
-    veriYokMesaji.style.display = 'none';
-
-    kullanicilar.forEach(kullanici => {
-        let olusturulmaTarihi = "Bilinmiyor";
-        try {
-            olusturulmaTarihi = new Date(kullanici.created_at).toLocaleDateString('tr-TR');
-        } catch(e) { /* Hata olursa varsayılan kalır */ }
-
-        // Rol metnini daha kullanıcı dostu yapalım
-        let rolText = (kullanici.rol || '').replace('_', ' '); 
-        rolText = rolText.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '); 
-        if (rolText === 'Ciftci') rolText = 'Çiftçi'; 
-        else if (rolText === 'Firma Yetkilisi') rolText = 'Yetkili';
-
-        // Role göre rozet rengi
-        let rolBadgeClass = 'bg-secondary'; 
-        if (kullanici.rol === 'firma_yetkilisi') rolBadgeClass = 'bg-primary';
-        else if (kullanici.rol === 'toplayici') rolBadgeClass = 'bg-info text-dark';
-        else if (kullanici.rol === 'muhasebeci') rolBadgeClass = 'bg-warning text-dark';
-        else if (kullanici.rol === 'ciftci') rolBadgeClass = 'bg-success';
-
-
-        // --- GÜNCELLENDİ: Şifre ve Düzenle/Sil Butonları Mantığı ---
-        let sifreButonu = '';
-        let duzenleButonu = '';
-        let silButonu = '';
-        // GüvenliKullaniciAdi, HTML'deki onclick içine eklendiğinde ' (tek tırnak) hatası vermesin diye.
-        const guvenliKullaniciAdi = (kullanici.kullanici_adi || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        
-        // Kural: 'firma_yetkilisi' veya 'admin' rolü SİLİNEMEZ ve şifresi buradan AYARLANAMAZ.
-        if (kullanici.rol !== 'firma_yetkilisi' && kullanici.rol !== 'admin') {
-        
-            // Şifre Ayarla Butonu (Anahtar) - Artık toplayıcı, muhasebeci ve çiftçi için gösterilecek
-            sifreButonu = `
-                <button class="btn btn-sm btn-outline-warning ms-1"
-                        onclick="kullaniciSifreModaliniAc(${kullanici.id}, '${guvenliKullaniciAdi}')"
-                        title="Kullanıcı Şifresini Ayarla">
-                    <i class="bi bi-key-fill"></i>
-                </button>`;
-                
-            // Sil Butonu
-            silButonu = `
-                <button class="btn btn-sm btn-outline-danger ms-1" onclick="silmeOnayiAc(${kullanici.id}, '${guvenliKullaniciAdi}')">
-                    <i class="bi bi-trash"></i>
-                </button>`;
-
-            // Düzenle Butonu (Sadece toplayıcı ve muhasebeci için)
-            if (kullanici.rol === 'toplayici' || kullanici.rol === 'muhasebeci') {
-                 duzenleButonu = `
-                    <button class="btn btn-sm btn-outline-primary" onclick="duzenlemeModaliniAc(${kullanici.id})">
-                        <i class="bi bi-pencil"></i> Düzenle
-                    </button>
-                    `;
-            }
-        }
-        // --- /GÜNCELLENDİ ---
-
-        const row = `
-            <tr id="kullanici-satir-${kullanici.id}">
-                <td><strong>${utils.sanitizeHTML(kullanici.kullanici_adi)}</strong></td>
-                <td><span class="badge ${rolBadgeClass}">${rolText}</span></td>
-                <td>${olusturulmaTarihi}</td>
-                <td class="text-center">
-                    ${duzenleButonu}  ${sifreButonu}    ${silButonu}      </td>
-            </tr>
-        `; // DİKKAT: Hatalı {# ... #} yorumu buradan kaldırıldı.
-        tabloBody.innerHTML += row;
-    });
+function silmeOnayiAc(id, ad) {
+    document.getElementById('silinecek-kullanici-id').value = id;
+    document.getElementById('silinecek-kullanici-adi').innerText = ad;
+    toggleModal('silmeOnayModal', true);
 }
 
-
-/**
- * Silme onay modal'ını açar.
- */
-function silmeOnayiAc(id, kullaniciAdi) {
-    // Bu fonksiyon aynı kalıyor
-    const idInput = document.getElementById('silinecek-kullanici-id');
-    const nameSpan = document.getElementById('silinecek-kullanici-adi');
-    if(idInput) idInput.value = id;
-    if(nameSpan) nameSpan.innerText = kullaniciAdi;
-    if(silmeOnayModal) silmeOnayModal.show();
-}
-
-/**
- * API'yi çağırarak kullanıcıyı siler.
- */
 async function kullaniciSil() {
-    // Bu fonksiyon aynı kalıyor
-    const idInput = document.getElementById('silinecek-kullanici-id');
-    if (!idInput) return; // Input yoksa çık
-    const id = idInput.value;
-    if(silmeOnayModal) silmeOnayModal.hide();
-
-    const silinecekSatir = document.getElementById(`kullanici-satir-${id}`);
-    const originalHTML = silinecekSatir ? silinecekSatir.outerHTML : null;
-    const parent = silinecekSatir ? silinecekSatir.parentNode : null;
-    const nextSibling = silinecekSatir ? silinecekSatir.nextSibling : null;
-
-    if (silinecekSatir) {
-        silinecekSatir.style.transition = 'opacity 0.4s ease';
-        silinecekSatir.style.opacity = '0';
-        setTimeout(() => {
-            if (silinecekSatir.parentNode) silinecekSatir.remove(); // Hâlâ varsa sil
-             // Liste boşaldıysa "veri yok" mesajını kontrol et
-             if (parent && parent.children.length === 0) {
-                 const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-                 if(veriYokMesaji) veriYokMesaji.style.display = 'block';
-             }
-        }, 400);
+    const id = document.getElementById('silinecek-kullanici-id').value;
+    toggleModal('silmeOnayModal', false);
+    
+    // UI'dan silme animasyonu
+    const row = document.getElementById(`kullanici-satir-${id}`);
+    if(row) {
+        row.classList.add('opacity-0', 'scale-95');
+        setTimeout(() => row.remove(), 300);
     }
 
     try {
-        const result = await api.request(`/firma/api/kullanici_sil/${id}`, { method: 'DELETE' });
-        gosterMesaj(result.message, 'success');
-        const data = await api.request('/firma/api/yonetim_data');
-        lisansBilgisiniGoster(data.kullanicilar, data.limit);
-        // Liste boşaldıysa "veri yok" mesajını burada da kontrol et (zaten yukarıda var ama garanti olsun)
-        if (parent && parent.children.length === 0) {
-             const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-             if(veriYokMesaji) veriYokMesaji.style.display = 'block';
-        }
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-        if (originalHTML && parent) {
-            const temp = document.createElement('tbody');
-            temp.innerHTML = originalHTML;
-            const restoredRow = temp.firstChild;
-            if (restoredRow) { // Elementin varlığını kontrol et
-                 restoredRow.style.opacity = '1';
-                 parent.insertBefore(restoredRow, nextSibling);
-                 // Veri yok mesajını gizle
-                 const veriYokMesaji = document.getElementById('veri-yok-mesaji');
-                 if(veriYokMesaji) veriYokMesaji.style.display = 'none';
-            }
-        }
-        await verileriYukle(); // Hata durumunda listeyi tam senkronize et
+        const res = await api.deleteKullanici(id);
+        gosterMesaj(res.message, 'success');
+        // Lisans bilgisini güncellemek için tekrar yükle
+        verileriYukle();
+    } catch(err) { 
+        gosterMesaj(err.message, 'danger'); 
+        verileriYukle(); // Hata olursa listeyi geri getir
     }
 }
 
-/**
- * Kullanıcı düzenleme modalını açar ve ilgili verileri yükler.
- */
-async function duzenlemeModaliniAc(kullaniciId) {
-    // Bu fonksiyon aynı kalıyor
-    const modalElement = document.getElementById('kullaniciDuzenleModal');
-    const tedarikciAtamaAlani = document.getElementById('tedarikci-atama-alani');
-    const form = document.getElementById('kullanici-duzenle-form');
-    if (!modalElement || !tedarikciAtamaAlani || !form || !tedarikciSeciciTomSelect) return; // Elementler yoksa çık
-
-    form.reset();
-    tedarikciSeciciTomSelect.clear();
-    tedarikciSeciciTomSelect.clearOptions();
-    modalElement.querySelector('.modal-title').innerText = 'Yükleniyor...';
-    tedarikciAtamaAlani.style.display = 'none';
+async function duzenlemeModaliniAc(id) {
+    const modalTitle = document.querySelector('#kullaniciDuzenleModal h3');
+    const atamaAlani = document.getElementById('tedarikci-atama-alani');
+    
+    modalTitle.innerText = 'Yükleniyor...';
+    document.getElementById('kullanici-duzenle-form').reset();
+    if(tedarikciSeciciTomSelect) tedarikciSeciciTomSelect.clear();
+    atamaAlani.classList.add('hidden');
+    
+    toggleModal('kullaniciDuzenleModal', true);
 
     try {
-        const data = await api.request(`/firma/api/kullanici_detay/${kullaniciId}`);
-        if (!data || !data.kullanici_detay || !data.kullanici_detay.kullanici || !data.tum_tedarikciler) {
-            throw new Error("API'den eksik kullanıcı detayı geldi.");
-        }
-        const kullanici = data.kullanici_detay.kullanici;
-        const atananTedarikciler = data.kullanici_detay.atanan_tedarikciler || [];
-        const tumTedarikciler = data.tum_tedarikciler;
+        const data = await api.fetchKullaniciDetay(id);
+        const k = data.kullanici_detay.kullanici;
+        
+        modalTitle.innerText = `Düzenle: ${k.kullanici_adi}`;
+        document.getElementById('edit-kullanici-id').value = k.id;
+        document.getElementById('edit-kullanici-adi-input').value = k.kullanici_adi;
+        document.getElementById('edit-telefon-input').value = k.telefon_no || '';
+        document.getElementById('edit-adres-input').value = k.adres || '';
 
-        modalElement.querySelector('.modal-title').innerText = `Kullanıcı Düzenle: ${utils.sanitizeHTML(kullanici.kullanici_adi)}`;
-        document.getElementById('edit-kullanici-id').value = kullanici.id;
-        document.getElementById('edit-kullanici-adi-input').value = kullanici.kullanici_adi;
-        document.getElementById('edit-telefon-input').value = kullanici.telefon_no || '';
-        document.getElementById('edit-adres-input').value = kullanici.adres || '';
-        document.getElementById('edit-sifre-input').value = '';
-
-        if (kullanici.rol === 'toplayici') {
-            tedarikciAtamaAlani.style.display = 'block';
-            const options = tumTedarikciler.map(t => ({ value: t.id, text: utils.sanitizeHTML(t.isim) }));
+        if (k.rol === 'toplayici' && tedarikciSeciciTomSelect) {
+            atamaAlani.classList.remove('hidden');
+            const options = data.tum_tedarikciler.map(t => ({ value: t.id, text: utils.sanitizeHTML(t.isim) }));
+            tedarikciSeciciTomSelect.clearOptions();
             tedarikciSeciciTomSelect.addOptions(options);
-            tedarikciSeciciTomSelect.setValue(atananTedarikciler);
-        } else {
-            tedarikciAtamaAlani.style.display = 'none';
+            tedarikciSeciciTomSelect.setValue(data.kullanici_detay.atanan_tedarikciler || []);
         }
-
-        if(kullaniciDuzenleModal) kullaniciDuzenleModal.show();
-
-    } catch (error) {
-        gosterMesaj(error.message || 'Kullanıcı detayları yüklenemedi.', 'danger');
+    } catch(e) { 
+        gosterMesaj('Detay yüklenemedi.', 'danger'); 
+        toggleModal('kullaniciDuzenleModal', false);
     }
 }
 
-/**
- * Kullanıcı bilgilerini ve atamalarını günceller.
- */
 async function kullaniciGuncelle() {
-    // Bu fonksiyon aynı kalıyor
-    const idInput = document.getElementById('edit-kullanici-id');
-    const guncelleButton = document.getElementById('guncelle-btn');
-    if (!idInput || !guncelleButton || !tedarikciSeciciTomSelect) return; // Elementler yoksa çık
-    const id = idInput.value;
-    const originalButtonText = guncelleButton.innerHTML;
-
+    const id = document.getElementById('edit-kullanici-id').value;
+    const btn = document.getElementById('guncelle-btn');
     const veri = {
         kullanici_adi: document.getElementById('edit-kullanici-adi-input').value.trim(),
         sifre: document.getElementById('edit-sifre-input').value,
         telefon_no: document.getElementById('edit-telefon-input').value.trim(),
         adres: document.getElementById('edit-adres-input').value.trim(),
-        atanan_tedarikciler: tedarikciSeciciTomSelect.getValue() // TomSelect'ten seçili ID'leri al
+        atanan_tedarikciler: tedarikciSeciciTomSelect ? tedarikciSeciciTomSelect.getValue() : []
     };
 
-     if (!veri.kullanici_adi) {
-        gosterMesaj('Kullanıcı adı boş bırakılamaz.', 'warning');
-        return;
-    }
-
-    guncelleButton.disabled = true;
-    guncelleButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Güncelleniyor...`;
-
+    btn.disabled = true;
     try {
-        const result = await api.request(`/firma/api/kullanici_guncelle/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
-        });
-
-        gosterMesaj(result.message, 'success');
-        if(kullaniciDuzenleModal) kullaniciDuzenleModal.hide();
-        await verileriYukle();
-
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-    } finally {
-        guncelleButton.disabled = false;
-        guncelleButton.innerHTML = 'Değişiklikleri Kaydet';
-    }
+        const res = await api.updateKullanici(id, veri);
+        gosterMesaj(res.message, 'success');
+        toggleModal('kullaniciDuzenleModal', false);
+        verileriYukle();
+    } catch(e) { gosterMesaj(e.message, 'danger'); }
+    finally { btn.disabled = false; }
 }
 
-// --- GÜNCELLENDİ: Çiftçi fonksiyonları genel "Kullanıcı" fonksiyonlarına dönüştü ---
-
-/**
- * Kullanıcı şifre ayarlama modalını açar ve kullanıcı bilgilerini doldurur.
- */
-function kullaniciSifreModaliniAc(kullaniciId, kullaniciAdi) { // AD DEĞİŞTİ
-    const idInput = document.getElementById('kullanici-sifre-ayarla-id'); // ID DEĞİŞTİ
-    const nameSpan = document.getElementById('kullanici-sifre-ayarla-kullanici'); // ID DEĞİŞTİ
-    const passInput = document.getElementById('kullanici-yeni-sifre-input'); // ID DEĞİŞTİ
-    const passRepeatInput = document.getElementById('kullanici-yeni-sifre-tekrar-input'); // ID DEĞİŞTİ
-
-    if (idInput) idInput.value = kullaniciId;
-    if (nameSpan) nameSpan.innerText = kullaniciAdi;
-    if (passInput) passInput.value = ''; // Alanları temizle
-    if (passRepeatInput) passRepeatInput.value = '';
-
-    if (kullaniciSifreAyarlaModal) { // AD DEĞİŞTİ
-        kullaniciSifreAyarlaModal.show(); // AD DEĞİŞTİ
-    } else {
-        console.error("Kullanıcı şifre ayarlama modalı başlatılamamış!");
-    }
+function kullaniciSifreModaliniAc(id, ad) {
+    document.getElementById('kullanici-sifre-ayarla-id').value = id;
+    document.getElementById('kullanici-sifre-ayarla-kullanici').innerText = ad;
+    document.getElementById('kullanici-yeni-sifre-input').value = '';
+    document.getElementById('kullanici-yeni-sifre-tekrar-input').value = '';
+    toggleModal('kullaniciSifreAyarlaModal', true);
 }
 
-/**
- * Kullanıcı şifre ayarlama modalındaki yeni şifreyi alır ve API'ye gönderir.
- */
-async function kullaniciSifreKaydet() { // AD DEĞİŞTİ
-    const idInput = document.getElementById('kullanici-sifre-ayarla-id'); // ID DEĞİŞTİ
-    const yeniSifreInput = document.getElementById('kullanici-yeni-sifre-input'); // ID DEĞİŞTİ
-    const yeniSifreTekrarInput = document.getElementById('kullanici-yeni-sifre-tekrar-input'); // ID DEĞİŞTİ
-    const kaydetButton = document.querySelector('#kullaniciSifreAyarlaModal .btn-primary'); // ID DEĞİŞTİ
+async function kullaniciSifreKaydet() {
+    const idInput = document.getElementById('kullanici-sifre-ayarla-id');
+    const yeniSifreInput = document.getElementById('kullanici-yeni-sifre-input');
+    const yeniSifreTekrarInput = document.getElementById('kullanici-yeni-sifre-tekrar-input');
+    
+    // DÜZELTME: Artık ID ile seçiyoruz, hata vermeyecek.
+    const kaydetButton = document.getElementById('sifre-kaydet-btn'); 
     
     if (!idInput || !yeniSifreInput || !yeniSifreTekrarInput || !kaydetButton) {
-        console.error("kullaniciSifreKaydet: Gerekli DOM elementleri bulunamadı.");
+        console.error("Gerekli elementler bulunamadı.");
         return;
     }
 
@@ -437,32 +231,40 @@ async function kullaniciSifreKaydet() { // AD DEĞİŞTİ
         gosterMesaj('Girilen yeni şifreler eşleşmiyor.', 'warning');
         return;
     }
-    // İsteğe bağlı: Minimum şifre uzunluğu kontrolü
-    // if (yeniSifre.length < 4) {
-    //     gosterMesaj('Yeni şifre en az 4 karakter olmalıdır.', 'warning');
-    //     return;
-    // }
 
     kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
+    kaydetButton.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i>`;
 
     try {
-        // GÜNCELLENDİ: Yeni API endpoint'ini ve metodu kullan
-        const result = await api.request(`/firma/api/kullanici_sifre_setle/${id}`, { 
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ yeni_sifre: yeniSifre }) // Sadece yeni şifreyi gönder
-        });
-
-        gosterMesaj(result.message, 'success'); // Başarı mesajını göster
-        if (kullaniciSifreAyarlaModal) kullaniciSifreAyarlaModal.hide(); // Modalı kapat
-
+        const result = await api.postKullaniciSifreSetle(id, { yeni_sifre: yeniSifre });
+        gosterMesaj(result.message, 'success');
+        toggleModal('kullaniciSifreAyarlaModal', false);
     } catch (error) {
-        // Hata mesajını göster
-        gosterMesaj(error.message || 'Şifre ayarlanırken bir hata oluştu.', 'danger');
+        gosterMesaj(error.message || 'Şifre ayarlanırken hata oluştu.', 'danger');
     } finally {
-        // Butonu tekrar aktif et
         kaydetButton.disabled = false;
-        kaydetButton.innerHTML = 'Şifreyi Kaydet';
+        kaydetButton.innerHTML = originalButtonText;
     }
 }
+
+// ==========================================================
+// 2. SAYFA YÜKLENİNCE ÇALIŞAN KOD (EN SONA)
+// ==========================================================
+
+window.onload = function() {
+    // Form Dinleyicisi
+    const form = document.getElementById('yeni-kullanici-form');
+    if(form) form.addEventListener('submit', yeniKullaniciEkle);
+
+    // TomSelect
+    const selectEl = document.getElementById('edit-tedarikci-sec');
+    if(selectEl) {
+        tedarikciSeciciTomSelect = new TomSelect(selectEl, {
+            plugins: ['remove_button'],
+            create: false,
+            sortField: { field: "text", direction: "asc" }
+        });
+    }
+
+    verileriYukle();
+};

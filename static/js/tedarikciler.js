@@ -1,67 +1,39 @@
-// static/js/tedarikciler.js
+// static/js/tedarikciler.js (TAILWIND UYUMLU)
 
-let tedarikcilerMevcutGorunum = 'tablo'; // YENİ İSİM
+let tedarikcilerMevcutGorunum = 'tablo';
 let mevcutSayfa = 1;
 const KAYIT_SAYISI = 15;
-let mevcutSiralamaSutunu = 'isim';
-let mevcutSiralamaYonu = 'asc';
 let mevcutAramaTerimi = '';
-let tedarikciModal, silmeOnayModal;
 
-// Arama için debounce fonksiyonu
-function debounce(func, delay = 400) {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), delay);
-    };
-}
-
+// Sayfa Yüklendiğinde
 window.onload = async () => {
-    tedarikciModal = new bootstrap.Modal(document.getElementById('tedarikciModal'));
-    silmeOnayModal = new bootstrap.Modal(document.getElementById('silmeOnayModal'));
-
-    // tedarikcilerMevcutGorunum kullanılıyor
+    // Görünüm Ayarları
     tedarikcilerMevcutGorunum = localStorage.getItem('tedarikciGorunum') || 'tablo';
-    gorunumuAyarla(tedarikcilerMevcutGorunum); // Fonksiyona değişkeni ver
+    gorunumuAyarla(tedarikcilerMevcutGorunum);
 
-    const aramaInput = document.getElementById('arama-input');
-    if (aramaInput) { // Elementin varlığını kontrol et
-        aramaInput.addEventListener('input', debounce((event) => {
-            mevcutAramaTerimi = event.target.value;
-            verileriYukle(1); // Arama yapıldığında ilk sayfaya dön
-        }));
-    }
-
-
-    document.querySelectorAll('.sortable').forEach(header => {
-        header.addEventListener('click', () => {
-            const sutun = header.dataset.sort;
-            if (mevcutSiralamaSutunu === sutun) {
-                mevcutSiralamaYonu = mevcutSiralamaYonu === 'asc' ? 'desc' : 'asc';
-            } else {
-                mevcutSiralamaSutunu = sutun;
-                mevcutSiralamaYonu = 'asc';
-            }
-            basliklariGuncelle();
-            verileriYukle(1);
-        });
+    // Arama Dinleyicisi
+    const arama = document.getElementById('arama-input');
+    if(arama) arama.addEventListener('input', (e) => {
+        mevcutAramaTerimi = e.target.value;
+        verileriYukle(1);
     });
 
-    basliklariGuncelle();
     await verileriYukle();
 };
 
-/**
- * Tedarikçi listesini sunucudan çeker ve arayüzü günceller.
- * @param {number} sayfa - Yüklenecek sayfa numarası.
- */
+// --- MODAL YÖNETİMİ (BASİT) ---
+function toggleModal(id, show) {
+    const el = document.getElementById(id);
+    if(show) el.classList.remove('hidden');
+    else el.classList.add('hidden');
+}
+
+// --- VERİ YÜKLEME ---
 async function verileriYukle(sayfa = 1) {
     mevcutSayfa = sayfa;
-    const url = `/api/tedarikciler_liste?sayfa=${sayfa}&arama=${encodeURIComponent(mevcutAramaTerimi)}&sirala=${mevcutSiralamaSutunu}&yon=${mevcutSiralamaYonu}&limit=${KAYIT_SAYISI}`;
-
-    await genelVeriYukleyici({ // data-loader.js'den
-        apiURL: url,
+    // Data Loader kullanarak veriyi çek ve render et
+    await genelVeriYukleyici({
+        apiURL: `/api/tedarikciler_liste?sayfa=${sayfa}&arama=${encodeURIComponent(mevcutAramaTerimi)}&limit=${KAYIT_SAYISI}`,
         veriAnahtari: 'tedarikciler',
         tabloBodyId: 'tedarikciler-tablosu',
         kartContainerId: 'tedarikciler-kart-listesi',
@@ -72,223 +44,132 @@ async function verileriYukle(sayfa = 1) {
         yukleFn: verileriYukle,
         sayfa: sayfa,
         kayitSayisi: KAYIT_SAYISI,
-        // tedarikcilerMevcutGorunum kullanılıyor
         mevcutGorunum: tedarikcilerMevcutGorunum
     });
 }
 
-/**
- * Tedarikçi verilerini tablo satırları olarak render eder.
- */
+// Tablo Oluşturucu
 function renderTable(container, suppliers) {
-    suppliers.forEach(supplier => {
+    container.innerHTML = '';
+    suppliers.forEach(s => {
         container.innerHTML += `
-            <tr id="tedarikci-${supplier.id}">
-                <td><strong>${utils.sanitizeHTML(supplier.isim)}</strong></td>
-                <td>${utils.sanitizeHTML(supplier.telefon_no) || '-'}</td>
-                <td class="text-end">${parseFloat(supplier.toplam_litre || 0).toFixed(2)} L</td>
-                <td class="text-center">
-                    <a href="/tedarikci/${supplier.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
-                    <button class="btn btn-sm btn-outline-primary ms-1" title="Düzenle" onclick="tedarikciDuzenleAc(${supplier.id}, this)"><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-sm btn-outline-danger ms-1" title="Sil" onclick="silmeOnayiAc(${supplier.id}, '${utils.sanitizeHTML(supplier.isim.replace(/'/g, "\\'"))}')"><i class="bi bi-trash"></i></button>
-                </td>
-            </tr>`;
+        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+            <td class="px-6 py-4 text-sm font-medium text-gray-900">${utils.sanitizeHTML(s.isim)}</td>
+            <td class="px-6 py-4 text-sm text-gray-500">${utils.sanitizeHTML(s.telefon_no) || '-'}</td>
+            <td class="px-6 py-4 text-sm text-right font-mono text-brand-600 font-bold">${parseFloat(s.toplam_litre||0).toFixed(2)} L</td>
+            <td class="px-6 py-4 text-center flex justify-center gap-2">
+                <a href="/tedarikci/${s.id}" class="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"><i class="fa-solid fa-eye"></i></a>
+                <button onclick="tedarikciDuzenleAc(${s.id})" class="p-1.5 bg-yellow-50 text-yellow-600 rounded hover:bg-yellow-100"><i class="fa-solid fa-pen"></i></button>
+                <button onclick="silmeOnayiAc(${s.id}, '${s.isim.replace(/'/g, "\\'")}')" class="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100"><i class="fa-solid fa-trash"></i></button>
+            </td>
+        </tr>`;
     });
 }
 
-/**
- * Tedarikçi verilerini kartlar olarak render eder. (GÜNCELLENDİ)
- */
+// Kart Oluşturucu
 function renderCards(container, suppliers) {
-    suppliers.forEach(supplier => {
-        // Toplam litreyi formatlıyoruz (tıpkı liste görünümündeki gibi)
-        const toplamLitre = parseFloat(supplier.toplam_litre || 0).toFixed(2);
-
+    container.innerHTML = '';
+    suppliers.forEach(s => {
         container.innerHTML += `
-            <div class="col-lg-4 col-md-6 col-12" id="tedarikci-${supplier.id}">
-                <div class="supplier-card">
-                    <div class="supplier-card-header"><h5>${utils.sanitizeHTML(supplier.isim)}</h5></div>
-                    <div class="supplier-card-body">
-                        <p class="mb-2"><i class="bi bi-telephone-fill me-2"></i>${utils.sanitizeHTML(supplier.telefon_no) || 'Belirtilmemiş'}</p>
-                        
-                        <p class="mb-0 fw-bold"><i class="bi bi-droplet-fill me-2 text-primary"></i>${toplamLitre} L</p>
-                        
-                    </div>
-                    <div class="supplier-card-footer">
-                        <a href="/tedarikci/${supplier.id}" class="btn btn-sm btn-outline-info" title="Detayları Gör"><i class="bi bi-eye"></i></a>
-                        <button class="btn btn-sm btn-outline-primary ms-1" title="Düzenle" onclick="tedarikciDuzenleAc(${supplier.id}, this)"><i class="bi bi-pencil"></i></button>
-                        <button class="btn btn-sm btn-outline-danger ms-1" title="Sil" onclick="silmeOnayiAc(${supplier.id}, '${utils.sanitizeHTML(supplier.isim.replace(/'/g, "\\'"))}')"><i class="bi bi-trash"></i></button>
-                    </div>
+        <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow">
+            <div class="flex justify-between items-start mb-3">
+                <h3 class="font-bold text-gray-900">${utils.sanitizeHTML(s.isim)}</h3>
+                <a href="/tedarikci/${s.id}" class="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100">Detay</a>
+            </div>
+            <p class="text-sm text-gray-500 mb-2"><i class="fa-solid fa-phone mr-2"></i>${s.telefon_no || '-'}</p>
+            <div class="flex justify-between items-center border-t border-gray-50 pt-2">
+                <span class="font-bold text-brand-600 text-lg">${parseFloat(s.toplam_litre||0).toFixed(2)} L</span>
+                <div class="flex gap-1">
+                    <button onclick="tedarikciDuzenleAc(${s.id})" class="p-1 text-yellow-600 hover:bg-yellow-50 rounded"><i class="fa-solid fa-pen"></i></button>
+                    <button onclick="silmeOnayiAc(${s.id}, '${s.isim.replace(/'/g, "\\'")}')" class="p-1 text-red-600 hover:bg-red-50 rounded"><i class="fa-solid fa-trash"></i></button>
                 </div>
-            </div>`;
+            </div>
+        </div>`;
     });
 }
 
-/**
- * Tablo başlıklarındaki sıralama ikonlarını günceller.
- */
-function basliklariGuncelle() {
-    document.querySelectorAll('.sortable').forEach(header => {
-        header.classList.remove('asc', 'desc');
-        if (header.dataset.sort === mevcutSiralamaSutunu) {
-            header.classList.add(mevcutSiralamaYonu);
-        }
-    });
-}
+// --- İŞLEMLER ---
 
-/**
- * Yeni tedarikçi ekleme veya mevcut tedarikçiyi güncelleme işlemini yapar.
- */
-async function tedarikciKaydet() {
-    const kaydetButton = document.querySelector('#kaydet-tedarikci-btn');
-    const originalButtonText = kaydetButton.innerHTML;
-    const id = document.getElementById('edit-tedarikci-id').value;
-    const veri = {
-        isim: document.getElementById('tedarikci-isim-input').value.trim(),
-        tc_no: document.getElementById('tedarikci-tc-input').value.trim(),
-        telefon_no: document.getElementById('tedarikci-tel-input').value.trim(),
-        adres: document.getElementById('tedarikci-adres-input').value.trim()
-    };
-    if (!veri.isim) { gosterMesaj("Tedarikçi ismi zorunludur.", "warning"); return; } // ui.js'den
-
-    kaydetButton.disabled = true;
-    kaydetButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Kaydediliyor...`;
-    try {
-        const result = id
-            ? await api.updateTedarikci(id, veri) // api.js'den
-            : await api.postTedarikci(veri);    // api.js'den
-
-        let mesaj = result.message;
-        if (!id && result.ciftci_kullanici_adi && result.ciftci_sifre) {
-            mesaj += `<br><small class="mt-2">Otomatik oluşturulan çiftçi giriş bilgileri:<br>Kullanıcı Adı: <strong>${utils.sanitizeHTML(result.ciftci_kullanici_adi)}</strong><br>Şifre: <strong>${utils.sanitizeHTML(result.ciftci_sifre)}</strong></small>`;
-             gosterMesaj(mesaj, "success", 10000, true); // YENİ: allowHTML: true
-        } else {
-             gosterMesaj(mesaj, "success"); // ui.js'den
-        }
-
-        tedarikciModal.hide();
-        await verileriYukle(id ? mevcutSayfa : 1); // Listeyi güncelle
-
-    } catch (error) {
-        gosterMesaj(error.message || "Bir hata oluştu.", "danger"); // ui.js'den
-    } finally {
-        kaydetButton.disabled = false;
-        kaydetButton.innerHTML = originalButtonText;
-    }
-}
-
-/**
- * Tedarikçiyi ve (varsa) bağlı çiftçi hesabını siler.
- */
-async function tedarikciSil() {
-    const id = document.getElementById('silinecek-tedarikci-id').value;
-    silmeOnayModal.hide();
-
-    const silinecekElement = document.getElementById(`tedarikci-${id}`);
-    if (!silinecekElement) return;
-
-    const parent = silinecekElement.parentNode;
-    const nextSibling = silinecekElement.nextSibling;
-    const originalHTML = silinecekElement.outerHTML;
-
-    silinecekElement.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-    silinecekElement.style.opacity = '0';
-    silinecekElement.style.transform = 'translateX(-50px)';
-    setTimeout(() => {
-        if(silinecekElement.parentNode) silinecekElement.remove();
-        // tedarikcilerMevcutGorunum kullanılıyor
-        if (parent && parent.children.length === 0 && (tedarikcilerMevcutGorunum === 'kart' || document.getElementById('tedarikciler-tablosu').children.length === 0)) {
-           document.getElementById('veri-yok-mesaji').style.display = 'block';
-        }
-    }, 400);
-
-    try {
-        const result = await api.deleteTedarikci(id); // api.js'den
-        gosterMesaj(result.message, 'success'); // ui.js'den
-        await verileriYukle(1); // Sayfalamayı düzeltmek için ilk sayfayı yükle
-    } catch (error) {
-        gosterMesaj(error.message || 'Silme işlemi başarısız, tedarikçi geri yüklendi.', 'danger'); // ui.js'den
-        if (originalHTML && parent) {
-             // tedarikcilerMevcutGorunum kullanılıyor
-             const tempDiv = document.createElement(tedarikcilerMevcutGorunum === 'kart' ? 'div' : 'tbody');
-             tempDiv.innerHTML = originalHTML;
-             const restoredElement = tempDiv.firstChild;
-             restoredElement.style.opacity = '1';
-             restoredElement.style.transform = 'translateX(0)';
-             parent.insertBefore(restoredElement, nextSibling);
-             document.getElementById('veri-yok-mesaji').style.display = 'none';
-        }
-    }
-}
-
-
-/**
- * Tedarikçi düzenleme modalını açar ve verileri doldurur.
- */
-async function tedarikciDuzenleAc(id, button) {
-    if(button) button.disabled = true; // Butonu geçici olarak devre dışı bırak
-    try {
-        // api.js'den direkt tedarikçi detayını çek, /api/tedarikci/<id> endpoint'i olmalı
-        const supplier = await api.request(`/api/tedarikci/${id}`);
-
-        document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Bilgilerini Düzenle';
-        document.getElementById('edit-tedarikci-id').value = supplier.id;
-        document.getElementById('tedarikci-isim-input').value = supplier.isim;
-        document.getElementById('tedarikci-tc-input').value = supplier.tc_no || '';
-        document.getElementById('tedarikci-tel-input').value = supplier.telefon_no || '';
-        document.getElementById('tedarikci-adres-input').value = supplier.adres || '';
-        tedarikciModal.show();
-    } catch (error) {
-        gosterMesaj(error.message || "Tedarikçi detayı bulunamadı.", "danger"); // ui.js'den
-    } finally {
-        if(button) button.disabled = false; // Butonu tekrar aktif et
-    }
-}
-
-/**
- * Yeni tedarikçi ekleme modalını açar.
- */
+// Yeni Ekle
 function yeniTedarikciAc() {
     document.getElementById('tedarikciModalLabel').innerText = 'Yeni Tedarikçi Ekle';
     document.getElementById('edit-tedarikci-id').value = '';
     document.getElementById('tedarikci-form').reset();
-    tedarikciModal.show();
+    toggleModal('tedarikciModal', true);
 }
 
-/**
- * Silme onay modalını açar.
- */
+// Düzenle
+async function tedarikciDuzenleAc(id) {
+    try {
+        const s = await api.request(`/api/tedarikci/${id}`);
+        document.getElementById('tedarikciModalLabel').innerText = 'Tedarikçi Düzenle';
+        document.getElementById('edit-tedarikci-id').value = s.id;
+        document.getElementById('tedarikci-isim-input').value = s.isim;
+        document.getElementById('tedarikci-tc-input').value = s.tc_no || '';
+        document.getElementById('tedarikci-tel-input').value = s.telefon_no || '';
+        document.getElementById('tedarikci-adres-input').value = s.adres || '';
+        toggleModal('tedarikciModal', true);
+    } catch(e) { gosterMesaj('Bilgi alınamadı.', 'danger'); }
+}
+
+// Kaydet (Hem Yeni Hem Düzenleme)
+async function tedarikciKaydet() {
+    const id = document.getElementById('edit-tedarikci-id').value;
+    const veri = {
+        isim: document.getElementById('tedarikci-isim-input').value,
+        tc_no: document.getElementById('tedarikci-tc-input').value,
+        telefon_no: document.getElementById('tedarikci-tel-input').value,
+        adres: document.getElementById('tedarikci-adres-input').value
+    };
+
+    if(!veri.isim) { gosterMesaj('İsim zorunlu.', 'warning'); return; }
+
+    try {
+        const res = id ? await api.updateTedarikci(id, veri) : await api.postTedarikci(veri);
+        gosterMesaj(res.message, 'success');
+        toggleModal('tedarikciModal', false);
+        verileriYukle(id ? mevcutSayfa : 1);
+    } catch(e) { gosterMesaj(e.message, 'danger'); }
+}
+
+// Silme
 function silmeOnayiAc(id, isim) {
     document.getElementById('silinecek-tedarikci-id').value = id;
     document.getElementById('silinecek-tedarikci-adi').innerText = isim;
-    silmeOnayModal.show();
+    toggleModal('silmeOnayModal', true);
 }
 
-/**
- * Liste ve Kart görünümleri arasında geçiş yapar.
- */
-async function gorunumuDegistir(yeniGorunum) { // 1. "async" eklendi
-    // tedarikcilerMevcutGorunum kullanılıyor
-    if (tedarikcilerMevcutGorunum === yeniGorunum) return;
-    tedarikcilerMevcutGorunum = yeniGorunum;
-    localStorage.setItem('tedarikciGorunum', tedarikcilerMevcutGorunum);
-    gorunumuAyarla(tedarikcilerMevcutGorunum); // Fonksiyona değişkeni ver
+async function tedarikciSil() {
+    const id = document.getElementById('silinecek-tedarikci-id').value;
+    toggleModal('silmeOnayModal', false);
+    try {
+        const res = await api.deleteTedarikci(id);
+        gosterMesaj(res.message, 'success');
+        verileriYukle(1);
+    } catch(e) { gosterMesaj(e.message, 'danger'); }
+}
+
+// Görünüm Değiştir
+function gorunumuDegistir(v) {
+    tedarikcilerMevcutGorunum = v;
+    localStorage.setItem('tedarikciGorunum', v);
+    gorunumuAyarla(v);
+    verileriYukle(mevcutSayfa);
+}
+
+function gorunumuAyarla(v) {
+    document.getElementById('tablo-gorunumu').classList.add('hidden');
+    document.getElementById('kart-gorunumu').classList.add('hidden');
+    document.getElementById(v + '-gorunumu').classList.remove('hidden');
     
-    // Görünüm değişince veriyi tekrar yükle (opsiyonel)
-    await verileriYukle(mevcutSayfa); // 2. Yorum satırı kaldırıldı ve "await" kullanıldı
-}
-
-/**
- * Aktif görünüme göre ilgili div'i gösterir/gizler ve butonları ayarlar.
- */
-function gorunumuAyarla(aktifGorunum) { // Parametre eklendi
-    document.querySelectorAll('.gorunum-konteyneri').forEach(el => el.style.display = 'none');
-    const aktifElement = document.getElementById(`${aktifGorunum}-gorunumu`);
-    if(aktifElement) {
-       aktifElement.style.display = 'block'; // Hem tablo hem kart için block yeterli
+    const btnT = document.getElementById('btn-view-table');
+    const btnC = document.getElementById('btn-view-card');
+    
+    if(v==='tablo') {
+        btnT.classList.add('bg-white', 'shadow-sm', 'text-brand-600');
+        btnC.classList.remove('bg-white', 'shadow-sm', 'text-brand-600');
+    } else {
+        btnC.classList.add('bg-white', 'shadow-sm', 'text-brand-600');
+        btnT.classList.remove('bg-white', 'shadow-sm', 'text-brand-600');
     }
-    const tableBtn = document.getElementById('btn-view-table');
-    const cardBtn = document.getElementById('btn-view-card');
-    if(tableBtn) tableBtn.classList.toggle('active', aktifGorunum === 'tablo');
-    if(cardBtn) cardBtn.classList.toggle('active', aktifGorunum === 'kart');
 }

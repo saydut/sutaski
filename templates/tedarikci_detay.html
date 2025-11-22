@@ -1,103 +1,199 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="tr" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tedarikçi Detayı - Süt Takip Sistemi</title>
 
-{% block title %}Tedarikçi Detayı - Süt Takip Sistemi{% endblock %}
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-{% block content %}
-<div class="main-wrapper p-3 p-md-4">
-    <div id="alert-container"></div>
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <span>
-            <a href="{{ url_for('main.tedarikciler_sayfasi') }}" class="btn btn-sm btn-outline-secondary mb-2">
-                <i class="bi bi-arrow-left"></i> Tüm Tedarikçiler
-            </a>
-            <h1 id="tedarikci-adi-baslik" class="fw-bold">
-                <div class="spinner-border spinner-border-sm" role="status"></div>
-            </h1>
-        </span>
-        <div class="d-flex align-items-center gap-2">
-            <div class="btn-group btn-group-sm" role="group">
-                <button type="button" id="btn-view-table" class="btn btn-sm btn-outline-primary active" onclick="gorunumuDegistir('tablo')"><i class="bi bi-list-task"></i></button>
-                <button type="button" id="btn-view-card" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('kart')"><i class="bi bi-grid-3x2-gap-fill"></i></button>
-            </div>
-            <button id="theme-toggle" class="btn btn-sm">
-                <i id="sun-icon" class="bi bi-sun-fill"></i>
-                <i id="moon-icon" class="bi bi-moon-fill"></i>
-            </button>
-        </div>
-    </div>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { brand: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1' } }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-full flex flex-col bg-gray-50 font-sans text-gray-900 antialiased pb-20 md:pb-0" data-user-role="{{ session.get('user', {}).get('rol', '') }}">
 
-    <div class="row g-3 mb-3" id="ozet-kartlari">
-        </div>
-
-    <div class="card mb-3">
-        <div class="card-body p-3">
-            <h5 class="card-title">Raporlar</h5>
-            <div class="row g-3 align-items-end">
-                <div class="col-lg-4 col-md-6 col-12">
-                    <label for="rapor-ay" class="form-label mb-1">Ay</label>
-                    <select id="rapor-ay" class="form-select form-select-sm"></select>
+    <header class="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="{{ url_for('main.tedarikciler_sayfasi') }}" class="mr-4 text-gray-500 hover:text-brand-600 transition-colors flex items-center">
+                        <i class="fa-solid fa-arrow-left mr-2"></i> <span class="hidden sm:inline">Geri</span>
+                    </a>
+                    <div class="flex items-center">
+                        <div class="bg-brand-600 text-white p-2 rounded-lg shadow-sm mr-3">
+                            <i class="fa-solid fa-user text-xl"></i>
+                        </div>
+                        <h1 class="text-lg font-bold text-gray-900 leading-tight" id="tedarikci-adi-baslik">
+                            <div class="animate-pulse h-6 w-32 bg-gray-200 rounded"></div>
+                        </h1>
+                    </div>
                 </div>
-                <div class="col-lg-4 col-md-6 col-12">
-                    <label for="rapor-yil" class="form-label mb-1">Yıl</label>
-                    <select id="rapor-yil" class="form-select form-select-sm"></select>
-                </div>
-                <div class="col-lg-2 col-md-6 col-12 d-grid">
-                     <button class="btn btn-success btn-sm w-100" id="pdf-indir-btn" onclick="hesapOzetiIndir()">
-                        <i class="bi bi-file-earmark-pdf"></i> Hesap Özeti
-                    </button>
-                </div>
-                <div class="col-lg-2 col-md-6 col-12 d-grid">
-                    <button class="btn btn-info btn-sm w-100" id="mustahsil-indir-btn" onclick="mustahsilMakbuzuIndir()">
-                        <i class="bi bi-receipt"></i> Müstahsil
-                    </button>
+                <div class="flex items-center space-x-3">
+                    {% include '_hizli_islemler.html' %}
                 </div>
             </div>
         </div>
-    </div>
+    </header>
 
-    <div class="card">
-        <div class="card-header">
-            <ul class="nav nav-tabs card-header-tabs" id="myTab" role="tablist">
-                <li class="nav-item" role="presentation"><button class="nav-link active" id="sut-tab" data-bs-toggle="tab" data-bs-target="#sut-tab-pane" type="button" role="tab">Süt Girdileri</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link" id="yem-tab" data-bs-toggle="tab" data-bs-target="#yem-tab-pane" type="button" role="tab">Yem Alımları</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link" id="finans-tab" data-bs-toggle="tab" data-bs-target="#finans-tab-pane" type="button" role="tab">Finansal İşlemler</button></li>
-            </ul>
-        </div>
-        <div class="card-body p-3">
-            <div class="tab-content" id="myTabContent">
-                <div class="tab-pane fade show active" id="sut-tab-pane" role="tabpanel">
-                    <div class="gorunum-konteyneri-detay" id="sut-tablo-gorunumu">
-                        <div class="table-responsive"><table class="table"><thead><tr><th>Tarih</th><th class="text-end">Litre</th><th class="text-end">Fiyat (TL)</th><th class="text-end">Tutar (TL)</th><th>Giren Kullanıcı</th></tr></thead><tbody id="sut-girdileri-tablosu"></tbody></table></div>
-                    </div>
-                    <div class="gorunum-konteyneri-detay row g-3" id="sut-kart-gorunumu" style="display: none;"></div>
-                    <div class="veri-yok-mesaji text-center p-4 text-secondary" id="sut-veri-yok" style="display: none;">Süt girdisi bulunamadı.</div>
-                    <nav id="sut-sayfalama" class="d-flex justify-content-center mt-3"></nav>
+    <main class="flex-1 overflow-y-auto bg-gray-50 p-4 pb-24">
+        <div class="max-w-7xl mx-auto space-y-6 mt-2">
+            
+            <div id="alert-container"></div>
+
+            <div id="ozet-kartlari" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 </div>
-        
-                <div class="tab-pane fade" id="yem-tab-pane" role="tabpanel">
-                    <div class="gorunum-konteyneri-detay" id="yem-tablo-gorunumu">
-                        <div class="table-responsive"><table class="table"><thead><tr><th>İşlem Tarihi</th><th>Yem Adı</th><th class="text-end">Miktar (KG)</th><th class="text-end">Birim Fiyat (TL)</th><th class="text-end">Toplam Tutar (TL)</th><th>İşlemi Yapan</th></tr></thead><tbody id="yem-islemleri-tablosu"></tbody></table></div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                <h5 class="font-bold text-gray-800 mb-4 flex items-center"><i class="fa-solid fa-file-pdf text-red-500 mr-2"></i>PDF Raporlar</h5>
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
+                    <div class="sm:col-span-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Ay</label>
+                        <select id="rapor-ay" class="block w-full rounded-lg border-gray-300 border p-2.5 text-sm shadow-sm focus:ring-brand-500 focus:border-brand-500"></select>
                     </div>
-                    <div class="gorunum-konteyneri-detay row g-3" id="yem-kart-gorunumu" style="display: none;"></div>
-                    <div class="veri-yok-mesaji text-center p-4 text-secondary" id="yem-veri-yok" style="display: none;">Yem alımı bulunamadı.</div>
-                    <nav id="yem-sayfalama" class="d-flex justify-content-center mt-3"></nav>
-                </div>
-        
-                <div class="tab-pane fade" id="finans-tab-pane" role="tabpanel">
-                    <div class="gorunum-konteyneri-detay" id="finans-tablo-gorunumu">
-                        <div class="table-responsive"><table class="table"><thead><tr><th>İşlem Tarihi</th><th>İşlem Tipi</th><th class="text-end">Tutar (TL)</th><th>Açıklama</th><th>İşlemi Yapan</th></tr></thead><tbody id="finansal-islemler-tablosu"></tbody></table></div>
+                    <div class="sm:col-span-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Yıl</label>
+                        <select id="rapor-yil" class="block w-full rounded-lg border-gray-300 border p-2.5 text-sm shadow-sm focus:ring-brand-500 focus:border-brand-500"></select>
                     </div>
-                    <div class="gorunum-konteyneri-detay row g-3" id="finans-kart-gorunumu" style="display: none;"></div>
-                    <div class="veri-yok-mesaji text-center p-4 text-secondary" id="finans-veri-yok" style="display: none;">Finansal işlem bulunamadı.</div>
-                    <nav id="finans-sayfalama" class="d-flex justify-content-center mt-3"></nav>
+                    <div class="sm:col-span-2">
+                        <button id="pdf-indir-btn" onclick="hesapOzetiIndir()" class="w-full bg-green-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-green-700 transition-colors shadow-sm flex items-center justify-center">
+                            <i class="fa-solid fa-file-invoice mr-2"></i> Hesap Özeti
+                        </button>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <button id="mustahsil-indir-btn" onclick="mustahsilMakbuzuIndir()" class="w-full bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm flex items-center justify-center">
+                            <i class="fa-solid fa-receipt mr-2"></i> Müstahsil
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
 
-{% block scripts %}
-<script> const TEDARIKCI_ID = {{ tedarikci_id }}; </script>
-<script src="{{ url_for('static', filename='js/tedarikci_detay.js') }}"></script>
-{% endblock %}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[600px]">
+                <div class="border-b border-gray-200 bg-gray-50 px-4 flex justify-between items-center flex-wrap gap-2">
+                    <nav class="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto" aria-label="Tabs">
+                        <button onclick="switchTab('sut')" id="tab-btn-sut" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-brand-500 text-brand-600 transition-colors">Süt Girdileri</button>
+                        <button onclick="switchTab('yem')" id="tab-btn-yem" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">Yem Alımları</button>
+                        <button onclick="switchTab('finans')" id="tab-btn-finans" class="whitespace-nowrap py-4 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors">Finansal İşlemler</button>
+                    </nav>
+                    
+                    <div class="flex bg-gray-200 rounded-lg p-1 my-2 sm:my-0">
+                        <button id="btn-view-table" onclick="gorunumuDegistir('tablo')" class="p-1.5 rounded text-brand-600 bg-white shadow-sm transition-all"><i class="fa-solid fa-list"></i></button>
+                        <button id="btn-view-card" onclick="gorunumuDegistir('kart')" class="p-1.5 rounded text-gray-500 hover:text-brand-600 active:bg-white active:shadow-sm transition-all"><i class="fa-solid fa-grip"></i></button>
+                    </div>
+                </div>
+
+                <div class="p-4">
+                    
+                    <div id="tab-content-sut" class="tab-pane block">
+                        <div id="sut-tablo-gorunumu" class="overflow-x-auto hidden">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Litre</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Fiyat</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tutar</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giren</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sut-girdileri-tablosu" class="bg-white divide-y divide-gray-200 text-sm"></tbody>
+                            </table>
+                        </div>
+                        <div id="sut-kart-gorunumu" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                        <div id="sut-veri-yok" class="hidden text-center py-10 text-gray-400">Kayıt yok.</div>
+                        <nav id="sut-sayfalama" class="flex justify-center mt-4"></nav>
+                    </div>
+
+                    <div id="tab-content-yem" class="tab-pane hidden">
+                        <div id="yem-tablo-gorunumu" class="overflow-x-auto hidden">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ürün</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Miktar</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Birim Fiyat</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Toplam</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">İşlem</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="yem-islemleri-tablosu" class="bg-white divide-y divide-gray-200 text-sm"></tbody>
+                            </table>
+                        </div>
+                        <div id="yem-kart-gorunumu" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                        <div id="yem-veri-yok" class="hidden text-center py-10 text-gray-400">Kayıt yok.</div>
+                        <nav id="yem-sayfalama" class="flex justify-center mt-4"></nav>
+                    </div>
+
+                    <div id="tab-content-finans" class="tab-pane hidden">
+                        <div id="finans-tablo-gorunumu" class="overflow-x-auto hidden">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tip</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tutar</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Açıklama</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">İşlem</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="finansal-islemler-tablosu" class="bg-white divide-y divide-gray-200 text-sm"></tbody>
+                            </table>
+                        </div>
+                        <div id="finans-kart-gorunumu" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                        <div id="finans-veri-yok" class="hidden text-center py-10 text-gray-400">Kayıt yok.</div>
+                        <nav id="finans-sayfalama" class="flex justify-center mt-4"></nav>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/data-loader.js') }}"></script>
+    
+    <script> const TEDARIKCI_ID = {{ tedarikci_id }}; </script>
+    <script src="{{ url_for('static', filename='js/tedarikci_detay.js') }}"></script>
+
+    <script>
+        // Tab Değiştirme Mantığı (Tailwind Uyumlu)
+        function switchTab(tabName) {
+            // Tüm içerikleri gizle
+            document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+            document.getElementById('tab-content-' + tabName).classList.remove('hidden');
+
+            // Tüm butonların stilini sıfırla
+            document.querySelectorAll('[id^="tab-btn-"]').forEach(btn => {
+                btn.classList.remove('border-brand-500', 'text-brand-600');
+                btn.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+            });
+
+            // Aktif butonu vurgula
+            const activeBtn = document.getElementById('tab-btn-' + tabName);
+            activeBtn.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+            activeBtn.classList.add('border-brand-500', 'text-brand-600');
+            
+            // JS tarafındaki yükleme mantığını tetikle
+            if(typeof onTabChanged === 'function') onTabChanged(tabName);
+        }
+    </script>
+
+</body>
+</html>

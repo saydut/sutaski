@@ -1,174 +1,255 @@
 // static/js/render-utils.js
 // ====================================================================================
-// ARAYÜZ OLUŞTURMA YARDIMCILARI (render-utils.js)
-// Farklı veri türleri için liste ve kart HTML'i oluşturan fonksiyonları içerir.
+// ARAYÜZ OLUŞTURMA YARDIMCILARI (HTML GENERATOR)
+// Bu dosya, ham veriyi alır ve Tailwind CSS sınıflarıyla süslenmiş HTML'e çevirir.
 // ====================================================================================
 
-// utils objesinin utils.js'den geldiğini varsayıyoruz
+// Bağımlılık Kontrolü
 if (typeof utils === 'undefined') {
-    console.error("render-utils.js: utils objesi bulunamadı. utils.js yüklendi mi?");
+    console.error("render-utils.js HATASI: 'utils' kütüphanesi bulunamadı. Lütfen utils.js dosyasının bu dosyadan önce yüklendiğinden emin olun.");
 }
 
 const renderUtils = {
 
     /**
-     * Ana paneldeki süt girdilerini liste formatında (list-group) HTML olarak oluşturur.
-     * @param {Array} girdiler - Gösterilecek girdi objeleri dizisi.
+     * Süt girdilerini LİSTE (Satır) formatında HTML'e çevirir.
+     * @param {Array} girdiler - API'den gelen süt girdisi objeleri.
      * @returns {string} - Oluşturulan HTML string'i.
      */
     renderSutGirdileriAsList(girdiler) {
         let listHTML = '';
+        
+        // Eğer veri yoksa boş string dön (UI tarafı "veri yok" mesajını halleder)
+        if (!girdiler || girdiler.length === 0) {
+            return '';
+        }
+
         girdiler.forEach(girdi => {
-            let formatliTarih = 'Geçersiz Saat';
+            // 1. Tarih/Saat Formatlama
+            let formatliSaat = '??:??';
             try {
                  const tarihObj = new Date(girdi.taplanma_tarihi);
                  if (!isNaN(tarihObj.getTime())) {
-                     formatliTarih = `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}`;
+                     // Sadece saati ve dakikayı alıyoruz (Liste görünümü için)
+                     formatliSaat = tarihObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
                  }
-            } catch(e) { console.error("Tarih formatlama hatası:", girdi.taplanma_tarihi, e); }
+            } catch(e) { 
+                console.error("Tarih hatası:", girdi.taplanma_tarihi, e); 
+            }
 
-            const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark ms-2">Düzenlendi</span>` : '';
-            const cevrimdisiEtiketi = girdi.isOffline ? `<span class="badge bg-info text-dark ms-2" title="İnternet geldiğinde gönderilecek"><i class="bi bi-cloud-upload"></i> Beklemede</span>` : '';
+            // 2. Etiketler (Badge) - Tailwind
+            let etiketlerHTML = '';
+            
+            // Düzenlendi Etiketi
+            if (girdi.duzenlendi_mi) {
+                etiketlerHTML += `<span class="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20 ms-2" title="Bu kayıt daha önce düzenlenmiş">Düzenlendi</span>`;
+            }
+            
+            // Çevrimdışı (Offline) Etiketi
+            if (girdi.isOffline) {
+                etiketlerHTML += `<span class="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 ms-2" title="İnternet bağlantısı bekleniyor"><i class="fa-solid fa-cloud-arrow-up mr-1"></i> Bekliyor</span>`;
+            }
 
-            const currentUserRole = document.body.dataset.userRole;
+            // 3. Yetki Kontrolü (Düzenle/Sil butonları kime görünecek?)
+            // Mevcut kullanıcının ID'sini ve rolünü alıyoruz
             let currentUserId = null;
-            try { currentUserId = JSON.parse(localStorage.getItem('offlineUser'))?.id; } catch(e) { console.error("Kullanıcı ID alınamadı:", e); }
+            const currentUserRole = document.body.dataset.userRole; // HTML'den gelir
+            try { 
+                const offlineUser = JSON.parse(localStorage.getItem('offlineUser'));
+                if (offlineUser) currentUserId = offlineUser.id;
+            } catch(e) {}
 
             const girdiSahibiId = girdi.kullanici_id;
-            const canModify = !girdi.isOffline && typeof currentUserId === 'number' && typeof girdiSahibiId === 'number' &&
-                              (currentUserRole === 'firma_yetkilisi' || (currentUserRole === 'toplayici' && girdiSahibiId === currentUserId));
+            
+            // Kural: Admin ve Firma Yetkilisi herkesinkini, Toplayıcı sadece kendisininkini silebilir.
+            // Çevrimdışı kayıtlar henüz sunucuda olmadığı için düzenlenemez (senkronizasyon beklenir).
+            const yetkiVar = !girdi.isOffline && (
+                currentUserRole === 'admin' || 
+                currentUserRole === 'firma_yetkilisi' || 
+                (currentUserRole === 'toplayici' && girdiSahibiId === currentUserId)
+            );
 
-            let actionButtons = canModify ? `
-                <button class="btn btn-sm btn-outline-info border-0" title="Düzenle"
-                        data-bs-toggle="modal" data-bs-target="#duzenleModal"
-                        data-girdi-id="${girdi.id}" data-litre="${girdi.litre}" data-fiyat="${girdi.fiyat}">
-                    <i class="bi bi-pencil"></i>
-                </button>
-                <button class="btn btn-sm btn-outline-danger border-0" title="Sil"
-                        data-bs-toggle="modal" data-bs-target="#silmeOnayModal"
-                        data-girdi-id="${girdi.id}">
-                    <i class="bi bi-trash"></i>
-                </button>` : '';
+            // 4. Buton Grubu Oluşturma
+            let actionButtons = '';
+            if (yetkiVar) {
+                actionButtons = `
+                    <div class="flex items-center gap-1">
+                        <button onclick="modalHandler.acDuzenleModal(${girdi.id}, '${girdi.litre}', '${girdi.fiyat}')" 
+                                class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200" 
+                                title="Girdiyi Düzenle">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button onclick="modalHandler.acSilmeModal(${girdi.id})" 
+                                class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-200" 
+                                title="Girdiyi Sil">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>`;
+            }
 
-            // onclick içinde global fonksiyonu çağırıyoruz (ui.js veya modal-handler.js içinde olabilir)
-            const gecmisButonu = !girdi.isOffline && girdi.id && !String(girdi.id).startsWith('offline-')
-                ? `<button class="btn btn-sm btn-outline-secondary border-0" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button>`
+            // Geçmiş Butonu (Offline değilse ve ID geçerliyse)
+            let gecmisButonu = '';
+            if (!girdi.isOffline && girdi.id && !String(girdi.id).startsWith('offline-')) {
+                 gecmisButonu = `
+                    <button onclick="modalHandler.acGecmisModal(${girdi.id})" 
+                            class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors duration-200" 
+                            title="Düzenleme Geçmişini Gör">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                    </button>`;
+            }
+
+            // 5. Veri Hazırlığı
+            const litre = parseFloat(girdi.litre).toFixed(1); // Örn: 25.5
+            const fiyat = parseFloat(girdi.fiyat || 0);
+            
+            // Fiyat varsa yeşil renkte göster, yoksa boş geç
+            const fiyatHTML = fiyat > 0 
+                ? `<span class="text-green-600 font-medium text-xs ml-1 bg-green-50 px-1.5 py-0.5 rounded">@${fiyat.toFixed(2)} TL</span>` 
                 : '';
-
-            const fiyat = parseFloat(girdi.fiyat || 0); // Fiyat null ise 0 kabul et
-            const fiyatBilgisi = fiyat > 0 ? `<span class="text-success">@ ${fiyat.toFixed(2)} TL</span>` : '';
-            // utils objesinin global olduğunu varsayıyoruz (utils.js'den)
-            const kullaniciAdi = girdi.kullanicilar?.kullanici_adi ? utils.sanitizeHTML(girdi.kullanicilar.kullanici_adi) : (girdi.isOffline ? 'Siz (Beklemede)' : 'Bilinmiyor');
+            
+            // İsimleri güvenli hale getir (XSS koruması)
+            const kullaniciAdi = girdi.kullanicilar?.kullanici_adi ? utils.sanitizeHTML(girdi.kullanicilar.kullanici_adi) : (girdi.isOffline ? 'Siz (Cihaz)' : '-');
             const tedarikciAdi = girdi.tedarikciler ? utils.sanitizeHTML(girdi.tedarikciler.isim) : 'Bilinmeyen Tedarikçi';
 
-
+            // 6. HTML Şablonu (Tailwind)
             listHTML += `
-                <div class="list-group-item" id="girdi-liste-${girdi.id}">
-                    <div class="d-flex w-100 justify-content-between flex-wrap">
-                        <h5 class="mb-1 girdi-baslik">${tedarikciAdi} - ${girdi.litre} Litre ${fiyatBilgisi} ${duzenlendiEtiketi} ${cevrimdisiEtiketi}</h5>
-                        <div class="btn-group">${actionButtons} ${gecmisButonu}</div>
+                <div class="group flex items-center justify-between p-4 bg-white hover:bg-gray-50 transition-colors duration-200 border-b border-gray-100 last:border-0" id="girdi-liste-${girdi.id}">
+                    
+                    <div class="flex-1 min-w-0 pr-4">
+                        <div class="flex items-center flex-wrap gap-2 mb-1">
+                            <h5 class="text-sm font-bold text-gray-900 truncate">${tedarikciAdi}</h5>
+                            ${etiketlerHTML}
+                        </div>
+                        
+                        <div class="flex items-center text-xs text-gray-500 flex-wrap gap-y-1">
+                            <span class="font-bold text-gray-800 text-sm mr-1">${litre} L</span>
+                            ${fiyatHTML}
+                            
+                            <span class="mx-2 text-gray-300 hidden sm:inline">|</span>
+                            <span class="flex items-center mr-3 sm:mr-0">
+                                <i class="fa-regular fa-user mr-1 text-gray-400"></i>${kullaniciAdi}
+                            </span>
+                            
+                            <span class="mx-2 text-gray-300">|</span>
+                            <span class="flex items-center font-mono">
+                                <i class="fa-regular fa-clock mr-1 text-gray-400"></i>${formatliSaat}
+                            </span>
+                        </div>
                     </div>
-                    <p class="mb-1 girdi-detay">Toplayan: ${kullaniciAdi} | Saat: ${formatliTarih}</p>
+
+                    <div class="flex items-center opacity-100 sm:opacity-60 sm:group-hover:opacity-100 transition-opacity">
+                        ${actionButtons}
+                        ${gecmisButonu}
+                    </div>
                 </div>`;
         });
+
         return listHTML;
     },
 
     /**
-     * Ana paneldeki süt girdilerini kart formatında (grid) HTML olarak oluşturur.
-     * @param {Array} girdiler - Gösterilecek girdi objeleri dizisi.
+     * Süt girdilerini KART (Grid) formatında HTML'e çevirir.
+     * @param {Array} girdiler - API'den gelen süt girdisi objeleri.
      * @returns {string} - Oluşturulan HTML string'i.
      */
     renderSutGirdileriAsCards(girdiler) {
         let cardsHTML = '';
+
+        if (!girdiler || girdiler.length === 0) {
+            return '';
+        }
+
         girdiler.forEach(girdi => {
-            let formatliTarih = 'Geçersiz Saat';
-             try {
-                  const tarihObj = new Date(girdi.taplanma_tarihi);
-                  if (!isNaN(tarihObj.getTime())) {
-                      formatliTarih = `${String(tarihObj.getHours()).padStart(2, '0')}:${String(tarihObj.getMinutes()).padStart(2, '0')}`;
-                  }
-             } catch(e) { console.error("Tarih formatlama hatası:", girdi.taplanma_tarihi, e); }
+            // 1. Tarih Formatlama
+            let formatliSaat = '??:??';
+            try {
+                const tarihObj = new Date(girdi.taplanma_tarihi);
+                if (!isNaN(tarihObj.getTime())) {
+                    formatliSaat = tarihObj.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+                }
+            } catch(e) {}
 
-            const duzenlendiEtiketi = girdi.duzenlendi_mi ? `<span class="badge bg-warning text-dark">Düzenlendi</span>` : '';
-            const cevrimdisiEtiketi = girdi.isOffline ? `<span class="badge bg-info text-dark" title="Beklemede"><i class="bi bi-cloud-upload"></i></span>` : '';
+            // 2. Etiketler (Badge) - Sağ üst köşe için absolut pozisyon
+            let badgeler = '';
+            if (girdi.duzenlendi_mi) {
+                badgeler += `<span class="h-2.5 w-2.5 rounded-full bg-yellow-400 ring-2 ring-white" title="Düzenlendi"></span>`;
+            }
+            if (girdi.isOffline) {
+                badgeler += `<span class="h-2.5 w-2.5 rounded-full bg-blue-500 ring-2 ring-white ml-1" title="Çevrimdışı Kayıt"></span>`;
+            }
+            const badgeContainer = badgeler ? `<div class="absolute top-3 right-3 flex">${badgeler}</div>` : '';
 
-            const currentUserRole = document.body.dataset.userRole;
+            // 3. Yetki Kontrolü
             let currentUserId = null;
-            try { currentUserId = JSON.parse(localStorage.getItem('offlineUser'))?.id; } catch(e) { console.error("Kullanıcı ID alınamadı:", e); }
-
+            const currentUserRole = document.body.dataset.userRole;
+            try { 
+                const offlineUser = JSON.parse(localStorage.getItem('offlineUser'));
+                if(offlineUser) currentUserId = offlineUser.id; 
+            } catch(e) {}
+            
             const girdiSahibiId = girdi.kullanici_id;
-            const canModify = !girdi.isOffline && typeof currentUserId === 'number' && typeof girdiSahibiId === 'number' &&
-                               (currentUserRole === 'firma_yetkilisi' || (currentUserRole === 'toplayici' && girdiSahibiId === currentUserId));
+            const yetkiVar = !girdi.isOffline && (
+                currentUserRole === 'admin' || 
+                currentUserRole === 'firma_yetkilisi' || 
+                (currentUserRole === 'toplayici' && girdiSahibiId === currentUserId)
+            );
 
-            let actionButtons = canModify ? `
-                <button class="btn btn-sm btn-outline-primary" title="Düzenle"
-                        data-bs-toggle="modal" data-bs-target="#duzenleModal"
-                        data-girdi-id="${girdi.id}" data-litre="${girdi.litre}" data-fiyat="${girdi.fiyat}">
-                    <i class="bi bi-pencil"></i>
+            // 4. Butonlar
+            let actionButtons = '';
+            if (yetkiVar) {
+                actionButtons = `
+                <button onclick="modalHandler.acDuzenleModal(${girdi.id}, '${girdi.litre}', '${girdi.fiyat}')" 
+                        class="text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-md transition-colors">
+                    Düzenle
                 </button>
-                <button class="btn btn-sm btn-outline-danger" title="Sil"
-                        data-bs-toggle="modal" data-bs-target="#silmeOnayModal"
-                        data-girdi-id="${girdi.id}">
-                    <i class="bi bi-trash"></i>
-                </button>` : '';
+                <button onclick="modalHandler.acSilmeModal(${girdi.id})" 
+                        class="text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-md transition-colors ml-2">
+                    Sil
+                </button>`;
+            } else if (girdi.isOffline) {
+                actionButtons = `<span class="text-xs text-gray-400 italic">Senkronizasyon bekleniyor...</span>`;
+            }
 
-             // onclick içinde global fonksiyonu çağırıyoruz (ui.js veya modal-handler.js içinde olabilir)
-            const gecmisButonu = !girdi.isOffline && girdi.id && !String(girdi.id).startsWith('offline-')
-                ? `<button class="btn btn-sm btn-outline-secondary" title="Geçmişi Gör" onclick="gecmisiGoster(${girdi.id})"><i class="bi bi-clock-history"></i></button>`
-                : '';
-
-            const litre = parseFloat(girdi.litre || 0);
+            // 5. Veri Hazırlığı
+            const litre = parseFloat(girdi.litre).toFixed(1); // Örn: 50.0
             const fiyat = parseFloat(girdi.fiyat || 0);
-            const tutar = litre * fiyat;
-            const kullaniciAdi = girdi.kullanicilar?.kullanici_adi ? utils.sanitizeHTML(girdi.kullanicilar.kullanici_adi) : (girdi.isOffline ? 'Siz (Beklemede)' : 'Bilinmiyor');
-            const tedarikciAdi = girdi.tedarikciler ? utils.sanitizeHTML(girdi.tedarikciler.isim) : 'Bilinmeyen Tedarikçi';
+            const toplamTutar = (parseFloat(girdi.litre) * fiyat).toFixed(2);
+            
+            const tedarikciAdi = girdi.tedarikciler ? utils.sanitizeHTML(girdi.tedarikciler.isim) : 'Bilinmeyen';
+            const toplayan = girdi.kullanicilar?.kullanici_adi ? utils.sanitizeHTML(girdi.kullanicilar.kullanici_adi) : '-';
 
+            // 6. HTML Şablonu (Tailwind Card)
             cardsHTML += `
-            <div class="col-xl-6 col-12" id="girdi-kart-${girdi.id}">
-                <div class="card p-2 h-100">
-                    <div class="card-body p-2">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <h6 class="card-title mb-0">${tedarikciAdi}</h6>
-                                <small class="text-secondary">Toplayan: ${kullaniciAdi}</small>
-                            </div>
-                            <div class="d-flex gap-2">${cevrimdisiEtiketi} ${duzenlendiEtiketi}</div>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center my-2">
-                            <span class="fs-4 fw-bold text-primary">${litre.toFixed(2)} L</span> 
-                            <span class="fs-5 fw-bold text-success">${tutar.toFixed(2)} TL</span>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                             <small class="text-secondary">Saat: ${formatliTarih}</small>
-                             <div class="btn-group btn-group-sm">${actionButtons} ${gecmisButonu}</div>
-                        </div>
+            <div class="col-span-1 relative bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition-all duration-200 group" id="girdi-kart-${girdi.id}">
+                ${badgeContainer}
+                
+                <div class="mb-3 pr-6">
+                    <h3 class="text-base font-bold text-gray-900 truncate" title="${tedarikciAdi}">${tedarikciAdi}</h3>
+                    <div class="flex items-center text-xs text-gray-400 mt-1">
+                        <i class="fa-regular fa-clock mr-1"></i> ${formatliSaat}
+                        <span class="mx-1">•</span>
+                        <span>${toplayan}</span>
+                    </div>
+                </div>
+                
+                <div class="flex items-baseline gap-1 mb-4">
+                    <span class="text-3xl font-extrabold text-brand-600 tracking-tight">${litre}</span>
+                    <span class="text-sm font-medium text-gray-500">Litre</span>
+                </div>
+                
+                <div class="flex items-center justify-between pt-3 border-t border-gray-100">
+                    <div class="flex flex-col">
+                        <span class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Tutar</span>
+                        <span class="text-sm font-bold text-green-600">${fiyat > 0 ? toplamTutar + ' TL' : '-'}</span>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        ${actionButtons}
                     </div>
                 </div>
             </div>`;
         });
-        return cardsHTML;
-    }
 
-    // Gelecekte diğer sayfaların render fonksiyonları da buraya eklenebilir.
-    // Örnek:
-    /*
-    renderTedarikcilerAsTable(tedarikciler) {
-        let tableHTML = '';
-        tedarikciler.forEach(supplier => {
-            // ... (tedarikciler.js içindeki renderTable mantığı buraya) ...
-            tableHTML += `<tr> ... </tr>`;
-        });
-        return tableHTML;
-    },
-    renderTedarikcilerAsCards(tedarikciler) {
-         let cardsHTML = '';
-        tedarikciler.forEach(supplier => {
-            // ... (tedarikciler.js içindeki renderCards mantığı buraya) ...
-            cardsHTML += `<div class="col..."> ... </div>`;
-        });
         return cardsHTML;
     }
-    */
-    // ... Yem, Finans vb. için de benzer fonksiyonlar eklenebilir.
 };

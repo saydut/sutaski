@@ -100,49 +100,43 @@ function renderCiftciOzet(ozet) {
     const container = document.getElementById('ciftci-ozet-kartlari');
     if (!container || !ozet) return;
 
-    // --- DÜZELTME: Yorumlar temizlendi ve Tahsilat kartı eklendi ---
+    // Tailwind Grid ve Card Yapısı
+    // Not: Container'ın kendisi HTML tarafında zaten "grid grid-cols-1..." classına sahip olmalı veya burada kapsayıcı div eklenmeli.
+    // Ancak buradaki yapıya göre container içine direkt eleman ekliyoruz.
+    // HTML tarafında container ID'sine sahip div'e "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" eklemeyi unutmayın.
+    // (Aşağıda HTML yapısını bozmadan string üretiyorum)
+
+    container.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4"; // Grid yapısını JS ile zorla
+
     container.innerHTML = `
-        <div class="col-md-6 col-lg-3 col-12 mb-3">
-            <div class="card p-3 text-center h-100">
-                <div class="fs-6 text-secondary">Toplam Süt Alacağı</div>
-                <h4 class="fw-bold mb-0 text-success" id="ciftci-toplam-sut">0.00 TL</h4>
-            </div>
+        <div class="bg-green-50 rounded-xl p-4 border border-green-100 shadow-sm text-center">
+            <div class="text-xs font-semibold text-green-800 uppercase mb-1">Toplam Süt Alacağı</div>
+            <h4 class="text-xl font-bold text-green-600" id="ciftci-toplam-sut">0.00 TL</h4>
         </div>
-        <div class="col-md-6 col-lg-3 col-12 mb-3">
-            <div class="card p-3 text-center h-100">
-                <div class="fs-6 text-secondary">Toplam Yem Borcu</div>
-                <h4 class="fw-bold mb-0 text-danger" id="ciftci-toplam-yem">0.00 TL</h4>
-            </div>
+        <div class="bg-red-50 rounded-xl p-4 border border-red-100 shadow-sm text-center">
+            <div class="text-xs font-semibold text-red-800 uppercase mb-1">Toplam Yem Borcu</div>
+            <h4 class="text-xl font-bold text-red-600" id="ciftci-toplam-yem">0.00 TL</h4>
         </div>
-        <div class="col-md-6 col-lg-3 col-12 mb-3">
-             <div class="card p-3 text-center h-100">
-                <div class="fs-6 text-secondary">Şirketten Ödeme (Avans+Hakediş)</div>
-                <h4 class="fw-bold mb-0 text-warning" id="ciftci-toplam-sirket-odeme">0.00 TL</h4>
-            </div>
+        <div class="bg-yellow-50 rounded-xl p-4 border border-yellow-100 shadow-sm text-center">
+            <div class="text-xs font-semibold text-yellow-800 uppercase mb-1">Şirketten Ödeme</div>
+            <h4 class="text-xl font-bold text-yellow-600" id="ciftci-toplam-sirket-odeme">0.00 TL</h4>
         </div>
-        
-        <div class="col-md-6 col-lg-3 col-12 mb-3">
-             <div class="card p-3 text-center h-100">
-                <div class="fs-6 text-secondary">Şirkete Yapılan (Tahsilat)</div>
-                <h4 class="fw-bold mb-0 text-info" id="ciftci-toplam-tahsilat">0.00 TL</h4>
-            </div>
+        <div class="bg-blue-50 rounded-xl p-4 border border-blue-100 shadow-sm text-center">
+            <div class="text-xs font-semibold text-blue-800 uppercase mb-1">Tahsilat</div>
+            <h4 class="text-xl font-bold text-blue-600" id="ciftci-toplam-tahsilat">0.00 TL</h4>
         </div>
-        
-         <div class="col-md-6 col-lg-3 col-12 mb-3">
-             <div class="card p-3 text-center h-100">
-                <div class="fs-6 text-secondary">Net Bakiye</div>
-                <h4 class="fw-bold mb-0 text-primary" id="ciftci-net-bakiye">0.00 TL</h4>
-            </div>
+        <div class="bg-indigo-50 rounded-xl p-4 border border-indigo-100 shadow-sm text-center">
+            <div class="text-xs font-semibold text-indigo-800 uppercase mb-1">Net Bakiye</div>
+            <h4 class="text-xl font-bold text-indigo-600" id="ciftci-net-bakiye">0.00 TL</h4>
         </div>
     `;
     // --- /DÜZELTME ---
 
     // Değerleri animasyonla göster (Yeni Alan Adları ile)
-    if (typeof animateCounter === 'function') {
+if (typeof animateCounter === 'function') {
         animateCounter(document.getElementById('ciftci-toplam-sut'), parseFloat(ozet.toplam_sut_alacagi || 0), 1000, ' TL', 2);
         animateCounter(document.getElementById('ciftci-toplam-yem'), parseFloat(ozet.toplam_yem_borcu || 0), 1000, ' TL', 2);
         animateCounter(document.getElementById('ciftci-toplam-sirket-odeme'), parseFloat(ozet.toplam_sirket_odemesi || 0), 1000, ' TL', 2);
-        // DÜZELTME: Tahsilat animasyonunu ekle
         animateCounter(document.getElementById('ciftci-toplam-tahsilat'), parseFloat(ozet.toplam_tahsilat || 0), 1000, ' TL', 2);
         animateCounter(document.getElementById('ciftci-net-bakiye'), parseFloat(ozet.net_bakiye || 0), 1000, ' TL', 2);
     } else {

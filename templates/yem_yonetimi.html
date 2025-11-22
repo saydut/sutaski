@@ -3,301 +3,157 @@
 {% block title %}Yem Yönetimi - Süt Takip Sistemi{% endblock %}
 
 {% block head_extra %}
-    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css" rel="stylesheet">
+<style>
+    .ts-control { border-radius: 0.5rem !important; padding: 0.5rem !important; border-color: #d1d5db !important; }
+    .ts-dropdown { border-radius: 0.5rem !important; border-color: #d1d5db !important; }
+    .hidden { display: none !important; }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="main-wrapper p-3 p-md-4">
-    <div id="alert-container"></div>
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h1 class="fw-bold">Yem Yönetimi</h1>
-        <div class="d-flex align-items-center gap-2">
-            {% include '_hizli_islemler.html' %}
+<header class="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between h-16">
+            <div class="flex items-center">
+                <a href="{{ url_for('main.panel') }}" class="mr-4 text-gray-500 hover:text-brand-600 transition-colors"><i class="fa-solid fa-arrow-left text-xl"></i></a>
+                <div class="flex-shrink-0 flex items-center">
+                    <div class="bg-brand-600 text-white p-2 rounded-lg shadow-sm mr-3"><i class="fa-solid fa-wheat-awn text-xl"></i></div>
+                    <h1 class="text-lg font-bold text-gray-900">Yem Yönetimi</h1>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                {% include '_hizli_islemler.html' %}
+            </div>
         </div>
     </div>
+</header>
 
-    <div class="row g-3">
+<main class="flex-1 overflow-y-auto bg-gray-50 p-4">
+    <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
         
-        <div class="col-lg-4 col-12 order-lg-1 order-2">
-            
-            <div class="card">
-                <div class="card-header p-0">
-                     <ul class="nav nav-tabs nav-fill" id="yem-islem-tab-list" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="giris-tab" data-bs-toggle="tab" data-bs-target="#giris-panel" type="button" role="tab" aria-controls="giris-panel" aria-selected="true">
-                                <i class="bi bi-plus-circle-fill text-success me-1"></i> Yem Girişi (Alış)
-                            </button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="cikis-tab" data-bs-toggle="tab" data-bs-target="#cikis-panel" type="button" role="tab" aria-controls="cikis-panel" aria-selected="false">
-                                <i class="bi bi-dash-circle-fill text-danger me-1"></i> Yem Çıkışı (Satış)
-                            </button>
-                        </li>
-                    </ul>
+        <div id="alert-container" class="lg:col-span-12"></div>
+
+        <div class="lg:col-span-4 order-1">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="flex border-b border-gray-200">
+                    <button onclick="switchFormTab('giris')" id="tab-btn-giris" class="flex-1 py-3 text-sm font-medium text-center border-b-2 border-green-500 text-green-700 bg-green-50 transition-colors">Giriş (Alış)</button>
+                    <button onclick="switchFormTab('cikis')" id="tab-btn-cikis" class="flex-1 py-3 text-sm font-medium text-center border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors">Çıkış (Satış)</button>
                 </div>
 
-                <div class="tab-content" id="yem-islem-tab-content">
+                <div id="giris-panel" class="p-5">
+                    <h3 class="text-sm font-bold text-green-700 mb-4 uppercase tracking-wide">Stok Girişi</h3>
+                    <form id="yem-giris-formu" class="space-y-4">
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Yem Ürünü</label><select id="yem-urun-giris-sec" class="w-full" required></select></div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><label class="block text-sm font-medium text-gray-700 mb-1">Miktar (KG)</label><input type="number" step="0.1" id="giris-miktar-kg-input" class="block w-full rounded-lg border-gray-300 border p-2 text-sm" required></div>
+                            <div id="cuval-giris-alani" class="hidden"><label class="block text-sm font-medium text-gray-700 mb-1">Miktar (Çuval)</label><input type="number" step="1" id="giris-miktar-cuval-input" class="block w-full rounded-lg border-gray-300 border p-2 text-sm"></div>
+                        </div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Birim Alış Fiyatı</label><input type="number" step="0.01" id="giris-alis-fiyati-input" class="block w-full rounded-lg border-gray-300 border p-2 text-sm" required><p id="giris-fiyat-uyari" class="mt-1 text-xs text-gray-500"></p></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Açıklama</label><textarea id="giris-aciklama-input" rows="2" class="block w-full rounded-lg border-gray-300 border p-2 text-sm"></textarea></div>
+                        <button type="submit" id="yem-giris-btn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition-colors">Kaydet</button>
+                    </form>
+                </div>
+
+                <div id="cikis-panel" class="p-5 hidden">
+                    <div class="space-y-4">
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Tedarikçi</label><select id="tedarikci-sec" class="w-full"></select></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Yem Ürünü</label><select id="yem-urun-sec" class="w-full"></select></div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><label class="block text-sm font-medium text-gray-700 mb-1">Miktar (KG)</label><input type="number" step="0.1" id="miktar-kg-input" class="block w-full rounded-lg border-gray-300 border p-2 text-sm" placeholder="0.0"></div>
+                            <div id="cuval-cikis-alani" class="hidden"><label class="block text-sm font-medium text-gray-700 mb-1">Miktar (Çuval)</label><input type="number" step="0.5" id="miktar-cuval-input" class="block w-full rounded-lg border-gray-300 border p-2 text-sm" placeholder="0.0"></div>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 flex gap-4">
+                            <label class="inline-flex items-center cursor-pointer"><input type="radio" name="fiyatTipiRadio" value="pesin" checked class="text-red-600 focus:ring-red-500 border-gray-300"><span class="ml-2 text-sm">Peşin</span></label>
+                            <label class="inline-flex items-center cursor-pointer"><input type="radio" name="fiyatTipiRadio" value="vadeli" class="text-red-600 focus:ring-red-500 border-gray-300"><span class="ml-2 text-sm">Vadeli</span></label>
+                        </div>
+                        <div id="vadeli-fiyat-alani" class="hidden space-y-3">
+                            <div id="vadeli-cuval-fiyat-grup" class="hidden"><label class="block text-sm">Vadeli (TL/Çuval)</label><input type="number" step="0.01" id="vadeli-cuval-fiyat-input" class="block w-full rounded-lg border-gray-300 border p-2 text-sm"></div>
+                            <div id="vadeli-kg-fiyat-grup" class="hidden"><label class="block text-sm">Vadeli (TL/KG)</label><input type="number" step="0.01" id="birim-fiyat-input" class="block w-full rounded-lg border-gray-300 border p-2 text-sm"></div>
+                        </div>
+                        <div id="pesin-fiyat-alani"><label class="block text-sm">Birim Fiyat (TL/KG)</label><input type="number" step="0.01" id="birim-fiyat-input-pesin" class="block w-full rounded-lg border-gray-300 border p-2 text-sm bg-gray-100 cursor-not-allowed" disabled></div>
+                        <div><label class="block text-sm">Açıklama</label><textarea id="aciklama-input" rows="2" class="block w-full rounded-lg border-gray-300 border p-2 text-sm"></textarea></div>
+                        <button onclick="yemCikisiYap()" id="yem-cikis-btn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors">Çıkışı Kaydet</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-8 order-2">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[600px]">
+                <div class="px-4 py-3 border-b border-gray-200 flex flex-wrap justify-between items-center gap-3 bg-gray-50">
+                    <div class="flex space-x-2">
+                        <button onclick="switchListTab('stoklar')" id="tab-list-stoklar" class="px-3 py-1.5 rounded-md text-sm font-medium bg-white text-brand-600 shadow-sm ring-1 ring-gray-200 transition-all">Stoklar</button>
+                        <button onclick="switchListTab('islemler')" id="tab-list-islemler" class="px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-white transition-all">Hareketler</button>
+                    </div>
                     
-                    <div class="tab-pane fade show active" id="giris-panel" role="tabpanel" aria-labelledby="giris-tab">
-                        <div class="card-body p-3">
-                            <h5 class="card-title mb-3 text-success">Yem Girişi (Stok Alımı)</h5>
-                            <form id="yem-giris-formu">
-                                <div class="mb-2">
-                                    <label for="yem-urun-giris-sec" class="form-label">Yem Ürünü</label>
-                                    <select id="yem-urun-giris-sec" placeholder="Yem seçin..." autocomplete="off" required></select>
-                                </div>
-        
-                                <div class="row g-2 mb-2">
-                                    <div class="col-6">
-                                        <label for="giris-miktar-kg-input" class="form-label">Miktar (KG)</label>
-                                        <input type="number" step="0.1" class="form-control form-control-sm" id="giris-miktar-kg-input" placeholder="Örn: 1000" required>
-                                    </div>
-                                    <div class="col-6" id="cuval-giris-alani" style="display: none;">
-                                        <label for="giris-miktar-cuval-input" class="form-label">Miktar (Çuval)</label>
-                                        <input type="number" step="1" class="form-control form-control-sm" id="giris-miktar-cuval-input" placeholder="Örn: 20">
-                                    </div>
-                                </div>
-        
-                                <div class="mb-2">
-                                    <label for="giris-alis-fiyati-input" class="form-label">Birim Alış Fiyatı (TL/KG)</label>
-                                    <input type="number" step="0.01" class="form-control form-control-sm" id="giris-alis-fiyati-input" placeholder="Alış fiyatı (otomatik gelebilir)" required>
-                                    <small class="form-text text-secondary" id="giris-fiyat-uyari"></small>
-                                </div>
-                                
-                                 <div class="mb-3">
-                                    <label for="giris-aciklama-input" class="form-label">Açıklama (İsteğe bağlı)</label>
-                                    <textarea class="form-control form-control-sm" id="giris-aciklama-input" rows="2" placeholder="Örn: X firmasından alındı"></textarea>
-                                </div>
-                                <div class="d-grid">
-                                    <button type="submit" class="btn btn-success" id="yem-giris-btn">Girişi (Alış) Kaydet</button>
-                                </div>
-                            </form>
+                    <div class="flex items-center gap-2">
+                        <div class="flex bg-gray-200 rounded-lg p-1">
+                            <button id="btn-view-table" onclick="gorunumuDegistir('tablo')" class="p-1.5 rounded text-gray-500 hover:text-brand-600 active:bg-white active:shadow-sm"><i class="fa-solid fa-list"></i></button>
+                            <button id="btn-view-card" onclick="gorunumuDegistir('kart')" class="p-1.5 rounded text-gray-500 hover:text-brand-600 active:bg-white active:shadow-sm"><i class="fa-solid fa-grip"></i></button>
                         </div>
-                    </div>
-                    
-                    <div class="tab-pane fade" id="cikis-panel" role="tabpanel" aria-labelledby="cikis-tab">
-                        <div class="card-body p-3">
-                            <h5 class="card-title mb-3 text-danger">Tedarikçiye Yem Çıkışı (Satış)</h5>
-                            <div class="mb-2">
-                                <label for="tedarikci-sec" class="form-label">Tedarikçi</label>
-                                <select id="tedarikci-sec" placeholder="Tedarikçi seçin..." autocomplete="off"></select>
-                            </div>
-                            <div class="mb-2">
-                                <label for="yem-urun-sec" class="form-label">Yem Ürünü</label>
-                                <select id="yem-urun-sec" placeholder="Yem seçin..." autocomplete="off"></select>
-                            </div>
-        
-                            <div class="row g-2 mb-2">
-                                <div class="col-6">
-                                    <label for="miktar-kg-input" class="form-label">Miktar (KG)</label>
-                                    <input type="number" step="0.1" class="form-control form-control-sm" id="miktar-kg-input" placeholder="Örn: 50.5">
-                                </div>
-                                <div class="col-6" id="cuval-cikis-alani" style="display: none;">
-                                    <label for="miktar-cuval-input" class="form-label">Miktar (Çuval)</label>
-                                    <input type="number" step="0.5" class="form-control form-control-sm" id="miktar-cuval-input" placeholder="Örn: 1.5">
-                                </div>
-                            </div>
-        
-                            <div class="mb-2">
-                                <label class="form-label d-block">Satış Fiyat Tipi</label>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="fiyatTipiRadio" id="fiyatTipiPesin" value="pesin" checked>
-                                    <label class="form-check-label" for="fiyatTipiPesin">Peşin Fiyat</label>
-                                </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="radio" name="fiyatTipiRadio" id="fiyatTipiVadeli" value="vadeli">
-                                    <label class="form-check-label" for="fiyatTipiVadeli">Vadeli Fiyat</label>
-                                </div>
-                            </div>
-                            
-                            <div id="vadeli-fiyat-alani" style="display: none;">
-                                <div class="mb-2" id="vadeli-cuval-fiyat-grup" style="display: none;">
-                                    <label for="vadeli-cuval-fiyat-input" class="form-label">Vadeli Fiyat (TL/Çuval)</label>
-                                    <input type="number" step="0.01" class="form-control form-control-sm" id="vadeli-cuval-fiyat-input" placeholder="Çuval fiyatı girin">
-                                </div>
-                                <div class="mb-2" id="vadeli-kg-fiyat-grup" style="display: none;">
-                                    <label for="birim-fiyat-input" class="form-label">Vadeli Fiyat (TL/KG)</label>
-                                    <input type="number" step="0.01" class="form-control form-control-sm" id="birim-fiyat-input" placeholder="KG fiyatı girin">
-                                </div>
-                            </div>
-                            
-                            <div class="mb-2" id="pesin-fiyat-alani">
-                                <label for="birim-fiyat-input-pesin" class="form-label">Birim Fiyat (TL/KG)</label>
-                                <input type="number" step="0.01" class="form-control form-control-sm" id="birim-fiyat-input-pesin" placeholder="Peşin satış fiyatı otomatik" disabled>
-                            </div>
-        
-                             <div class="mb-3">
-                                <label for="aciklama-input" class="form-label">Açıklama (İsteğe bağlı)</label>
-                                <textarea class="form-control form-control-sm" id="aciklama-input" rows="2" placeholder="Örn: Ay sonu mahsuplaşılacak"></textarea>
-                            </div>
-                            <div class="d-grid">
-                                <button class="btn btn-danger" id="yem-cikis-btn" onclick="yemCikisiYap()">Çıkışı (Satış) Kaydet</button>
-                            </div>
-                        </div>
-                    </div>
-                </div> </div> </div> <div class="col-lg-8 col-12 order-lg-2 order-1">
-            <div class="card">
-                <div class="card-header p-3">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        
-                        <ul class="nav nav-tabs card-header-tabs" id="yem-tab-list" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="stoklar-tab" data-bs-toggle="tab" data-bs-target="#stoklar-panel" type="button" role="tab" aria-controls="stoklar-panel" aria-selected="true">
-                                    <i class="bi bi-box-seam me-1"></i> Ürün Stokları
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="islemler-tab" data-bs-toggle="tab" data-bs-target="#islemler-panel" type="button" role="tab" aria-controls="islemler-panel" aria-selected="false">
-                                    <i class="bi bi-list-task me-1"></i> Son Çıkışlar
-                                </button>
-                            </li>
-                        </ul>
-                        
-                        <div>
-                            {% if session.get('user', {}).get('rol') != 'muhasebeci' %}
-                            <button class="btn btn-primary btn-sm" onclick="yeniYemModaliniAc()">
-                                <i class="bi bi-plus-circle"></i> Yeni Ürün Tanımla
-                            </button>
-                            {% endif %}
-                        </div>
+                        {% if session.get('user', {}).get('rol') != 'muhasebeci' %}
+                        <button onclick="toggleModal('yemUrunuModal', true)" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-brand-600 hover:bg-brand-700 transition-colors"><i class="fa-solid fa-plus mr-1"></i> Ürün Ekle</button>
+                        {% endif %}
                     </div>
                 </div>
 
-                <div class="tab-content" id="yem-tab-content">
-                    
-                    <div class="tab-pane fade show active" id="stoklar-panel" role="tabpanel" aria-labelledby="stoklar-tab">
-                        <div class="card-body p-3">
-                            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                                <h5 class="card-title mb-0">Yem Ürünleri ve Stok Durumu</h5>
-                                <div class="btn-group" role="group">
-                                    <button type="button" id="btn-view-table" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('tablo')"><i class="bi bi-list-task"></i> Liste</button>
-                                    <button type="button" id="btn-view-card" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('kart')"><i class="bi bi-grid-3x2-gap-fill"></i> Kart</button>
-                                </div>
-                            </div>
-                            <div id="tablo-gorunumu" class="gorunum-konteyneri" style="display: none;">
-                                <div class="table-responsive">
-                                    <table class="table table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>Yem Adı</th>
-                                                <th class="text-end">Stok</th>
-                                                <th class="text-end">Alış Fiyatı</th>
-                                                <th class="text-end">Satış Fiyatı</th>
-                                                <th class="text-center">İşlemler</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="yem-urunleri-tablosu"></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <div id="kart-gorunumu" class="gorunum-konteyneri" style="display: none;">
-                                <div class="row g-3" id="yem-urunleri-kart-listesi"></div>
-                            </div>
-                            <div id="veri-yok-mesaji" class="text-center p-4" style="display: none;">
-                                <p class="text-secondary">Kayıtlı yem ürünü bulunamadı.</p>
-                            </div>
-                            <nav id="yem-urunleri-sayfalama" class="d-flex justify-content-center mt-3"></nav>
+                <div id="panel-stoklar" class="p-4">
+                    <div id="tablo-gorunumu" class="overflow-x-auto hidden">
+                        <table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Yem Adı</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Stok</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Alış</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Satış</th><th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">İşlem</th></tr></thead><tbody id="yem-urunleri-tablosu" class="bg-white divide-y divide-gray-200 text-sm"></tbody></table>
+                    </div>
+                    <div id="kart-gorunumu" class="hidden"><div id="yem-urunleri-kart-listesi" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div></div>
+                    <div id="veri-yok-mesaji" class="hidden text-center py-10 text-gray-400">Kayıtlı ürün yok.</div>
+                    <nav id="yem-urunleri-sayfalama" class="flex justify-center mt-4"></nav>
+                </div>
+
+                <div id="panel-islemler" class="hidden p-4">
+                    <div class="flex justify-end mb-3">
+                        <div class="flex bg-gray-100 rounded-lg p-1">
+                            <button id="btn-islemler-liste" onclick="gorunumuDegistirIslemler('tablo')" class="p-1.5 rounded text-brand-600 bg-white shadow-sm"><i class="fa-solid fa-list"></i></button>
+                            <button id="btn-islemler-kart" onclick="gorunumuDegistirIslemler('kart')" class="p-1.5 rounded text-gray-500 hover:text-brand-600"><i class="fa-solid fa-grip"></i></button>
                         </div>
                     </div>
-
-                    <div class="tab-pane fade" id="islemler-panel" role="tabpanel" aria-labelledby="islemler-tab">
-                        <div class="card-body p-3">
-                            
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h5 class="card-title mb-0">Son Yem Çıkışları (Satışlar)</h5>
-                                <div class="btn-group" role="group">
-                                    <button type="button" id="btn-islemler-liste" class="btn btn-sm btn-outline-primary active" onclick="gorunumuDegistirIslemler('tablo')"><i class="bi bi-list-task"></i></button>
-                                    <button type="button" id="btn-islemler-kart" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistirIslemler('kart')"><i class="bi bi-grid-3x2-gap-fill"></i></button>
-                                </div>
-                            </div>
-                            
-                            <div id="islemler-tablo-gorunumu" class="gorunum-konteyneri-islemler">
-                                 <div class="table-responsive">
-                                    <table class="table">
-                                        <thead>
-                                            <tr>
-                                                <th>Tarih</th>
-                                                <th>Tedarikçi</th>
-                                                <th>Yem Ürünü</th>
-                                                <th class="text-end">Miktar (KG)</th>
-                                                <th class="text-center">İşlemler</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="yem-islemleri-listesi"></tbody>
-                                    </table>
-                                </div>
-                            </div>
-                
-                            <div id="islemler-kart-gorunumu" class="gorunum-konteyneri-islemler" style="display: none;">
-                                <div class="row g-3" id="yem-islemleri-kart-listesi">
-                                </div>
-                            </div>
-
-                            <div id="yem-islemleri-veri-yok" class="text-center p-4" style="display: none;">
-                                <p class="text-secondary">Kayıtlı yem çıkış işlemi bulunamadı.</p>
-                            </div>
-                            <nav id="yem-islemleri-sayfalama" class="d-flex justify-content-center mt-3"></nav>
-                        </div>
+                    <div id="islemler-tablo-gorunumu" class="overflow-x-auto hidden">
+                        <table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tedarikçi</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ürün</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Miktar</th><th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">İşlem</th></tr></thead><tbody id="yem-islemleri-listesi" class="bg-white divide-y divide-gray-200 text-sm"></tbody></table>
                     </div>
+                    <div id="islemler-kart-gorunumu" class="hidden"><div id="yem-islemleri-kart-listesi" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div></div>
+                    <div id="yem-islemleri-veri-yok" class="hidden text-center py-10 text-gray-400">İşlem yok.</div>
+                    <nav id="yem-islemleri-sayfalama" class="flex justify-center mt-4"></nav>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
 
-                </div> </div> </div> </div>{# Ana Row Sonu #}
-</div> {# Ana Wrapper Sonu #}
-
-
-<div class="modal fade" id="yemUrunuModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="yemUrunuModalLabel">Yeni Yem Ürünü Tanımla</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="yem-urun-form"><input type="hidden" id="edit-yem-id">
-                <div class="mb-2">
-                    <label for="yem-adi-input" class="form-label">Yem Adı <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm" id="yem-adi-input" placeholder="Örn: Süt Yemi 18 Protein" required>
-                </div>
-                <div class="mb-2">
-                    <label for="fiyatlandirma-tipi-sec" class="form-label">Stok ve Fiyatlandırma Tipi</label>
-                    <select id="fiyatlandirma-tipi-sec" class="form-select form-select-sm">
-                        <option value="kg">KG Olarak Takip Et</option>
-                        <option value="cuval">Çuval Olarak Takip Et</option>
-                    </select>
-                </div>
-                <div class="mb-2">
-                    <label for="yem-stok-input" class="form-label" id="yem-stok-label">Başlangıç Stok (KG) <span class="text-danger">*</span></label>
-                    <input type="number" step="1" class="form-control form-control-sm" id="yem-stok-input" placeholder="Örn: 5000" required>
-                    <small class="form-text text-secondary">Bu, ürün ilk kez tanımlanırkenki stoktur. Daha sonra 'Yem Girişi' formundan stok eklenmelidir.</small>
-                </div>
-                <hr>
-                <div id="kg-fiyat-alani">
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <label for="yem-fiyat-input" class="form-label">Varsayılan Alış (TL/KG) <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control form-control-sm" id="yem-fiyat-input" placeholder="Örn: 14.75">
-                        </div>
-                        <div class="col-6">
-                            <label for="yem-satis-fiyat-input" class="form-label">Varsayılan Satış (TL/KG) <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control form-control-sm" id="yem-satis-fiyat-input" placeholder="Örn: 16.00">
-                        </div>
-                    </div>
-                </div>
-                <div id="cuval-fiyat-alani" style="display: none;">
-                    <div class="mb-2">
-                        <label for="cuval-agirlik-input" class="form-label">Çuval Ağırlığı (KG)<span class="text-danger">*</span></label>
-                        <input type="number" step="0.5" class="form-control form-control-sm" id="cuval-agirlik-input" placeholder="Örn: 50">
-                    </div>
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <label for="cuval-fiyat-input" class="form-label">Varsayılan Alış (TL/Çuval)<span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control form-control-sm" id="cuval-fiyat-input" placeholder="Örn: 850.00">
-                        </div>
-                         <div class="col-6">
-                            <label for="yem-satis-cuval-fiyat-input" class="form-label">Varsayılan Satış (TL/Çuval)<span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" class="form-control form-control-sm" id="yem-satis-cuval-fiyat-input" placeholder="Örn: 900.00">
-                        </div>
-                    </div>
-                </div>
-            </form></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" id="kaydet-yem-btn" onclick="yemUrunuKaydet()">Kaydet</button></div></div></div></div>
-
-<div class="modal fade" id="yemSilmeOnayModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-danger">Silme Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p><strong><span id="silinecek-yem-adi"></span></strong> adlı yem ürününü silmek istediğinize emin misiniz?</p><input type="hidden" id="silinecek-yem-id"></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-danger btn-sm" onclick="yemUrunuSil()">Evet, Sil</button></div></div></div></div>
-<div class="modal fade" id="yemIslemSilmeOnayModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title text-danger">İptal Onayı</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><p>Bu yem çıkış işlemini iptal etmek istediğinize emin misiniz?</p><p class="text-danger small">Bu işlem geri alınamaz ve yem stoğu iade edilir.</p><input type="hidden" id="silinecek-islem-id"></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button><button type="button" class="btn btn-danger btn-sm" onclick="yemIslemiSil()">Evet, İptal Et</button></div></div></div></div>
-<div class="modal fade" id="yemIslemDuzenleModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Yem Çıkışını Düzenle</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" id="edit-islem-id"><div class="mb-2"><label for="edit-miktar-input" class="form-label">Yeni Miktar (KG)</label><input type="number" step="0.5" class="form-control form-control-sm" id="edit-miktar-input"></div><div class="mb-2"><label for="edit-aciklama-input" class="form-label">Açıklama (İsteğe Bağlı)</label><textarea class="form-control form-control-sm" id="edit-aciklama-input" rows="2"></textarea></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button><button type="button" class="btn btn-primary btn-sm" onclick="yemIslemiGuncelle()">Kaydet</button></div></div></div></div>
+<div id="yemUrunuModal" class="fixed inset-0 z-50 hidden" aria-modal="true"><div class="fixed inset-0 bg-gray-500 bg-opacity-75" onclick="toggleModal('yemUrunuModal', false)"></div><div class="fixed inset-0 z-10 overflow-y-auto"><div class="flex min-h-full items-center justify-center p-4"><div class="relative rounded-lg bg-white shadow-xl sm:w-full sm:max-w-md"><div class="bg-white px-4 pb-4 pt-5 border-b border-gray-100"><h3 class="text-lg font-semibold" id="yemUrunuModalLabel">Yeni Yem</h3></div><div class="px-4 py-5"><form id="yem-urun-form" class="space-y-3"><input type="hidden" id="edit-yem-id"><div><label class="block text-sm font-medium text-gray-700">Adı</label><input type="text" id="yem-adi-input" class="block w-full rounded-md border-gray-300 border p-2 text-sm"></div><div><label class="block text-sm font-medium text-gray-700">Tip</label><select id="fiyatlandirma-tipi-sec" class="block w-full rounded-md border-gray-300 border p-2 text-sm"><option value="kg">KG</option><option value="cuval">Çuval</option></select></div><div><label class="block text-sm font-medium text-gray-700" id="yem-stok-label">Stok</label><input type="number" id="yem-stok-input" class="block w-full rounded-md border-gray-300 border p-2 text-sm"></div><div id="kg-fiyat-alani" class="grid grid-cols-2 gap-2"><div><label class="text-xs">Alış</label><input type="number" step="0.01" id="yem-fiyat-input" class="block w-full rounded-md border p-2 text-sm"></div><div><label class="text-xs">Satış</label><input type="number" step="0.01" id="yem-satis-fiyat-input" class="block w-full rounded-md border p-2 text-sm"></div></div><div id="cuval-fiyat-alani" class="hidden space-y-2"><div><label class="text-xs">Çuval KG</label><input type="number" step="0.5" id="cuval-agirlik-input" class="block w-full rounded-md border p-2 text-sm"></div><div class="grid grid-cols-2 gap-2"><div><label class="text-xs">Alış</label><input type="number" step="0.01" id="cuval-fiyat-input" class="block w-full rounded-md border p-2 text-sm"></div><div><label class="text-xs">Satış</label><input type="number" step="0.01" id="yem-satis-cuval-fiyat-input" class="block w-full rounded-md border p-2 text-sm"></div></div></div></form></div><div class="bg-gray-50 px-4 py-3 flex flex-row-reverse"><button type="button" id="kaydet-yem-urun-btn" onclick="yemUrunuKaydet()" class="rounded-md bg-brand-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-500 ml-3">Kaydet</button><button type="button" onclick="toggleModal('yemUrunuModal', false)" class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-gray-300 hover:bg-gray-50">İptal</button></div></div></div></div></div>
+<div id="yemSilmeOnayModal" class="fixed inset-0 z-50 hidden" aria-modal="true"><div class="fixed inset-0 bg-gray-500 bg-opacity-75" onclick="toggleModal('yemSilmeOnayModal', false)"></div><div class="fixed inset-0 z-10 overflow-y-auto"><div class="flex min-h-full items-center justify-center p-4"><div class="relative rounded-lg bg-white shadow-xl sm:w-full sm:max-w-sm p-6"><h3 class="text-base font-semibold mb-2">Sil?</h3><p class="text-sm text-gray-500 mb-4"><span id="silinecek-yem-adi"></span> silinecek?</p><input type="hidden" id="silinecek-yem-id"><div class="flex justify-end gap-2"><button onclick="toggleModal('yemSilmeOnayModal', false)" class="px-3 py-2 text-sm border rounded-md">İptal</button><button onclick="yemUrunuSil()" class="px-3 py-2 text-sm text-white bg-red-600 rounded-md">Sil</button></div></div></div></div></div>
+<div id="yemIslemSilmeOnayModal" class="fixed inset-0 z-50 hidden" aria-modal="true"><div class="fixed inset-0 bg-gray-500 bg-opacity-75" onclick="toggleModal('yemIslemSilmeOnayModal', false)"></div><div class="fixed inset-0 z-10 overflow-y-auto"><div class="flex min-h-full items-center justify-center p-4"><div class="relative rounded-lg bg-white shadow-xl sm:w-full sm:max-w-sm p-6"><h3 class="text-base font-semibold mb-2">İptal?</h3><p class="text-sm text-gray-500 mb-4">İşlem geri alınacak.</p><input type="hidden" id="silinecek-islem-id"><div class="flex justify-end gap-2"><button onclick="toggleModal('yemIslemSilmeOnayModal', false)" class="px-3 py-2 text-sm border rounded-md">Vazgeç</button><button onclick="yemIslemiSil()" class="px-3 py-2 text-sm text-white bg-red-600 rounded-md">İptal Et</button></div></div></div></div></div>
+<div id="yemIslemDuzenleModal" class="fixed inset-0 z-50 hidden" aria-modal="true"><div class="fixed inset-0 bg-gray-500 bg-opacity-75" onclick="toggleModal('yemIslemDuzenleModal', false)"></div><div class="fixed inset-0 z-10 overflow-y-auto"><div class="flex min-h-full items-center justify-center p-4"><div class="relative rounded-lg bg-white shadow-xl sm:w-full sm:max-w-sm p-6"><h3 class="text-base font-semibold mb-4">Düzenle</h3><input type="hidden" id="edit-islem-id"><div class="space-y-3"><div><label class="block text-sm">Miktar</label><input type="number" id="edit-miktar-input" class="block w-full border rounded-md p-2 text-sm"></div><div><label class="block text-sm">Açıklama</label><textarea id="edit-aciklama-input" class="block w-full border rounded-md p-2 text-sm"></textarea></div></div><div class="mt-5 flex justify-end gap-2"><button onclick="toggleModal('yemIslemDuzenleModal', false)" class="px-3 py-2 text-sm border rounded-md">İptal</button><button onclick="yemIslemiGuncelle()" class="px-3 py-2 text-sm text-white bg-brand-600 rounded-md">Kaydet</button></div></div></div></div></div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <script src="{{ url_for('static', filename='js/yem_yonetimi.js') }}"></script>
+
+<script>
+    // Tablar için basit script (Local fonksiyonlar)
+    function switchFormTab(tab) {
+        document.getElementById('giris-panel').classList.add('hidden');
+        document.getElementById('cikis-panel').classList.add('hidden');
+        document.getElementById(tab + '-panel').classList.remove('hidden');
+        const g = document.getElementById('tab-btn-giris'); const c = document.getElementById('tab-btn-cikis');
+        if(tab==='giris'){ g.className="flex-1 py-3 text-sm font-medium text-center border-b-2 border-green-500 text-green-700 bg-green-50 transition-colors"; c.className="flex-1 py-3 text-sm font-medium text-center border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"; }
+        else { g.className="flex-1 py-3 text-sm font-medium text-center border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"; c.className="flex-1 py-3 text-sm font-medium text-center border-b-2 border-red-500 text-red-700 bg-red-50 transition-colors"; }
+    }
+    function switchListTab(tab) {
+        document.getElementById('panel-stoklar').classList.add('hidden');
+        document.getElementById('panel-islemler').classList.add('hidden');
+        document.getElementById('panel-'+tab).classList.remove('hidden');
+        const s = document.getElementById('tab-list-stoklar'); const i = document.getElementById('tab-list-islemler');
+        const act = "px-3 py-1.5 rounded-md text-sm font-medium bg-white text-brand-600 shadow-sm ring-1 ring-gray-200 transition-all";
+        const inact = "px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-white transition-all";
+        if(tab==='stoklar'){s.className=act;i.className=inact;}else{s.className=inact;i.className=act;}
+    }
+</script>
 {% endblock %}

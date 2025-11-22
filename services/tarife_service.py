@@ -3,7 +3,6 @@
 import logging
 from flask import g
 from decimal import Decimal, InvalidOperation
-from utils import sanitize_input # Güvenlik için
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -13,37 +12,28 @@ class TarifeService:
 
     def get_fiyat_for_date(self, sirket_id: int, tarih_str: str):
         """
-        Belirli bir tarih için geçerli süt fiyatını Supabase RPC
-        (get_sut_fiyati_for_date) fonksiyonunu çağırarak alır.
-        
-        NOT: Bu fonksiyon, RPC'den 'fiyat' adında bir sütun bekler.
-        RPC (get_sut_fiyati_for_date.sql) dosyası, bu sütunu 'alis_fiyati' olarak
-        döndürecek şekilde güncellenmelidir.
+        Belirli bir tarih için geçerli süt fiyatını Supabase RPC fonksiyonu ile alır.
         """
         try:
-            # 'YYYY-MM-DD' formatında bir tarih bekliyoruz
-            # Tarih formatını doğrula (opsiyonel ama güvenli)
+            # Tarih format kontrolü
             datetime.strptime(tarih_str, '%Y-%m-%d')
             
+            # SQL Fonksiyonunu Çağır
             response = g.supabase.rpc('get_sut_fiyati_for_date', {
                 'p_sirket_id': sirket_id,
                 'p_target_date': tarih_str
             }).execute()
             
-            # RPC'den dönüş '[{'fiyat': 15.50}]' formatında olabilir
             if response.data and len(response.data) > 0:
-                # Log hatasındaki 'Could not choose...' hatası burada değil, SQL'dedir.
-                # SQL'i düzelttikten sonra bu kod çalışacaktır.
-                return response.data[0].get('fiyat') # Fiyatı (örn: 15.50) veya None döndür
-            return None # Veri gelmezse None döndür
+                # SQL'den {fiyat: 18.50, satis_fiyati: 20.00} döner
+                return response.data[0].get('fiyat') 
+            
+            return None
 
-        except ValueError:
-            logger.warning(f"get_fiyat_for_date: Geçersiz tarih formatı alındı: {tarih_str}")
-            raise ValueError("Geçersiz tarih formatı.")
         except Exception as e:
-            # Loglardaki hata buraya düşüyor
-            logger.error(f"RPC 'get_sut_fiyati_for_date' çağrılırken hata: {e}", exc_info=True)
-            raise Exception("Fiyat bilgisi alınırken sunucu hatası oluştu.")
+            logger.error(f"RPC 'get_sut_fiyati_for_date' hatası: {e}", exc_info=True)
+            # Hata durumunda None dön ki panel çalışmaya devam etsin
+            return None
 
     def get_all_tariffs(self, sirket_id: int):
         """Bir şirkete ait tüm fiyat tarifelerini getirir."""
@@ -61,35 +51,25 @@ class TarifeService:
     def add_tariff(self, sirket_id: int, data: dict):
         """Yeni bir fiyat tarifesi ekler."""
         try:
-            # JS'den 'alis_fiyati' ve 'satis_fiyati' bekliyoruz
             alis_fiyat_str = data.get('alis_fiyati')
-            satis_fiyat_str = data.get('satis_fiyati') # Yeni alan
+            satis_fiyat_str = data.get('satis_fiyati')
             baslangic_tarihi = data.get('baslangic_tarihi')
-            bitis_tarihi = data.get('bitis_tarihi') or None # Bitiş tarihi opsiyonel
+            bitis_tarihi = data.get('bitis_tarihi') or None
 
-            if not alis_fiyat_str or not satis_fiyat_str or not baslangic_tarihi:
-                raise ValueError("Başlangıç tarihi, alış fiyatı ve satış fiyatı zorunludur.")
+            if not alis_fiyat_str or not baslangic_tarihi:
+                raise ValueError("Başlangıç tarihi ve alış fiyatı zorunludur.")
 
+            # Sayısal dönüşüm ve kontrol
             try:
-                alis_fiyat = Decimal(alis_fiyat_str)
-                if alis_fiyat <= 0:
-                    raise ValueError("Alış fiyatı pozitif bir değer olmalıdır.")
-            except (InvalidOperation, TypeError):
-                raise ValueError("Geçersiz alış fiyatı formatı.")
+                alis_fiyat = Decimal(str(alis_fiyat_str))
+                if alis_fiyat <= 0: raise ValueError("Alış fiyatı pozitif olmalıdır.")
+            except: raise ValueError("Geçersiz alış fiyatı.")
             
-            try:
-                satis_fiyat = Decimal(satis_fiyat_str)
-                if satis_fiyat < 0: # Satış fiyatı 0 olabilir
-                    raise ValueError("Satış fiyatı negatif olamaz.")
-            except (InvalidOperation, TypeError):
-                raise ValueError("Geçersiz satış fiyatı formatı.")
-
-            # Tarih format kontrolü
-            baslangic_dt = datetime.strptime(baslangic_tarihi, '%Y-%m-%d')
-            if bitis_tarihi:
-                bitis_dt = datetime.strptime(bitis_tarihi, '%Y-%m-%d')
-                if bitis_dt < baslangic_dt:
-                    raise ValueError("Bitiş tarihi, başlangıç tarihinden önce olamaz.")
+            satis_fiyat = Decimal('0')
+            if satis_fiyat_str:
+                try:
+                    satis_fiyat = Decimal(str(satis_fiyat_str))
+                except: raise ValueError("Geçersiz satış fiyatı.")
 
             yeni_tarife = {
                 "sirket_id": sirket_id,
@@ -105,73 +85,37 @@ class TarifeService:
         except ValueError as ve:
             raise ve
         except Exception as e:
-            # Unique constraint hatasını yakala (PK/UK)
-            if 'duplicate key value violates unique constraint' in str(e).lower():
-                raise ValueError(f"{baslangic_tarihi} tarihi için zaten bir tarife mevcut.")
-            logger.error(f"Tarife eklenirken hata: {e}", exc_info=True)
-            raise Exception("Tarife eklenirken bir sunucu hatası oluştu.")
+            if 'duplicate key' in str(e).lower():
+                raise ValueError(f"{baslangic_tarihi} için zaten tarife var.")
+            logger.error(f"Tarife ekleme hatası: {e}", exc_info=True)
+            raise Exception("Sunucu hatası.")
 
     def update_tariff(self, sirket_id: int, tarife_id: int, data: dict):
-        """Mevcut bir fiyat tarifesini günceller."""
+        """Tarifeyi günceller."""
         try:
-            guncellenecek_veri = {}
-            
-            if 'alis_fiyati' in data:
-                alis_fiyat = Decimal(data['alis_fiyati'])
-                if alis_fiyat <= 0: raise ValueError("Alış fiyatı pozitif olmalıdır.")
-                guncellenecek_veri['alis_fiyati'] = str(alis_fiyat)
-            
-            if 'satis_fiyati' in data:
-                satis_fiyat = Decimal(data['satis_fiyati'])
-                if satis_fiyat < 0: raise ValueError("Satış fiyatı negatif olamaz.")
-                guncellenecek_veri['satis_fiyati'] = str(satis_fiyat)
-                
-            if 'baslangic_tarihi' in data:
-                guncellenecek_veri['baslangic_tarihi'] = data['baslangic_tarihi']
-            
-            if 'bitis_tarihi' in data:
-                guncellenecek_veri['bitis_tarihi'] = data['bitis_tarihi'] or None
-            
-            if not guncellenecek_veri:
-                raise ValueError("Güncellenecek veri yok.")
+            update_data = {}
+            if 'alis_fiyati' in data: update_data['alis_fiyati'] = str(Decimal(data['alis_fiyati']))
+            if 'satis_fiyati' in data: update_data['satis_fiyati'] = str(Decimal(data['satis_fiyati']))
+            if 'baslangic_tarihi' in data: update_data['baslangic_tarihi'] = data['baslangic_tarihi']
+            if 'bitis_tarihi' in data: update_data['bitis_tarihi'] = data['bitis_tarihi'] or None
 
             response = g.supabase.table('sut_fiyat_tarifesi') \
-                .update(guncellenecek_veri) \
+                .update(update_data) \
                 .eq('id', tarife_id) \
                 .eq('sirket_id', sirket_id) \
                 .execute()
-            
-            if not response.data:
-                raise ValueError("Tarife bulunamadı veya güncelleme yetkiniz yok.")
             return response.data[0]
-            
-        except ValueError as ve:
-            raise ve
         except Exception as e:
-            if 'duplicate key value violates unique constraint' in str(e).lower():
-                raise ValueError("Başlangıç tarihi başka bir tarife ile çakışıyor.")
-            logger.error(f"Tarife güncellenirken hata (ID: {tarife_id}): {e}", exc_info=True)
-            raise Exception("Tarife güncellenirken bir sunucu hatası oluştu.")
-
+            logger.error(f"Güncelleme hatası: {e}", exc_info=True)
+            raise Exception("Güncelleme yapılamadı.")
 
     def delete_tariff(self, sirket_id: int, tarife_id: int):
-        """Bir fiyat tarifesini siler."""
+        """Tarifeyi siler."""
         try:
-            response = g.supabase.table('sut_fiyat_tarifesi') \
-                .delete() \
-                .eq('id', tarife_id) \
-                .eq('sirket_id', sirket_id) \
-                .execute()
-            
-            # Loglarda bu işlemin başarılı olduğu (200 OK) görünüyor.
-            if not response.data:
-                raise ValueError("Tarife bulunamadı veya silme yetkiniz yok.")
+            g.supabase.table('sut_fiyat_tarifesi').delete().eq('id', tarife_id).eq('sirket_id', sirket_id).execute()
             return True
-        except ValueError as ve:
-            raise ve
         except Exception as e:
-            logger.error(f"Tarife silinirken hata (ID: {tarife_id}): {e}", exc_info=True)
-            raise Exception("Tarife silinirken bir sunucu hatası oluştu.")
+            logger.error(f"Silme hatası: {e}", exc_info=True)
+            raise Exception("Silinemedi.")
 
-# Servisin bir örneğini (instance) oluştur
 tarife_service = TarifeService()

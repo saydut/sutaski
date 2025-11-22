@@ -740,3 +740,8 @@ h5 { font-size: 0.95rem; }
 .finance-card.tahsilat {
     border-left: 4px solid var(--info); /* Tema ile uyumlu mavi renk */
 }
+
+/* iOS Güvenli Alan Desteği */
+.pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+}

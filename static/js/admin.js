@@ -1,15 +1,6 @@
-let sirketSilmeOnayModal, sifreSifirlaModal, surumDuzenleModal, bildirimGonderModal;
-let tumSurumNotlari = []; // Sürüm notlarını burada saklayacağız
-
-// Tarih seçicileri için global bir obje
+let tumSurumNotlari = [];
 const tarihSeciciler = {};
 
-/**
- * JavaScript Date objesini 'YYYY-MM-DD' formatına çevirir.
- * Timezone dönüşümü yapmaz, böylece saat farkı sorununu çözer.
- * @param {Date} date - Formatlanacak tarih objesi.
- * @returns {string} - 'YYYY-MM-DD' formatında tarih metni.
- */
 function formatDateToYYYYMMDD(date) {
     if (!date) return null;
     const year = date.getFullYear();
@@ -19,38 +10,24 @@ function formatDateToYYYYMMDD(date) {
 }
 
 window.onload = function() {
-    sirketSilmeOnayModal = new bootstrap.Modal(document.getElementById('sirketSilmeOnayModal'));
-    sifreSifirlaModal = new bootstrap.Modal(document.getElementById('sifreSifirlaModal'));
-    surumDuzenleModal = new bootstrap.Modal(document.getElementById('surumDuzenleModal'));
-    bildirimGonderModal = new bootstrap.Modal(document.getElementById('bildirimGonderModal')); // YENİ SATIR
-    
-    // Yeni sürüm notu için tarih seçiciyi başlat
+    // Modalları JS objesi olarak başlatmaya gerek yok, HTML class toggle ile yönetiyoruz.
+
     flatpickr("#yayin-tarihi-input", {
-        dateFormat: "Y-m-d",
-        altInput: true,
-        altFormat: "d.m.Y",
-        locale: "tr",
-        defaultDate: "today"
+        dateFormat: "Y-m-d", altInput: true, altFormat: "d.m.Y", locale: "tr", defaultDate: "today"
     });
 
-    // Düzenleme modalı için tarih seçiciyi başlat
     flatpickr("#edit-yayin-tarihi-input", {
-        dateFormat: "Y-m-d",
-        altInput: true,
-        altFormat: "d.m.Y",
-        locale: "tr"
+        dateFormat: "Y-m-d", altInput: true, altFormat: "d.m.Y", locale: "tr"
     });
     
     document.getElementById('surum-formu').addEventListener('submit', surumNotuEkle);
-    
     adminVerileriniYukle();
 };
 
 async function adminVerileriniYukle() {
     try {
         const [adminDataResponse, surumNotlariResponse] = await Promise.all([
-            fetch('/api/admin/data'),
-            fetch('/api/admin/surum_notlari')
+            fetch('/api/admin/data'), fetch('/api/admin/surum_notlari')
         ]);
 
         const adminData = await adminDataResponse.json();
@@ -59,19 +36,14 @@ async function adminVerileriniYukle() {
         if (adminDataResponse.ok) {
             sirketleriDoldur(adminData.sirketler);
             kullanicilariDoldur(adminData.kullanicilar);
-        } else {
-            gosterMesaj(adminData.error || "Veriler yüklenemedi.", "danger");
-        }
+        } else gosterMesaj(adminData.error || "Veriler yüklenemedi.", "danger");
         
         if(surumNotlariResponse.ok){
-            tumSurumNotlari = surumNotlari; // Gelen veriyi global değişkene ata
+            tumSurumNotlari = surumNotlari;
             surumNotlariniDoldur(surumNotlari);
-        } else {
-            gosterMesaj(surumNotlari.error || "Sürüm notları yüklenemedi.", "danger");
-        }
+        } else gosterMesaj(surumNotlari.error || "Sürüm notları yüklenemedi.", "danger");
         
         mevcutOnbellekSurumunuYukle();
-        // *** YENİ EKLENEN SATIR: Sayfa yüklendiğinde bakım modu durumunu kontrol eder. ***
         mevcutBakimModunuYukle();
 
     } catch (error) {
@@ -80,166 +52,101 @@ async function adminVerileriniYukle() {
     }
 }
 
-// --- SÜRÜM YÖNETİMİ FONKSİYONLARI ---
-
 async function surumNotuEkle(event) {
     event.preventDefault(); 
-    
     const selectedDate = document.getElementById('yayin-tarihi-input')._flatpickr.selectedDates[0];
-    
     const veri = {
         surum_no: document.getElementById('surum-no-input').value,
         yayin_tarihi: formatDateToYYYYMMDD(selectedDate),
         notlar: document.getElementById('notlar-input').value
     };
-
     try {
-        const response = await fetch('/api/admin/surum_notlari', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
-        });
+        const response = await fetch('/api/admin/surum_notlari', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
         const result = await response.json();
         if (response.ok) {
             gosterMesaj(result.message, 'success');
             document.getElementById('surum-formu').reset();
-            document.getElementById('yayin-tarihi-input')._flatpickr.setDate(new Date());
             adminVerileriniYukle();
-        } else {
-            gosterMesaj(result.error || "Ekleme hatası.", "danger");
-        }
-    } catch (error) {
-        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
-    }
+        } else gosterMesaj(result.error || "Ekleme hatası.", "danger");
+    } catch (error) { gosterMesaj("Hata oluştu.", "danger"); }
 }
 
 function surumNotlariniDoldur(notlar) {
     const tbody = document.getElementById('surumler-tablosu');
     tbody.innerHTML = '';
-    if (notlar.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center">Kayıtlı sürüm notu bulunamadı.</td></tr>';
-        return;
-    }
+    if (notlar.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">Kayıtlı sürüm notu bulunamadı.</td></tr>'; return; }
     notlar.forEach(not => {
-        const notlarHtml = '<ul>' + not.notlar.split('\n').map(line => `<li>${line.replace(/^- /, '')}</li>`).join('') + '</ul>';
+        const notlarHtml = '<ul class="list-disc list-inside space-y-1">' + not.notlar.split('\n').map(line => `<li>${line.replace(/^- /, '')}</li>`).join('') + '</ul>';
         const tr = `
-            <tr>
-                <td><strong>${not.surum_no}</strong></td>
-                <td>${new Date(not.yayin_tarihi + 'T00:00:00').toLocaleDateString('tr-TR')}</td>
-                <td>${notlarHtml}</td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-primary me-1" onclick="surumDuzenlemeModaliniAc(${not.id})" title="Düzenle"><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="surumNotuSil(${not.id})" title="Bu sürüm notunu sil"><i class="bi bi-trash"></i></button>
+            <tr class="hover:bg-gray-50 border-b border-gray-100">
+                <td class="px-4 py-3 font-medium text-gray-900">${not.surum_no}</td>
+                <td class="px-4 py-3 text-gray-500">${new Date(not.yayin_tarihi + 'T00:00:00').toLocaleDateString('tr-TR')}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${notlarHtml}</td>
+                <td class="px-4 py-3 text-center flex justify-center gap-2">
+                    <button class="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100" onclick="surumDuzenlemeModaliniAc(${not.id})"><i class="fa-solid fa-pen"></i></button>
+                    <button class="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100" onclick="surumNotuSil(${not.id})"><i class="fa-solid fa-trash"></i></button>
                 </td>
-            </tr>
-        `;
+            </tr>`;
         tbody.innerHTML += tr;
     });
 }
 
 async function surumNotuSil(id) {
-    if (!confirm("Bu sürüm notunu silmek istediğinizden emin misiniz?")) return;
-
+    if (!confirm("Silmek istediğinize emin misiniz?")) return;
     try {
         const response = await fetch(`/api/admin/surum_notlari/${id}`, { method: 'DELETE' });
         const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            adminVerileriniYukle();
-        } else {
-            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
-        }
-    } catch (error) {
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
-    }
+        if (response.ok) { gosterMesaj(result.message, 'success'); adminVerileriniYukle(); } 
+        else gosterMesaj(result.error, 'danger');
+    } catch (e) { gosterMesaj('Hata.', 'danger'); }
 }
 
 function surumDuzenlemeModaliniAc(id) {
     const not = tumSurumNotlari.find(n => n.id === id);
-    if (!not) {
-        gosterMesaj("Düzenlenecek sürüm notu bulunamadı.", "danger");
-        return;
-    }
-
+    if (!not) return;
     document.getElementById('edit-surum-id').value = not.id;
     document.getElementById('edit-surum-no-input').value = not.surum_no;
     document.getElementById('edit-notlar-input').value = not.notlar;
     document.getElementById('edit-yayin-tarihi-input')._flatpickr.setDate(not.yayin_tarihi, true);
-
-    surumDuzenleModal.show();
+    toggleModal('surumDuzenleModal', true);
 }
 
 async function surumNotuGuncelle() {
     const id = document.getElementById('edit-surum-id').value;
-    const selectedDate = document.getElementById('edit-yayin-tarihi-input')._flatpickr.selectedDates[0];
-
     const veri = {
         surum_no: document.getElementById('edit-surum-no-input').value,
-        yayin_tarihi: formatDateToYYYYMMDD(selectedDate),
+        yayin_tarihi: formatDateToYYYYMMDD(document.getElementById('edit-yayin-tarihi-input')._flatpickr.selectedDates[0]),
         notlar: document.getElementById('edit-notlar-input').value
     };
-
-    if (!veri.surum_no || !veri.yayin_tarihi || !veri.notlar) {
-        gosterMesaj("Lütfen tüm alanları doldurun.", "warning");
-        return;
-    }
-
     try {
-        const response = await fetch(`/api/admin/surum_notlari/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(veri)
-        });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            surumDuzenleModal.hide();
-            adminVerileriniYukle();
-        } else {
-            gosterMesaj(result.error || "Güncelleme hatası.", "danger");
-        }
-    } catch (error) {
-        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
-    }
+        const res = await fetch(`/api/admin/surum_notlari/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(veri) });
+        const result = await res.json();
+        if (res.ok) { gosterMesaj(result.message, 'success'); toggleModal('surumDuzenleModal', false); adminVerileriniYukle(); }
+        else gosterMesaj(result.error, 'danger');
+    } catch (e) { gosterMesaj('Hata.', 'danger'); }
 }
-
-// --- ŞİRKET VE KULLANICI YÖNETİMİ FONKSİYONLARI ---
 
 function sirketleriDoldur(sirketler) {
     const tbody = document.getElementById('sirketler-tablosu');
     tbody.innerHTML = '';
-
-    for (const key in tarihSeciciler) {
-        if (tarihSeciciler[key]) {
-            tarihSeciciler[key].destroy();
-        }
-    }
-
-    if (sirketler.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" class="text-center">Kayıtlı şirket bulunamadı.</td></tr>';
-        return;
-    }
+    if (sirketler.length === 0) { tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-gray-500">Şirket yok.</td></tr>'; return; }
 
     sirketler.forEach(sirket => {
         const tr = document.createElement('tr');
+        tr.className = "hover:bg-gray-50 border-b border-gray-100 transition-colors";
         tr.innerHTML = `
-            <td>${sirket.sirket_adi}</td>
-            <td>
-                <input type="text" class="form-control form-control-sm flatpickr-input" id="lisans-tarih-${sirket.id}" placeholder="GG.AA.YYYY">
+            <td class="px-6 py-4 text-sm font-medium text-gray-900">${sirket.sirket_adi}</td>
+            <td class="px-6 py-4">
+                <input type="text" class="block w-full rounded-md border-gray-300 border p-1.5 text-sm shadow-sm focus:ring-brand-500" id="lisans-tarih-${sirket.id}" placeholder="GG.AA.YYYY">
             </td>
-            <td class="d-flex gap-1">
-                <button class="btn btn-sm btn-success" onclick="lisansGuncelle(${sirket.id})" title="Lisansı Kaydet"><i class="bi bi-check-lg"></i></button>
-                <button class="btn btn-sm btn-danger" onclick="sirketSilmeOnayiAc(${sirket.id}, '${sirket.sirket_adi}')" title="Şirketi Sil"><i class="bi bi-trash"></i></button>
-            </td>
-        `;
+            <td class="px-6 py-4 flex justify-center gap-2">
+                <button class="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100" onclick="lisansGuncelle(${sirket.id})" title="Kaydet"><i class="fa-solid fa-check"></i></button>
+                <button class="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100" onclick="sirketSilmeOnayiAc(${sirket.id}, '${sirket.sirket_adi}')" title="Sil"><i class="fa-solid fa-trash"></i></button>
+            </td>`;
         tbody.appendChild(tr);
-
-        const inputId = `lisans-tarih-${sirket.id}`;
-        const inputElement = document.getElementById(inputId);
-        tarihSeciciler[inputId] = flatpickr(inputElement, {
-            dateFormat: "d.m.Y",
-            locale: "tr",
-            defaultDate: sirket.lisans_bitis_tarihi ? new Date(sirket.lisans_bitis_tarihi) : null
+        
+        tarihSeciciler[`lisans-tarih-${sirket.id}`] = flatpickr(document.getElementById(`lisans-tarih-${sirket.id}`), {
+            dateFormat: "d.m.Y", locale: "tr", defaultDate: sirket.lisans_bitis_tarihi ? new Date(sirket.lisans_bitis_tarihi) : null
         });
     });
 }
@@ -247,31 +154,25 @@ function sirketleriDoldur(sirketler) {
 function kullanicilariDoldur(kullanicilar) {
     const tbody = document.getElementById('kullanicilar-tablosu');
     tbody.innerHTML = '';
-    if (kullanicilar.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center">Kayıtlı kullanıcı bulunamadı.</td></tr>';
-        return;
-    }
-    kullanicilar.forEach(kullanici => {
-        const sirketAdi = kullanici.sirketler ? kullanici.sirketler.sirket_adi : '<span class="text-muted">Atanmamış</span>';
-        const rol = kullanici.rol || 'user';
+    if (kullanicilar.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">Kullanıcı yok.</td></tr>'; return; }
+    kullanicilar.forEach(k => {
         const tr = `
-            <tr>
-                <td>${kullanici.kullanici_adi}</td>
-                <td>${sirketAdi}</td>
-                <td>
-                    <select class="form-select form-select-sm" id="rol-secim-${kullanici.id}">
-                        <option value="user" ${rol === 'user' ? 'selected' : ''}>Kullanıcı</option>
-                        <option value="muhasebeci" ${rol === 'muhasebeci' ? 'selected' : ''}>Muhasebeci</option>
-                        <option value="admin" ${rol === 'admin' ? 'selected' : ''}>Admin</option>
+            <tr class="hover:bg-gray-50 border-b border-gray-100">
+                <td class="px-6 py-4 text-sm font-medium text-gray-900">${k.kullanici_adi}</td>
+                <td class="px-6 py-4 text-sm text-gray-500">${k.sirketler ? k.sirketler.sirket_adi : 'Atanmamış'}</td>
+                <td class="px-6 py-4">
+                    <select class="block w-full rounded-md border-gray-300 border p-1.5 text-sm" id="rol-secim-${k.id}">
+                        <option value="user" ${k.rol === 'user' ? 'selected' : ''}>Kullanıcı</option>
+                        <option value="muhasebeci" ${k.rol === 'muhasebeci' ? 'selected' : ''}>Muhasebeci</option>
+                        <option value="admin" ${k.rol === 'admin' ? 'selected' : ''}>Admin</option>
                     </select>
                 </td>
-                <td class="text-center d-flex gap-1 justify-content-center">
-                    <button class="btn btn-sm btn-success" onclick="rolGuncelle(${kullanici.id})" title="Rolü Kaydet"><i class="bi bi-check-lg"></i></button>
-                    <button class="btn btn-sm btn-warning" onclick="sifreSifirlamaAc(${kullanici.id}, '${kullanici.kullanici_adi}')" title="Şifre Sıfırla"><i class="bi bi-key"></i></button>
-                    <button class="btn btn-sm btn-info" onclick="bildirimModaliniAc(${kullanici.id}, '${kullanici.kullanici_adi}')" title="Bildirim Gönder"><i class="bi bi-bell"></i></button>
+                <td class="px-6 py-4 flex justify-center gap-2">
+                    <button class="p-1.5 bg-green-50 text-green-600 rounded hover:bg-green-100" onclick="rolGuncelle(${k.id})"><i class="fa-solid fa-check"></i></button>
+                    <button class="p-1.5 bg-yellow-50 text-yellow-600 rounded hover:bg-yellow-100" onclick="sifreSifirlamaAc(${k.id}, '${k.kullanici_adi}')"><i class="fa-solid fa-key"></i></button>
+                    <button class="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100" onclick="bildirimModaliniAc(${k.id}, '${k.kullanici_adi}')"><i class="fa-solid fa-bell"></i></button>
                 </td>
-            </tr>
-        `;
+            </tr>`;
         tbody.innerHTML += tr;
     });
 }
@@ -313,66 +214,37 @@ async function rolGuncelle(kullaniciId) {
     }
 }
 
-function sirketSilmeOnayiAc(sirketId, sirketAdi) {
-    document.getElementById('silinecek-sirket-id').value = sirketId;
-    document.getElementById('silinecek-sirket-adi').textContent = sirketAdi;
-    sirketSilmeOnayModal.show();
+function sirketSilmeOnayiAc(id, ad) {
+    document.getElementById('silinecek-sirket-id').value = id;
+    document.getElementById('silinecek-sirket-adi').textContent = ad;
+    toggleModal('sirketSilmeOnayModal', true);
 }
 
 async function sirketSil() {
-    const sirketId = document.getElementById('silinecek-sirket-id').value;
+    const id = document.getElementById('silinecek-sirket-id').value;
     try {
-        const response = await fetch('/api/admin/delete_company', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sirket_id: parseInt(sirketId) })
-        });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            sirketSilmeOnayModal.hide();
-            await adminVerileriniYukle();
-        } else {
-            gosterMesaj(result.error || 'Silme işlemi başarısız.', 'danger');
-        }
-    } catch (error) {
-        console.error("Şirket silinirken hata:", error);
-        gosterMesaj('Sunucuya bağlanırken bir hata oluştu.', 'danger');
-    }
+        const res = await fetch('/api/admin/delete_company', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sirket_id: parseInt(id)}) });
+        const data = await res.json();
+        if(res.ok) { gosterMesaj(data.message, 'success'); toggleModal('sirketSilmeOnayModal', false); adminVerileriniYukle(); }
+        else gosterMesaj(data.error, 'danger');
+    } catch(e) { gosterMesaj('Hata.', 'danger'); }
 }
 
-function sifreSifirlamaAc(kullaniciId, kullaniciAdi) {
-    document.getElementById('sifirlanacak-kullanici-id').value = kullaniciId;
-    document.getElementById('sifresi-sifirlanacak-kullanici').textContent = kullaniciAdi;
+function sifreSifirlamaAc(id, ad) {
+    document.getElementById('sifirlanacak-kullanici-id').value = id;
+    document.getElementById('sifresi-sifirlanacak-kullanici').textContent = ad;
     document.getElementById('yeni-sifre-input').value = '';
-    sifreSifirlaModal.show();
+    toggleModal('sifreSifirlaModal', true);
 }
 
 async function sifreSifirla() {
-    const kullaniciId = document.getElementById('sifirlanacak-kullanici-id').value;
-    const yeniSifre = document.getElementById('yeni-sifre-input').value;
-
-    if (!yeniSifre) {
-        gosterMesaj("Lütfen yeni bir şifre girin.", "warning");
-        return;
-    }
+    const id = document.getElementById('sifirlanacak-kullanici-id').value;
+    const pass = document.getElementById('yeni-sifre-input').value;
     try {
-        const response = await fetch('/api/admin/reset_password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ kullanici_id: parseInt(kullaniciId), yeni_sifre: yeniSifre })
-        });
-        const result = await response.json();
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            sifreSifirlaModal.hide();
-        } else {
-            gosterMesaj(result.error || 'Şifre sıfırlama işlemi başarısız.', 'danger');
-        }
-    } catch (error) {
-        console.error("Şifre sıfırlanırken hata:", error);
-        gosterMesaj("Sunucuya bağlanırken bir hata oluştu.", "danger");
-    }
+        const res = await fetch('/api/admin/reset_password', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({kullanici_id: parseInt(id), yeni_sifre: pass}) });
+        if(res.ok) { gosterMesaj('Şifre sıfırlandı.', 'success'); toggleModal('sifreSifirlaModal', false); }
+        else gosterMesaj('Hata.', 'danger');
+    } catch(e) { gosterMesaj('Hata.', 'danger'); }
 }
 
 // --- DİNAMİK ÖNBELLEK YÖNETİMİ FONKSİYONLARI ---
@@ -486,39 +358,20 @@ async function toggleMaintenanceMode() {
 
 // static/js/admin.js dosyasının en altına ekle
 
-function bildirimModaliniAc(kullaniciId, kullaniciAdi) {
-    document.getElementById('bildirim-gonderilecek-kullanici-id').value = kullaniciId;
-    document.getElementById('bildirim-gonderilecek-kullanici').textContent = kullaniciAdi;
-    document.getElementById('bildirim-baslik-input').value = '';
-    document.getElementById('bildirim-icerik-input').value = '';
-    bildirimGonderModal.show();
+function bildirimModaliniAc(id, ad) {
+    document.getElementById('bildirim-gonderilecek-kullanici-id').value = id;
+    document.getElementById('bildirim-gonderilecek-kullanici').textContent = ad;
+    toggleModal('bildirimGonderModal', true);
 }
 
 async function bildirimGonder() {
-    const user_id = document.getElementById('bildirim-gonderilecek-kullanici-id').value;
+    const id = document.getElementById('bildirim-gonderilecek-kullanici-id').value;
     const title = document.getElementById('bildirim-baslik-input').value;
     const body = document.getElementById('bildirim-icerik-input').value;
-
-    if (!title || !body) {
-        gosterMesaj("Lütfen başlık ve içerik alanlarını doldurun.", "warning");
-        return;
-    }
-
     try {
-        const response = await fetch('/api/admin/send_notification', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: parseInt(user_id), title, body })
-        });
-        const result = await response.json();
-
-        if (response.ok) {
-            gosterMesaj(result.message, 'success');
-            bildirimGonderModal.hide();
-        } else {
-            throw new Error(result.error || 'Bilinmeyen bir hata oluştu.');
-        }
-    } catch (error) {
-        gosterMesaj(error.message, 'danger');
-    }
+        const res = await fetch('/api/admin/send_notification', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({user_id: parseInt(id), title, body}) });
+        const data = await res.json();
+        if(res.ok) { gosterMesaj(data.message, 'success'); toggleModal('bildirimGonderModal', false); }
+        else gosterMesaj(data.error, 'danger');
+    } catch(e) { gosterMesaj('Hata', 'danger'); }
 }

@@ -1,231 +1,219 @@
 // static/js/reports.js
 
 let detayliChart = null;
-let baslangicTarihiSecici = null; // Flatpickr instance'ları
+let baslangicTarihiSecici = null;
 let bitisTarihiSecici = null;
 
+// Tarih Formatlama (API için)
 function formatDateToYYYYMMDD(date) {
     if (!date) return null;
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+// PDF İndirme
 async function pdfIndir() {
     const ay = document.getElementById('rapor-ay').value;
     const yil = document.getElementById('rapor-yil').value;
     const url = `/api/rapor/aylik_pdf?ay=${ay}&yil=${yil}`;
 
-    await indirVeAc(url, 'pdf-indir-btn', {
-        success: 'Rapor indirildi ve yeni sekmede açıldı.',
-        error: 'PDF raporu oluşturulurken bir hata oluştu.'
-    });
+    if (typeof indirVeAc === 'function') {
+        await indirVeAc(url, 'pdf-indir-btn', {
+            success: 'Rapor başarıyla indirildi.',
+            error: 'PDF oluşturulurken bir hata meydana geldi.'
+        });
+    } else {
+        console.error("utils.js yüklenemedi.");
+        alert("İndirme başlatılamadı.");
+    }
 }
 
-
+// Sayfa Başlangıcı
 window.onload = function() {
+    // 1. Flatpickr Başlatma
     const birAyOnce = new Date();
     birAyOnce.setMonth(birAyOnce.getMonth() - 1);
 
-    baslangicTarihiSecici = flatpickr("#baslangic-tarihi", {
-        dateFormat: "d.m.Y", // Kullanıcıya gösterilecek format
-        altInput: true,     // Kullanıcıya gösterilecek alternatif input
-        altFormat: "d.m.Y", // Alternatif input formatı
-        locale: "tr",
-        defaultDate: birAyOnce,
-        onChange: function(selectedDates, dateStr, instance) {
-            // Başlangıç tarihi değiştiğinde bitiş tarihinin minimumunu ayarla
-            if (bitisTarihiSecici && selectedDates.length > 0) {
-                bitisTarihiSecici.set('minDate', selectedDates[0]);
+    const baslangicInput = document.getElementById("baslangic-tarihi");
+    const bitisInput = document.getElementById("bitis-tarihi");
+
+    if (baslangicInput && bitisInput && typeof flatpickr !== 'undefined') {
+        baslangicTarihiSecici = flatpickr(baslangicInput, {
+            dateFormat: "d.m.Y", altInput: true, altFormat: "d.m.Y", locale: "tr",
+            defaultDate: birAyOnce,
+            onChange: function(selectedDates) {
+                if (bitisTarihiSecici && selectedDates.length > 0) {
+                    bitisTarihiSecici.set('minDate', selectedDates[0]);
+                }
             }
-        }
-    });
+        });
 
-    bitisTarihiSecici = flatpickr("#bitis-tarihi", {
-        dateFormat: "d.m.Y", // Kullanıcıya gösterilecek format
-        altInput: true,     // Kullanıcıya gösterilecek alternatif input
-        altFormat: "d.m.Y", // Alternatif input formatı
-        locale: "tr",
-        defaultDate: "today",
-        minDate: birAyOnce // Başlangıçta minimum tarihi ayarla
-    });
+        bitisTarihiSecici = flatpickr(bitisInput, {
+            dateFormat: "d.m.Y", altInput: true, altFormat: "d.m.Y", locale: "tr",
+            defaultDate: "today", minDate: birAyOnce
+        });
+    }
 
+    // 2. Ay/Yıl Seçicileri
+    if(typeof ayYilSecicileriniDoldur === 'function') {
+        ayYilSecicileriniDoldur('rapor-ay', 'rapor-yil');
+    }
 
-    ayYilSecicileriniDoldur('rapor-ay', 'rapor-yil');
-
-    // --- YENİ EKLENEN GRAFİK ÇAĞRILARI ---
-    // Ana panelden taşınan haftalık ve tedarikçi dağılımı grafiklerini oluştur.
-    // charts objesinin charts.js'den geldiğini varsayıyoruz (base.html'de yüklü)
+    // 3. Küçük Grafikler
     if (typeof charts !== 'undefined') {
         charts.haftalikGrafigiOlustur();
         charts.tedarikciGrafigiOlustur();
-    } else {
-        console.error("charts objesi bulunamadı. charts.js'in yüklendiğinden emin olun.");
     }
-    // --- GRAFİK ÇAĞRILARI SONU ---
 
-    // Detaylı raporu başlangıçta oluşturmak için flatpickr'ın hazır olmasını bekle
-    setTimeout(() => {
-        raporOlustur(); // Detaylı rapor grafiğini oluşturur
-    }, 100);
+    // 4. Radyo Buton Dinleyici
+    const filters = document.querySelectorAll('input[name="tedarikci-periyot"]');
+    filters.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            filters.forEach(r => {
+                // Tailwind sınıflarını değiştir (Toggle Efekti)
+                const label = r.parentElement;
+                if(r.checked) {
+                    label.classList.remove('text-gray-500', 'hover:bg-white');
+                    label.classList.add('bg-white', 'text-brand-600', 'shadow-sm');
+                } else {
+                    label.classList.add('text-gray-500', 'hover:bg-white');
+                    label.classList.remove('bg-white', 'text-brand-600', 'shadow-sm');
+                }
+            });
+            if (typeof charts !== 'undefined') charts.tedarikciGrafigiGuncelle(e.target.value);
+        });
+    });
+
+    // 5. İlk Raporu Oluştur
+    setTimeout(() => { raporOlustur(); }, 100);
 };
 
-// --- Süt Raporu Yardımcı Fonksiyonları (Mevcut) ---
+// --- YARDIMCI FONKSİYONLAR ---
+
 function ozetVerileriniDoldur(summaryData) {
-    document.getElementById('ozet-kartlari').style.display = 'flex';
-    document.getElementById('ozet-toplam-litre').textContent = `${summaryData.totalLitre.toFixed(2)} L`; // toFixed(2) eklendi
-    document.getElementById('ozet-gunluk-ortalama').textContent = `${summaryData.averageDailyLitre.toFixed(2)} L`; // toFixed(2) eklendi
-    document.getElementById('ozet-girdi-sayisi').textContent = summaryData.entryCount;
-    document.getElementById('ozet-gun-sayisi').textContent = summaryData.dayCount;
+    const container = document.getElementById('ozet-kartlari');
+    if (container) container.classList.remove('hidden');
+    
+    document.getElementById('ozet-toplam-litre').textContent = `${parseFloat(summaryData.totalLitre || 0).toFixed(2)} L`;
+    document.getElementById('ozet-gunluk-ortalama').textContent = `${parseFloat(summaryData.averageDailyLitre || 0).toFixed(2)} L`;
+    document.getElementById('ozet-girdi-sayisi').textContent = summaryData.entryCount || 0;
+    document.getElementById('ozet-gun-sayisi').textContent = summaryData.dayCount || 0;
 }
 
 function tedarikciTablosunuDoldur(breakdownData) {
-    const tabloBody = document.getElementById('tedarikci-dokum-tablosu');
-    tabloBody.innerHTML = '';
-    if (!breakdownData || breakdownData.length === 0) { // breakdownData null kontrolü eklendi
-        tabloBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Veri yok.</td></tr>';
+    const body = document.getElementById('tedarikci-dokum-tablosu');
+    if (!body) return;
+    
+    body.innerHTML = '';
+    if (!breakdownData || breakdownData.length === 0) {
+        body.innerHTML = '<tr><td colspan="3" class="px-4 py-6 text-center text-gray-400 text-sm">Bu aralıkta veri bulunamadı.</td></tr>';
         return;
     }
+    
     breakdownData.forEach(item => {
-        // Litre değerini formatla
-        const litreFormatted = parseFloat(item.litre).toFixed(2);
-        const row = `<tr><td>${utils.sanitizeHTML(item.name)}</td><td>${litreFormatted}</td><td>${item.entryCount}</td></tr>`;
-        tabloBody.innerHTML += row;
+        body.innerHTML += `
+        <tr class="hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0">
+            <td class="px-4 py-3 text-gray-900 font-medium text-sm">${utils.sanitizeHTML(item.name)}</td>
+            <td class="px-4 py-3 text-right text-gray-600 font-mono text-sm">${parseFloat(item.litre).toFixed(2)}</td>
+            <td class="px-4 py-3 text-right text-gray-500 text-xs">${item.entryCount}</td>
+        </tr>`;
     });
 }
-// --- Süt Raporu Yardımcı Fonksiyonları Sonu ---
 
-
-// static/js/reports.js içindeki BU FONKSİYONU DEĞİŞTİR
-
-/**
- * Kârlılık kartlarındaki sayıları (TL) formatlar ve doldurur.
- * @param {object} data - API'den gelen kârlılık verisi.
- */
 function karlilikKartlariniDoldur(data) {
-    const formatla = (val) => `${parseFloat(val).toFixed(2)} TL`;
+    const fmt = (val) => `${parseFloat(val || 0).toFixed(2)} TL`;
     
-    // Ana Kartlar (Bunlar zaten doğru çalışıyordu)
-    document.getElementById('karlilik-toplam-gelir').textContent = formatla(data.toplam_gelir);
-    document.getElementById('karlilik-toplam-gider').textContent = formatla(data.toplam_gider);
-    document.getElementById('karlilik-net-kar').textContent = formatla(data.net_kar);
+    document.getElementById('karlilik-toplam-gelir').textContent = fmt(data.toplam_gelir);
+    document.getElementById('karlilik-toplam-gider').textContent = fmt(data.toplam_gider);
     
-    // Net kâr/zarar durumuna göre renk ayarı
-    const netKarElementi = document.getElementById('karlilik-net-kar');
-    const netKarDeger = parseFloat(data.net_kar);
-    netKarElementi.classList.remove('text-success', 'text-danger', 'text-primary');
-    if (netKarDeger > 0) {
-        netKarElementi.classList.add('text-success'); // Kâr
-    } else if (netKarDeger < 0) {
-        netKarElementi.classList.add('text-danger'); // Zarar
-    } else {
-        netKarElementi.classList.add('text-primary'); // Nötr
-    }
+    const net = document.getElementById('karlilik-net-kar');
+    const netVal = parseFloat(data.net_kar || 0);
+    net.textContent = fmt(netVal);
+    
+    // Renk sınıflarını temizle ve yenisini ekle
+    net.className = 'text-2xl font-bold tracking-tight ' + (netVal > 0 ? 'text-green-700' : (netVal < 0 ? 'text-red-700' : 'text-blue-700'));
 
-    // === DÜZELTME BURADA ===
-    // Detay kartları (Eski anahtarlar yerine yeni anahtarları kullan)
-    
-    // 'toplam_sut_geliri' -> 'sut_geliri'
-    document.getElementById('karlilik-sut-geliri').textContent = formatla(data.sut_geliri); 
-    
-    // 'toplam_finans_tahsilati' -> 'diger_gelirler'
-    document.getElementById('karlilik-tahsilat-geliri').textContent = formatla(data.diger_gelirler);
-    
-    // 'toplam_yem_gideri' -> 'yem_maliyeti'
-    document.getElementById('karlilik-yem-gideri').textContent = formatla(data.yem_maliyeti);
-    
-    // 'toplam_finans_odemesi' -> 'sut_maliyeti' (Süt Alımı maliyettir)
-    document.getElementById('karlilik-finans-gideri').textContent = formatla(data.sut_maliyeti);
-    
-    // 'toplam_genel_masraf' -> 'diger_giderler' (Masraflar + Primler)
-    document.getElementById('karlilik-genel-masraf').textContent = formatla(data.diger_giderler);
+    document.getElementById('karlilik-sut-geliri').textContent = fmt(data.sut_geliri); 
+    document.getElementById('karlilik-tahsilat-geliri').textContent = fmt(data.diger_gelirler);
+    document.getElementById('karlilik-yem-gideri').textContent = fmt(data.yem_maliyeti);
+    document.getElementById('karlilik-finans-gideri').textContent = fmt(data.sut_maliyeti);
+    document.getElementById('karlilik-genel-masraf').textContent = fmt(data.diger_giderler);
 }
 
-/**
- * Kârlılık raporu verilerini çeker ve kartları doldurur.
- */
+// --- RAPORLAMA MANTIĞI ---
+
 async function karlilikRaporuOlustur(baslangic, bitis) {
-    // Sadece firma yetkilisi veya admin bu raporu görebilir
-    const kullaniciRolu = document.body.dataset.userRole;
-    if (kullaniciRolu !== 'admin' && kullaniciRolu !== 'firma_yetkilisi') {
-        return; // Yetkisi yoksa hiçbir şey yapma
-    }
+    const role = document.body.dataset.userRole;
+    if (role !== 'admin' && role !== 'firma_yetkilisi') return;
 
     const container = document.getElementById('karlilik-raporu-container');
-    const mesajElementi = document.getElementById('karlilik-sonuc-mesaji');
-    const kartlarElementi = document.getElementById('karlilik-kartlari');
-    const tarihAraligiSpan = document.getElementById('karlilik-tarih-araligi');
+    const msg = document.getElementById('karlilik-sonuc-mesaji');
+    const cards = document.getElementById('karlilik-kartlari');
+    const dateSpan = document.getElementById('karlilik-tarih-araligi');
 
-    if (!container || !mesajElementi || !kartlarElementi || !tarihAraligiSpan) return;
+    if(!container) return;
+    
+    container.classList.remove('hidden');
+    cards.classList.add('hidden');
+    msg.classList.remove('hidden');
+    msg.innerHTML = '<div class="flex justify-center items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin text-brand-500"></i><span>Hesaplanıyor...</span></div>';
 
-    container.style.display = 'block'; // Ana kartı görünür yap
-    kartlarElementi.style.display = 'none'; // Veri kartlarını gizle
-    mesajElementi.style.display = 'block'; // Yükleniyor mesajını göster
-    mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Kârlılık analizi hesaplanıyor...</p>';
-
-    // Tarih başlığını ayarla
-    const formatliBaslangic = baslangicTarihiSecici.selectedDates[0].toLocaleDateString('tr-TR');
-    const formatliBitis = bitisTarihiSecici.selectedDates[0].toLocaleDateString('tr-TR');
-    tarihAraligiSpan.textContent = `${formatliBaslangic} - ${formatliBitis}`;
+    if (baslangicTarihiSecici && baslangicTarihiSecici.selectedDates[0]) {
+        const basStr = baslangicTarihiSecici.selectedDates[0].toLocaleDateString('tr-TR');
+        const bitStr = bitisTarihiSecici.selectedDates[0].toLocaleDateString('tr-TR');
+        dateSpan.textContent = `(${basStr} - ${bitStr})`;
+    }
     
     try {
-        const veri = await api.fetchKarlilikRaporu(baslangic, bitis);
+        const data = await api.fetchKarlilikRaporu(baslangic, bitis);
+        if (!data) throw new Error("Veri alınamadı");
         
-        if (!veri) {
-            throw new Error("Kârlılık verisi alınamadı.");
-        }
+        karlilikKartlariniDoldur(data);
         
-        karlilikKartlariniDoldur(veri);
-        mesajElementi.style.display = 'none'; // Yükleniyor'u gizle
-        kartlarElementi.style.display = 'block'; // Kartları göster
-
-    } catch (error) {
-        console.error("Kârlılık raporu oluşturulurken hata:", error);
-        mesajElementi.textContent = `Hata: ${error.message}`;
-        kartlarElementi.style.display = 'none';
+        msg.classList.add('hidden');
+        cards.classList.remove('hidden');
+    } catch (e) {
+        msg.innerHTML = `<span class="text-red-500">Hata: ${e.message}</span>`;
     }
 }
-// --- YENİ Fonksiyonlar Sonu ---
 
-
-/**
- * Detaylı Süt Raporunu (Grafik ve Döküm) oluşturur.
- * (Mevcut 'raporOlustur' fonksiyonunun mantığı buraya taşındı)
- */
 async function sutRaporuOlustur(baslangic, bitis) {
-    const mesajElementi = document.getElementById('rapor-sonuc-mesaji');
-    const grafikBaslik = document.getElementById('grafik-baslik');
+    const msg = document.getElementById('rapor-sonuc-mesaji');
+    const title = document.getElementById('grafik-baslik');
     const canvas = document.getElementById('detayliRaporGrafigi');
-    if (!canvas || !mesajElementi || !grafikBaslik) return;
+    
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
-    // Önceki raporun kalıntılarını temizle
-    document.getElementById('ozet-kartlari').style.display = 'none';
+    document.getElementById('ozet-kartlari').classList.add('hidden');
     document.getElementById('tedarikci-dokum-tablosu').innerHTML = '';
     
-    mesajElementi.innerHTML = '<div class="spinner-border" role="status"></div><p class="mt-2">Süt raporu oluşturuluyor...</p>';
-    mesajElementi.style.display = 'block';
-
+    msg.classList.remove('hidden');
+    msg.innerHTML = '<div class="flex justify-center items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin text-brand-500"></i><span>Yükleniyor...</span></div>';
+    
     if (detayliChart) {
-        unregisterChart(detayliChart);
+        if(typeof unregisterChart === 'function') unregisterChart(detayliChart);
         detayliChart.destroy();
         detayliChart = null;
     }
 
     try {
-        const veri = await api.request(`/api/rapor/detayli_rapor?baslangic=${baslangic}&bitis=${bitis}`); 
+        const veri = await api.fetchDetayliRapor(baslangic, bitis);
 
         if (!veri || !veri.chartData || veri.chartData.labels.length === 0) {
-            mesajElementi.textContent = "Seçilen tarih aralığında süt verisi bulunamadı.";
+            msg.textContent = "Seçilen aralıkta veri bulunamadı.";
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            grafikBaslik.textContent = "Veri Yok";
+            title.textContent = "Rapor";
             tedarikciTablosunuDoldur([]);
             return;
         }
 
-        mesajElementi.style.display = 'none';
-
-        const formatliBaslangic = baslangicTarihiSecici.selectedDates[0].toLocaleDateString('tr-TR');
-        const formatliBitis = bitisTarihiSecici.selectedDates[0].toLocaleDateString('tr-TR');
-        grafikBaslik.textContent = `${formatliBaslangic} - ${formatliBitis} Arası Günlük Süt Toplama Raporu`;
+        msg.classList.add('hidden');
+        
+        if (baslangicTarihiSecici && baslangicTarihiSecici.selectedDates[0]) {
+            const basStr = baslangicTarihiSecici.selectedDates[0].toLocaleDateString('tr-TR');
+            const bitStr = bitisTarihiSecici.selectedDates[0].toLocaleDateString('tr-TR');
+            title.textContent = `${basStr} - ${bitStr} Süt Raporu`;
+        }
 
         ozetVerileriniDoldur(veri.summaryData);
         tedarikciTablosunuDoldur(veri.supplierBreakdown);
@@ -238,89 +226,71 @@ async function sutRaporuOlustur(baslangic, bitis) {
                     label: 'Toplanan Süt (Litre)',
                     data: veri.chartData.data,
                     fill: true,
-                    tension: 0.1
+                    tension: 0.3,
+                    borderColor: '#0284c7', // Tailwind brand-600
+                    backgroundColor: 'rgba(2, 132, 199, 0.1)',
+                    pointBackgroundColor: '#ffffff',
+                    pointBorderColor: '#0284c7',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
                 }]
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { beginAtZero: true },
-                    x: {}
-                },
-                plugins: {
+                maintainAspectRatio: false, // Mobil uyum için kritik
+                plugins: { 
                     legend: { display: false },
-                    tooltip: { callbacks: { label: (context) => ` Toplam: ${context.parsed.y} Litre` } }
+                    tooltip: {
+                        backgroundColor: 'rgba(17, 24, 39, 0.9)', // gray-900
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: (ctx) => ` ${ctx.parsed.y} Litre`
+                        }
+                    }
+                },
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: '#f3f4f6', borderDash: [4, 4] }, // gray-100
+                        ticks: { font: { size: 11, family: "'Inter', sans-serif" } }
+                    }, 
+                    x: { 
+                        grid: { display: false },
+                        ticks: { font: { size: 11, family: "'Inter', sans-serif" } }
+                    } 
                 }
             }
         });
-        registerChart(detayliChart); 
+        
+        if(typeof registerChart === 'function') registerChart(detayliChart);
 
-        if (typeof updateAllChartThemes === 'function') updateAllChartThemes();
     } catch (error) {
-        console.error("Detaylı süt raporu oluşturulurken hata:", error);
-        mesajElementi.textContent = `Süt Raporu Hatası: ${error.message}`;
-        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+        console.error(error);
+        msg.textContent = "Hata oluştu.";
     }
 }
 
-
-/**
- * Ana Rapor Oluşturma Fonksiyonu
- * Hem Süt Raporunu hem de Kârlılık Raporunu tetikler.
- */
 async function raporOlustur() {
-    const baslangicDate = baslangicTarihiSecici.selectedDates[0];
-    const bitisDate = bitisTarihiSecici.selectedDates[0];
+    if (!baslangicTarihiSecici || !bitisTarihiSecici) return;
 
-    const baslangic = baslangicDate ? formatDateToYYYYMMDD(baslangicDate) : null;
-    const bitis = bitisDate ? formatDateToYYYYMMDD(bitisDate) : null;
+    const d1 = baslangicTarihiSecici.selectedDates[0];
+    const d2 = bitisTarihiSecici.selectedDates[0];
+    const bas = d1 ? formatDateToYYYYMMDD(d1) : null;
+    const bit = d2 ? formatDateToYYYYMMDD(d2) : null;
 
-    // Süt raporu için elementler (hata mesajı için)
-    const mesajElementi = document.getElementById('rapor-sonuc-mesaji');
-    const canvas = document.getElementById('detayliRaporGrafigi');
-    
-    // Kârlılık raporu için elementler (hata mesajı için)
-    const karlilikContainer = document.getElementById('karlilik-raporu-container');
-    const karlilikMesajElementi = document.getElementById('karlilik-sonuc-mesaji');
-    const karlilikKartlarElementi = document.getElementById('karlilik-kartlari');
-    
-    // Temizleme (Tarih seçilmemişse)
-    const temizle = () => {
-        if(mesajElementi) {
-            mesajElementi.textContent = "Lütfen geçerli bir başlangıç ve bitiş tarihi seçin.";
-            mesajElementi.style.display = 'block';
-        }
-        if (detayliChart) { unregisterChart(detayliChart); detayliChart.destroy(); detayliChart = null; }
-        if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-        
-        if (karlilikContainer) karlilikContainer.style.display = 'none';
-        if (karlilikMesajElementi) karlilikMesajElementi.style.display = 'none';
-        if (karlilikKartlarElementi) karlilikKartlarElementi.style.display = 'none';
-    };
-
-    if (!baslangic || !bitis) {
-        temizle();
+    if (!bas || !bit) {
+        if(typeof gosterMesaj === 'function') gosterMesaj("Lütfen tarih aralığı seçin.", "warning");
         return;
     }
-
     if (!navigator.onLine) {
-        if(mesajElementi) {
-            mesajElementi.innerHTML = '<p class="text-warning">Rapor oluşturmak için internet bağlantısı gereklidir.</p>';
-            mesajElementi.style.display = 'block';
-        }
-        if (karlilikMesajElementi) {
-            karlilikMesajElementi.innerHTML = '<p class="text-warning">Rapor oluşturmak için internet bağlantısı gereklidir.</p>';
-            karlilikMesajElementi.style.display = 'block';
-        }
-        if (karlilikContainer) karlilikContainer.style.display = 'block';
+        if(typeof gosterMesaj === 'function') gosterMesaj("İnternet bağlantısı gereklidir.", "warning");
         return;
     }
 
-    // İki raporu da paralel olarak başlat
-    // Not: Hata yönetimi (try/catch) fonksiyonların kendi içinde yapılıyor.
     await Promise.allSettled([
-        sutRaporuOlustur(baslangic, bitis),
-        karlilikRaporuOlustur(baslangic, bitis)
+        sutRaporuOlustur(bas, bit),
+        karlilikRaporuOlustur(bas, bit)
     ]);
 }

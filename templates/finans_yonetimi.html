@@ -1,161 +1,84 @@
-{% extends "base.html" %}
-
-{% block title %}Finans Yönetimi - Süt Takip Sistemi{% endblock %}
-
-{% block head_extra %}
+<!DOCTYPE html>
+<html lang="tr" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Finans Yönetimi</title>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-{% endblock %}
+    <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']},colors:{brand:{50:'#f0f9ff',100:'#e0f2fe',500:'#0ea5e9',600:'#0284c7',700:'#0369a1'}}}}}</script>
+    <style>.ts-control{border-radius:0.5rem!important;padding:0.5rem!important;border-color:#d1d5db!important}.ts-dropdown{border-radius:0.5rem!important;border-color:#d1d5db!important}.hidden{display:none!important}</style>
+</head>
+<body class="h-full flex flex-col bg-gray-50 font-sans text-gray-900 antialiased pb-20 md:pb-0">
 
-{% block content %}
-<div class="main-wrapper p-3 p-md-4">
-    <div id="alert-container"></div>
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h1 class="fw-bold">Finans Yönetimi</h1>
-
-        <div class="d-flex align-items-center gap-2">
-            {% include '_hizli_islemler.html' %}
+    <header class="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="{{ url_for('main.panel') }}" class="mr-4 text-gray-500 hover:text-brand-600 transition-colors"><i class="fa-solid fa-arrow-left text-xl"></i></a>
+                    <h1 class="text-lg font-bold text-gray-900">Finans Yönetimi</h1>
+                </div>
+                <div class="flex items-center space-x-3">{% include '_hizli_islemler.html' %}</div>
+            </div>
         </div>
+    </header>
 
-    </div>
+    <main class="flex-1 overflow-y-auto bg-gray-50 p-4">
+        <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
+            <div id="alert-container" class="lg:col-span-12"></div>
 
-    <div class="row g-3">
-        {# Yeni Finansal İşlem Ekleme Formu (Sol Taraf) #}
-        <div class="col-lg-4 col-12">
-            <div class="card">
-                <div class="card-body p-3">
-                    <h5 class="card-title mb-3">Yeni Finansal İşlem Ekle</h5>
-                    <div class="mb-2">
-                        <label for="islem-tipi-sec" class="form-label">İşlem Tipi</label>
-                        <select id="islem-tipi-sec" class="form-select form-select-sm">
-                            <option value="Ödeme">Ödeme</option>
-                            <option value="Avans">Avans</option>
-                        </select>
-                    </div>
-                    <div class="mb-2">
-                        <label for="tedarikci-sec" class="form-label">Tedarikçi</label>
-                        <select id="tedarikci-sec" placeholder="Tedarikçi seçin..." autocomplete="off"></select>
-                    </div>
-                    <div class="mb-2">
-                        <label for="tutar-input" class="form-label">Tutar (TL)</label>
-                        <input type="number" step="0.01" class="form-control form-control-sm" id="tutar-input" placeholder="Örn: 1500.50">
-                    </div>
-                    <div class="mb-2">
-                        <label for="islem-tarihi-input" class="form-label">İşlem Tarihi (İsteğe bağlı)</label>
-                        <input type="text" class="form-control form-control-sm" id="islem-tarihi-input" placeholder="Varsayılan: Şimdi">
-                    </div>
-                     <div class="mb-3">
-                        <label for="aciklama-input" class="form-label">Açıklama</label>
-                        <textarea class="form-control form-control-sm" id="aciklama-input" rows="2"></textarea>
-                    </div>
-                    <div class="d-grid">
-                        <button class="btn btn-primary" onclick="finansalIslemKaydet()">İşlemi Kaydet</button>
+            <div class="lg:col-span-4 order-1">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="bg-brand-50 px-4 py-3 border-b border-gray-100"><h3 class="font-bold text-brand-800 flex items-center"><i class="fa-solid fa-plus-circle mr-2"></i>Yeni İşlem</h3></div>
+                    <div class="p-4 space-y-4">
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">İşlem Tipi</label><select id="islem-tipi-sec" class="block w-full rounded-lg border-gray-300 border p-2 text-sm"><option value="Ödeme">Ödeme</option><option value="Avans">Avans</option><option value="Tahsilat">Tahsilat</option></select></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Tedarikçi</label><select id="tedarikci-sec" class="w-full"></select></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Tutar (TL)</label><input type="number" step="0.01" id="tutar-input" class="block w-full rounded-lg border-gray-300 border p-2 text-sm font-mono" placeholder="0.00"></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Tarih</label><input type="text" id="islem-tarihi-input" class="block w-full rounded-lg border-gray-300 border p-2 text-sm" placeholder="Şimdi"></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">Açıklama</label><textarea id="aciklama-input" rows="2" class="block w-full rounded-lg border-gray-300 border p-2 text-sm"></textarea></div>
+                        <button onclick="finansalIslemKaydet()" class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 transition-colors">Kaydet</button>
                     </div>
                 </div>
             </div>
-        </div>
 
-        {# Tüm Finansal İşlemler Listesi/Kartları (Sağ Taraf) #}
-        <div class="col-lg-8 col-12">
-             <div class="card">
-                <div class="card-body p-3">
-                     {# Başlık ve butonlar eski card-body içinde #}
-                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="card-title mb-0">Tüm Finansal İşlemler</h5>
-                        <div class="btn-group" role="group">
-                            <button type="button" id="btn-view-table" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('tablo')"><i class="bi bi-list-task"></i> Liste</button>
-                            <button type="button" id="btn-view-card" class="btn btn-sm btn-outline-primary" onclick="gorunumuDegistir('kart')"><i class="bi bi-grid-3x2-gap-fill"></i> Kart</button>
+            <div class="lg:col-span-8 order-2">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[500px]">
+                    <div class="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                        <h3 class="font-bold text-gray-700">Son İşlemler</h3>
+                        <div class="flex bg-gray-200 rounded-lg p-1">
+                            <button id="btn-view-table" onclick="gorunumuDegistir('tablo')" class="p-1.5 rounded text-gray-500 hover:text-brand-600 active:bg-white active:shadow-sm"><i class="fa-solid fa-list"></i></button>
+                            <button id="btn-view-card" onclick="gorunumuDegistir('kart')" class="p-1.5 rounded text-gray-500 hover:text-brand-600 active:bg-white active:shadow-sm"><i class="fa-solid fa-grip"></i></button>
                         </div>
-                     </div>
-
-                     {# Tablo görünümü eski halinde (içinde card yok) #}
-                     <div id="tablo-gorunumu" class="gorunum-konteyneri" style="display: none;">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>Tarih</th>
-                                        <th>Tedarikçi</th>
-                                        <th>İşlem Tipi</th>
-                                        <th class="text-end">Tutar (TL)</th>
-                                        <th>Açıklama</th>
-                                        <th class="text-center">İşlemler</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="finansal-islemler-tablosu"></tbody>
-                            </table>
-                        </div>
-                     </div>
-
-                     <div id="kart-gorunumu" class="gorunum-konteyneri" style="display: none;">
-                         <div class="row g-3" id="finansal-islemler-kart-listesi"></div>
-                     </div>
-
-                     <div id="veri-yok-mesaji" class="text-center p-4" style="display: none;">
-                        <p class="text-secondary">Kayıtlı finansal işlem bulunamadı.</p>
                     </div>
-
-                     <nav id="finans-sayfalama" class="d-flex justify-content-center mt-3"></nav>
-
-                </div> {# card-body sonu #}
-            </div> {# card sonu #}
-        </div> {# Sağ Sütun Sonu #}
-    </div> {# Ana Row Sonu #}
-</div> {# Ana Wrapper Sonu #}
-
-
-{# Modallar #}
-<div class="modal fade" id="duzenleModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">İşlemi Düzenle</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="edit-islem-id">
-                <div class="mb-2">
-                    <label for="edit-tutar-input" class="form-label">Yeni Tutar (TL)</label>
-                    <input type="number" step="0.01" class="form-control form-control-sm" id="edit-tutar-input">
-                </div>
-                <div class="mb-2">
-                    <label for="edit-aciklama-input" class="form-label">Yeni Açıklama</label>
-                    <textarea class="form-control form-control-sm" id="edit-aciklama-input" rows="2"></textarea>
+                    <div id="tablo-gorunumu" class="overflow-x-auto hidden"><table class="min-w-full divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tedarikçi</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tip</th><th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tutar</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Açıklama</th><th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">İşlem</th></tr></thead><tbody id="finansal-islemler-tablosu" class="bg-white divide-y divide-gray-200 text-sm"></tbody></table></div>
+                    <div id="kart-gorunumu" class="hidden p-4"><div id="finansal-islemler-kart-listesi" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div></div>
+                    <div id="veri-yok-mesaji" class="hidden text-center py-10 text-gray-400">Kayıt bulunamadı.</div>
+                    <nav id="finans-sayfalama" class="flex justify-center my-4"></nav>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="finansalIslemGuncelle()">Kaydet</button>
-            </div>
         </div>
-    </div>
-</div>
+    </main>
 
-<div class="modal fade" id="silmeOnayModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title text-danger">Silme Onayı</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p>Bu finansal işlemi kalıcı olarak silmek istediğinize emin misiniz?</p>
-                <input type="hidden" id="silinecek-islem-id">
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
-                <button type="button" class="btn btn-danger btn-sm" onclick="finansalIslemSil()">Evet, Sil</button>
-            </div>
-        </div>
-    </div>
-</div>
+    <div id="duzenleModal" class="fixed inset-0 z-50 hidden" aria-modal="true"><div class="fixed inset-0 bg-gray-500 bg-opacity-75" onclick="toggleModal('duzenleModal', false)"></div><div class="fixed inset-0 z-10 overflow-y-auto"><div class="flex min-h-full items-center justify-center p-4"><div class="relative rounded-lg bg-white shadow-xl sm:w-full sm:max-w-sm p-6"><h3 class="text-base font-semibold mb-4">Düzenle</h3><input type="hidden" id="edit-islem-id"><div class="space-y-3"><div><label class="block text-sm">Yeni Tutar</label><input type="number" step="0.01" id="edit-tutar-input" class="block w-full border rounded-md p-2 text-sm"></div><div><label class="block text-sm">Açıklama</label><textarea id="edit-aciklama-input" rows="2" class="block w-full border rounded-md p-2 text-sm"></textarea></div></div><div class="mt-5 flex justify-end gap-2"><button onclick="toggleModal('duzenleModal', false)" class="px-3 py-2 text-sm border rounded-md">İptal</button><button onclick="finansalIslemGuncelle()" class="px-3 py-2 text-sm text-white bg-brand-600 rounded-md">Kaydet</button></div></div></div></div></div>
+    <div id="silmeOnayModal" class="fixed inset-0 z-50 hidden" aria-modal="true"><div class="fixed inset-0 bg-gray-500 bg-opacity-75" onclick="toggleModal('silmeOnayModal', false)"></div><div class="fixed inset-0 z-10 overflow-y-auto"><div class="flex min-h-full items-center justify-center p-4"><div class="relative rounded-lg bg-white shadow-xl sm:w-full sm:max-w-sm p-6"><h3 class="text-base font-semibold mb-2">Sil?</h3><p class="text-sm text-gray-500 mb-4">Emin misiniz?</p><input type="hidden" id="silinecek-islem-id"><div class="flex justify-end gap-2"><button onclick="toggleModal('silmeOnayModal', false)" class="px-3 py-2 text-sm border rounded-md">Vazgeç</button><button onclick="finansalIslemSil()" class="px-3 py-2 text-sm text-white bg-red-600 rounded-md">Sil</button></div></div></div></div></div>
 
-{% endblock %}
-
-{% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://npmcdn.com/flatpickr/dist/l10n/tr.js"></script>
-<script src="{{ url_for('static', filename='js/finans_yonetimi.js') }}"></script>
-{% endblock %}
-
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/tr.js"></script>
+    <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/render-utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/offline.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/store.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/data-loader.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/finans_yonetimi.js') }}"></script>
+    <script>function toggleModal(id, show){const m=document.getElementById(id);if(show)m.classList.remove('hidden');else m.classList.add('hidden');}</script>
+</body>
+</html>

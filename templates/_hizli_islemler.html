@@ -1,40 +1,131 @@
-{% if request.endpoint != 'main.panel' %}
-<a href="{{ url_for('main.panel') }}" class="btn btn-secondary btn-sm">Ana Panele Dön</a>
-{% endif %}
+<div class="flex items-center space-x-2">
 
-<div class="btn-group">
-    <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-        <i class="bi bi-lightning-charge-fill"></i> Hızlı İşlemler
+    {% if request.endpoint != 'main.panel' %}
+    <a href="{{ url_for('main.panel') }}" class="hidden md:inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 transition-colors">
+        <i class="fa-solid fa-house mr-2"></i> Ana Panele Dön
+    </a>
+    {% endif %}
+
+    <div class="relative inline-block text-left" id="hizli-islem-container">
+        <div>
+            <button type="button" onclick="toggleHizliIslemMenu()" class="inline-flex justify-center w-full rounded-md border border-transparent shadow-sm px-4 py-2 bg-brand-600 text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 transition-colors" id="menu-button" aria-expanded="true" aria-haspopup="true">
+                <i class="fa-solid fa-bolt mr-2"></i> <span class="hidden sm:inline">Hızlı İşlemler</span>
+                <i class="fa-solid fa-chevron-down ml-2 -mr-1"></i>
+            </button>
+        </div>
+
+        <div id="hizli-islem-menu" class="hidden origin-top-right absolute right-0 mt-2 w-64 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50 divide-y divide-gray-100" role="menu" aria-orientation="vertical" aria-labelledby="menu-button" tabindex="-1">
+            
+            <div class="py-1" role="none">
+                <a href="{{ url_for('main.panel') }}" class="text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" role="menuitem">
+                    <i class="fa-solid fa-house w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Ana Panel
+                </a>
+            </div>
+
+            <div class="py-1" role="none">
+                <a href="{{ url_for('main.tedarikciler_sayfasi') }}" class="text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" role="menuitem">
+                    <i class="fa-solid fa-users w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Tedarikçi Yönetimi
+                </a>
+                <a href="{{ url_for('yem.yem_yonetimi_sayfasi') }}" class="text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" role="menuitem">
+                    <i class="fa-solid fa-wheat-awn w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Yem Yönetimi
+                </a>
+                <a href="{{ url_for('finans.finans_sayfasi') }}" class="text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" role="menuitem">
+                    <i class="fa-solid fa-coins w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Finans Yönetimi
+                </a>
+                <a href="{{ url_for('main.raporlar_page') }}" class="text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" role="menuitem">
+                    <i class="fa-solid fa-chart-line w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Detaylı Raporlar
+                </a>
+            </div>
+
+            {% if session.get('user', {}).get('rol') in ['admin', 'firma_yetkilisi'] %}
+            <div class="py-1" role="none">
+                <a href="{{ url_for('firma.firma_yonetim_sayfasi') }}" class="text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" role="menuitem">
+                    <i class="fa-solid fa-user-gear w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Kullanıcı Yönetimi
+                </a>
+                <a href="{{ url_for('tarife.tarife_yonetim_sayfasi') }}" class="text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" role="menuitem">
+                    <i class="fa-solid fa-tags w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Süt Fiyat Tarifesi
+                </a>
+                <a href="{{ url_for('masraf.masraf_yonetim_sayfasi') }}" class="text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" role="menuitem">
+                    <i class="fa-solid fa-wallet w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Genel Masraf Yönetimi
+                </a>
+            </div>
+            {% endif %}
+
+            <div class="py-1" role="none">
+                <button type="button" class="w-full text-left text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" onclick="toggleModal('hakkindaModal', true)">
+                    <i class="fa-solid fa-circle-info w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Uygulama Hakkında
+                </button>
+                
+                {% if session.get('user', {}).get('rol') == 'admin' %}
+                <a href="{{ url_for('admin.admin_panel') }}" class="text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" role="menuitem">
+                    <i class="fa-solid fa-shield-halved w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Admin Paneli
+                </a>
+                {% endif %}
+            </div>
+
+            <div class="py-1" role="none">
+                <a href="{{ url_for('profil.profil_sayfasi') }}" class="text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" role="menuitem">
+                    <i class="fa-solid fa-user w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Profilim
+                </a>
+                <button type="button" class="w-full text-left text-gray-700 hover:bg-gray-50 hover:text-brand-600 group flex items-center px-4 py-2 text-sm" onclick="askForNotificationPermission()">
+                    <i class="fa-solid fa-bell w-5 text-center mr-2 text-gray-400 group-hover:text-brand-500"></i> Bildirimleri Aç
+                </button>
+                <button type="button" class="w-full text-left text-red-600 hover:bg-red-50 hover:text-red-700 group flex items-center px-4 py-2 text-sm" onclick="guvenliCikis()">
+                    <i class="fa-solid fa-right-from-bracket w-5 text-center mr-2 text-red-400 group-hover:text-red-600"></i> Güvenli Çıkış
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <button id="theme-toggle" class="p-2 text-gray-500 hover:text-brand-600 transition-colors rounded-full hover:bg-gray-100 focus:outline-none border border-gray-200 shadow-sm bg-white">
+        <i id="sun-icon" class="fa-solid fa-sun text-yellow-500 hidden"></i>
+        <i id="moon-icon" class="fa-solid fa-moon text-brand-600"></i>
     </button>
-    <ul class="dropdown-menu dropdown-menu-end">
-        <li><a class="dropdown-item" href="{{ url_for('main.panel') }}"><i class="bi bi-house-door-fill me-2"></i>Ana Panele Dön</a></li>
-        <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="{{ url_for('main.tedarikciler_sayfasi') }}"><i class="bi bi-people-fill me-2"></i>Tedarikçi Yönetimi</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('yem.yem_yonetimi_sayfasi') }}"><i class="bi bi-inboxes-fill me-2"></i>Yem Yönetimi</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('finans.finans_sayfasi') }}"><i class="bi bi-cash-coin me-2"></i>Finans Yönetimi</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('main.raporlar_page') }}"><i class="bi bi-bar-chart-line-fill me-2"></i>Detaylı Raporlar</a></li>
-        <li><hr class="dropdown-divider"></li>
-        
-        {% if session.get('user', {}).get('rol') in ['admin', 'firma_yetkilisi'] %}
-        <li><a class="dropdown-item" href="{{ url_for('firma.firma_yonetim_sayfasi') }}"><i class="bi bi-person-badge me-2"></i>Kullanıcı Yönetimi</a></li>
-        <li><a class="dropdown-item" href="{{ url_for('tarife.tarife_yonetim_sayfasi') }}"><i class="bi bi-tags-fill me-2"></i>Süt Fiyat Tarifesi</a></li>
-        
-        <li><a class="dropdown-item" href="{{ url_for('masraf.masraf_yonetim_sayfasi') }}"><i class="bi bi-wallet-fill me-2"></i>Genel Masraf Yönetimi</a></li>
-        {% endif %}
-        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#hakkindaModal"><i class="bi bi-info-circle-fill me-2"></i>Uygulama Hakkında</a></li>
-        
-        {% if session.get('user', {}).get('rol') == 'admin' %}
-        <li><a class="dropdown-item" href="{{ url_for('admin.admin_panel') }}"><i class="bi bi-shield-lock-fill me-2"></i>Admin Paneli</a></li>
-        {% endif %}
-        
-        <li><a class="dropdown-item" href="{{ url_for('profil.profil_sayfasi') }}"><i class="bi bi-person-circle me-2"></i>Profilim</a></li>
-        <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="#" onclick="askForNotificationPermission()"><i class="bi bi-bell-fill me-2"></i>Bildirimleri Aç</a></li>
-        <li><a class="dropdown-item text-danger" href="#" onclick="guvenliCikis()"><i class="bi bi-box-arrow-right me-2"></i>Güvenli Çıkış</a></li>
-    </ul>
+
 </div>
 
-<button id="theme-toggle" class="btn btn-sm">
-    <i id="sun-icon" class="bi bi-sun-fill"></i>
-    <i id="moon-icon" class="bi bi-moon-fill"></i>
-</button>
+<script>
+    // Dropdown Açma/Kapama
+    function toggleHizliIslemMenu() {
+        const menu = document.getElementById('hizli-islem-menu');
+        if (menu) {
+            if (menu.classList.contains('hidden')) {
+                menu.classList.remove('hidden');
+                menu.classList.add('transition', 'ease-out', 'duration-100', 'transform', 'opacity-100', 'scale-100');
+            } else {
+                menu.classList.add('hidden');
+            }
+        }
+    }
+
+    // Dışarı tıklandığında menüyü kapat
+    window.addEventListener('click', function(e) {
+        const container = document.getElementById('hizli-islem-container');
+        const menu = document.getElementById('hizli-islem-menu');
+        if (container && !container.contains(e.target) && menu && !menu.classList.contains('hidden')) {
+            menu.classList.add('hidden');
+        }
+    });
+
+    // Güvenli Çıkış
+    function guvenliCikis() {
+        // Önce local verileri temizleyebiliriz (isteğe bağlı)
+        localStorage.removeItem('offlineUser');
+        
+        // Logout endpointine git
+        window.location.href = "{{ url_for('auth.logout') }}";
+    }
+
+    // Bildirim İzni (Basit Versiyon)
+    function askForNotificationPermission() {
+        if ('Notification' in window) {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    alert("Bildirim izni verildi!");
+                }
+            });
+        } else {
+            alert("Tarayıcınız bildirimleri desteklemiyor.");
+        }
+    }
+</script>

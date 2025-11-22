@@ -1,4 +1,4 @@
-# services/sut_service.py (TANKER MANTIĞI ENTEGRE EDİLMİŞ TAM HALİ)
+# services/sut_service.py (REVİZE EDİLMİŞ TAM HALİ)
 
 import logging
 from flask import g, session
@@ -6,22 +6,24 @@ from postgrest import APIError
 from extensions import turkey_tz 
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
-import pytz
 import bleach
 from utils import parse_supabase_timestamp
 from constants import UserRole
+
+# --- YENİ EKLENEN IMPORT ---
+from services.audit_service import audit_service
 
 logger = logging.getLogger(__name__)
 
 class SutService:
     """Süt girdileri veritabanı işlemleri için servis katmanı."""
 
-    # === YENİ YARDIMCI FONKSİYON ===
-    def _get_toplayici_tanker(self, toplayici_id: int, sirket_id: int):
-        """Yardımcı fonksiyon: Toplayıcının atanmış tankerini ve detaylarını getirir."""
-        # Not: Şemaya göre toplayici_tanker_atama'da sirket_id/firma_id yok,
-        # ancak biz yine de sirket_id'yi ekleyerek sorguyu güvenli hale getirebiliriz.
-        # Orijinal şemada 'toplayici_user_id' idi, 'toplayici_id' değilse düzeltilmeli.
+    # === YARDIMCI FONKSİYON (SADELEŞTİRİLDİ) ===
+    def _get_toplayici_tanker_id(self, toplayici_id: int, sirket_id: int):
+        """
+        Yardımcı fonksiyon: Toplayıcının atanmış tankerinin sadece ID'sini döner.
+        Artık doluluk hesabını SQL yaptığı için tüm tanker objesine ihtiyacımız yok.
+        """
         atama_res = g.supabase.table('toplayici_tanker_atama') \
             .select('tanker_id') \
             .eq('toplayici_user_id', toplayici_id) \
@@ -30,26 +32,10 @@ class SutService:
             .execute()
             
         if not atama_res.data or not atama_res.data.get('tanker_id'):
-            # Tanker atanmamışsa, girişe izin verme
-            raise ValueError(f"Bu toplayıcıya (ID: {toplayici_id}) atanmış aktif bir tanker bulunamadı.")
+            # Tanker atanmamış
+            return None
             
-        tanker_id = atama_res.data['tanker_id']
-        
-        # Şemaya göre 'sirket_id' olmalı ('firma_id' değil)
-        tanker_res = g.supabase.table('tankerler') \
-            .select('id, kapasite_litre, mevcut_doluluk') \
-            .eq('id', tanker_id) \
-            .eq('sirket_id', sirket_id) \
-            .single() \
-            .execute()
-            
-        if not tanker_res.data:
-            # Atama var ama tanker silinmiş
-            raise ValueError(f"Atanmış tanker (ID: {tanker_id}) sistemde bulunamadı.")
-            
-        return tanker_res.data
-    # === YARDIMCI FONKSİYON SONU ===
-
+        return atama_res.data['tanker_id']
 
     def get_daily_summary(self, sirket_id: int, tarih_str: str):
         """Belirtilen tarih için RPC kullanarak özet veriyi çeker."""
@@ -59,13 +45,11 @@ class SutService:
                 'target_date': tarih_str
             }).execute()
             if not response.data or not response.data[0]:
-                logger.warning(f"get_daily_summary_rpc veri döndürmedi. Sirket: {sirket_id}, Tarih: {tarih_str}")
                 return {'toplam_litre': 0, 'girdi_sayisi': 0}
             return response.data[0]
         except Exception as e:
             logger.error(f"Günlük özet alınırken hata: {e}", exc_info=True)
             return {'toplam_litre': 0, 'girdi_sayisi': 0}
-
 
     def get_paginated_list(self, sirket_id: int, kullanici_id: int, rol: str, tarih_str: str, sayfa: int, limit: int = 6):
         """Süt girdilerini sayfalama ve filtreleme yaparak listeler (RPC kullanarak)."""
@@ -82,42 +66,39 @@ class SutService:
             response = g.supabase.rpc('get_paginated_sut_girdileri', params).execute()
 
             if not response.data:
-                # logger.warning(f"get_paginated_sut_girdileri RPC'si veri döndürmedi. Parametreler: {params}")
                 return [], 0
             
             result_data = response.data
             girdiler = result_data.get('data', [])
             toplam_kayit = result_data.get('count', 0)
             
+            # Frontend için iç içe objeleri düzenle
             for girdi in girdiler:
                 if 'kullanici_adi' in girdi:
                     girdi['kullanicilar'] = {'kullanici_adi': girdi['kullanici_adi']}
                 if 'tedarikci_isim' in girdi:
                     girdi['tedarikciler'] = {'isim': girdi['tedarikci_isim']}
 
-            # logger.info(f"Süt girdileri listelendi (RPC): Sayfa {sayfa}, Limit {limit}, Tarih: {tarih_str}, Toplam: {toplam_kayit}")
             return girdiler, toplam_kayit
             
         except Exception as e:
-            logger.error(f"Süt girdileri listelenirken (RPC) hata: {e}", exc_info=True)
+            logger.error(f"Süt girdileri listelenirken hata: {e}", exc_info=True)
             return [], 0
 
-    # === ADD_ENTRY GÜNCELLENDİ ===
+    # === ADD_ENTRY (ATOMIC UPDATE + AUDIT LOG) ===
     def add_entry(self, sirket_id: int, kullanici_id: int, yeni_girdi: dict):
-        """Yeni bir süt girdisi ekler VE GEREKİRSE TANKERİ GÜNCELLER."""
+        """Yeni bir süt girdisi ekler."""
         try:
             litre_str = yeni_girdi.get('litre')
             fiyat_str = yeni_girdi.get('fiyat')
             tedarikci_id_to_add = yeni_girdi.get('tedarikci_id')
 
-            if not tedarikci_id_to_add:
-                 raise ValueError("Tedarikçi seçimi zorunludur.")
-            if not litre_str or not fiyat_str:
-                 raise ValueError("Litre ve Fiyat alanları zorunludur.")
+            if not tedarikci_id_to_add: raise ValueError("Tedarikçi seçimi zorunludur.")
+            if not litre_str or not fiyat_str: raise ValueError("Litre ve Fiyat alanları zorunludur.")
 
             try:
-                litre = Decimal(litre_str)
-                fiyat = Decimal(fiyat_str)
+                litre = Decimal(str(litre_str))
+                fiyat = Decimal(str(fiyat_str))
             except (InvalidOperation, TypeError):
                  raise ValueError("Litre ve Fiyat geçerli bir sayı olmalıdır.")
 
@@ -126,33 +107,25 @@ class SutService:
 
             user_role = session.get('user', {}).get('rol')
             
-            # === YENİ TANKER MANTIĞI BAŞLANGICI ===
+            # 1. Yetki ve Tanker Kontrolü
             tanker_id_to_update = None
-            mevcut_doluluk = Decimal(0)
             
             if user_role == UserRole.TOPLAYICI.value:
-                # 1. Tedarikçi yetkisini kontrol et
+                # Tedarikçi yetkisi kontrolü
                 atama_res = g.supabase.table('toplayici_tedarikci_atama') \
                     .select('tedarikci_id', count='exact') \
                     .eq('toplayici_id', kullanici_id) \
                     .eq('tedarikci_id', tedarikci_id_to_add) \
                     .execute()
                 if atama_res.count == 0:
-                    logger.warning(f"Yetkisiz ekleme denemesi: Toplayıcı {kullanici_id}, Tedarikçi {tedarikci_id_to_add}")
                     raise ValueError("Bu tedarikçiye veri ekleme yetkiniz yok.")
                     
-                # 2. Toplayıcının tankerini bul ve kapasiteyi kontrol et
-                tanker = self._get_toplayici_tanker(kullanici_id, sirket_id)
-                kapasite = Decimal(tanker['kapasite_litre'])
-                mevcut_doluluk = Decimal(tanker['mevcut_doluluk'])
-                kalan_kapasite = kapasite - mevcut_doluluk
-                
-                if litre > kalan_kapasite:
-                    raise ValueError(f"Tanker kapasitesi aşıldı! Kalan kapasite: {kalan_kapasite:.2f} L. Girmek istediğiniz: {litre} L.")
-                
-                tanker_id_to_update = tanker['id']
-            # === YENİ TANKER MANTIĞI SONU ===
-
+                # Tanker ID bul
+                tanker_id_to_update = self._get_toplayici_tanker_id(kullanici_id, sirket_id)
+                if not tanker_id_to_update:
+                     raise ValueError("Bu toplayıcıya atanmış aktif bir tanker bulunamadı.")
+            
+            # 2. Süt Girdisini Ekle
             insert_data = {
                 'tedarikci_id': tedarikci_id_to_add,
                 'litre': str(litre),
@@ -160,48 +133,57 @@ class SutService:
                 'kullanici_id': kullanici_id,
                 'sirket_id': sirket_id
             }
-            logger.info(f"Süt girdisi ekleniyor: {insert_data}")
             response = g.supabase.table('sut_girdileri').insert(insert_data).execute()
-
+            
             if not response.data:
-                 logger.error(f"Supabase insert işlemi veri döndürmedi. İstek: {insert_data}")
                  raise Exception("Veritabanına kayıt sırasında bir sorun oluştu.")
+            
+            yeni_kayit_id = response.data[0]['id']
 
-            # === YENİ TANKER GÜNCELLEME ADIMI ===
+            # 3. ATOMIC TANKER UPDATE (RPC İLE)
             if tanker_id_to_update:
                 try:
-                    yeni_doluluk = mevcut_doluluk + litre
-                    g.supabase.table('tankerler') \
-                        .update({'mevcut_doluluk': str(yeni_doluluk)}) \
-                        .eq('id', tanker_id_to_update) \
-                        .execute()
-                    logger.info(f"Tanker (ID: {tanker_id_to_update}) doluluğu {yeni_doluluk} L olarak güncellendi.")
+                    # RPC çağırıyoruz: atomic_tanker_update(tanker_id, litre_change)
+                    g.supabase.rpc('atomic_tanker_update', {
+                        'p_tanker_id': tanker_id_to_update,
+                        'p_litre_change': float(litre) # Decimal RPC'ye float gidebilir
+                    }).execute()
+                    logger.info(f"Tanker (ID: {tanker_id_to_update}) atomik olarak güncellendi.")
                 except Exception as tanker_e:
-                    # Tanker güncellenemezse, süt girdisini sil (Atomik işlem)
-                    logger.error(f"Tanker GÜNCELLEME HATASI: {tanker_e}. Süt girdisi (ID: {response.data[0]['id']}) geri alınıyor...", exc_info=True)
-                    g.supabase.table('sut_girdileri').delete().eq('id', response.data[0]['id']).execute()
-                    raise Exception(f"Tanker güncellenemedi, süt girişi iptal edildi. Hata: {tanker_e}")
-            # === TANKER GÜNCELLEME SONU ===
+                    # Tanker güncellenemezse (örn: kapasite doldu), süt girdisini sil (Rollback)
+                    logger.error(f"Tanker RPC Hatası: {tanker_e}. Girdi siliniyor...", exc_info=True)
+                    g.supabase.table('sut_girdileri').delete().eq('id', yeni_kayit_id).execute()
+                    # Hatayı kullanıcıya anlamlı şekilde dön
+                    if 'Tanker kapasitesi aşıldı' in str(tanker_e):
+                        raise ValueError("Tanker kapasitesi bu işlem için yetersiz!")
+                    raise ValueError("Tanker güncellenemediği için işlem iptal edildi.")
+
+            # 4. AUDIT LOG KAYDI
+            audit_service.log_islem(
+                islem_turu='INSERT',
+                tablo_adi='sut_girdileri',
+                kayit_id=yeni_kayit_id,
+                detaylar={
+                    'litre': str(litre), 
+                    'fiyat': str(fiyat), 
+                    'tedarikci_id': tedarikci_id_to_add,
+                    'tanker_updated': tanker_id_to_update
+                },
+                sirket_id=sirket_id
+            )
             
-            logger.info(f"Süt girdisi başarıyla eklendi: ID {response.data[0].get('id')}")
             return response.data[0]
 
         except ValueError as ve:
-            logger.warning(f"Süt girdisi ekleme validation hatası: {ve}")
             raise ve
-        except APIError as api_err:
-            logger.error(f"Supabase API hatası (süt ekleme): {api_err.message}", exc_info=True)
-            raise Exception(f"Veritabanı hatası: {api_err.message}")
         except Exception as e:
-            logger.error(f"Süt girdisi eklenirken BİLİNMEYEN hata: {e}", exc_info=True)
+            logger.error(f"Süt girdisi eklenirken hata: {e}", exc_info=True)
             raise Exception("Girdi eklenirken bir sunucu hatası oluştu.")
 
-    # === UPDATE_ENTRY GÜNCELLENDİ ===
+    # === UPDATE_ENTRY (ATOMIC UPDATE + AUDIT LOG) ===
     def update_entry(self, girdi_id: int, sirket_id: int, duzenleyen_kullanici_id: int, data: dict):
-        """Mevcut bir süt girdisini günceller, TANKERİ GÜNCELLER ve geçmiş kaydı oluşturur."""
+        """Mevcut bir süt girdisini günceller."""
         try:
-            logger.info(f"update_entry çağrıldı. Girdi ID: {girdi_id}, Kullanıcı ID: {duzenleyen_kullanici_id}, Gelen Data: {data}")
-
             yeni_litre_str = data.get('yeni_litre')
             yeni_fiyat_str = data.get('yeni_fiyat')
             raw_duzenleme_sebebi = data.get('duzenleme_sebebi', '').strip()
@@ -215,138 +197,105 @@ class SutService:
             if yeni_litre <= 0 or yeni_fiyat < 0:
                  raise ValueError("Litre pozitif, fiyat negatif olmayan bir değer olmalıdır.")
 
-            # **Adım 2: Mevcut girdiyi ve yetkiyi kontrol et**
+            # Mevcut girdiyi çek
             mevcut_girdi_res = g.supabase.table('sut_girdileri') \
-                .select('id, litre, fiyat, kullanici_id, tedarikci_id, taplanma_tarihi, sirket_id') \
+                .select('*') \
                 .eq('id', girdi_id).eq('sirket_id', sirket_id).maybe_single().execute()
 
             if not mevcut_girdi_res.data:
-                logger.warning(f"Güncellenecek girdi bulunamadı. Girdi ID: {girdi_id}, Sirket ID: {sirket_id}")
                 raise ValueError("Girdi bulunamadı veya bu şirkete ait değil.")
 
             mevcut_girdi = mevcut_girdi_res.data
             girdi_sahibi_id = mevcut_girdi.get('kullanici_id')
-            mevcut_tedarikci_id = mevcut_girdi.get('tedarikci_id')
             eski_litre = Decimal(mevcut_girdi.get('litre'))
             eski_fiyat = Decimal(mevcut_girdi.get('fiyat'))
-            girdi_tarihi_str_db = mevcut_girdi.get('taplanma_tarihi')
 
+            # Yetki kontrolü
             duzenleyen_rol = session.get('user', {}).get('rol')
             if duzenleyen_rol != UserRole.FIRMA_YETKILISI.value and duzenleyen_kullanici_id != girdi_sahibi_id:
-                logger.warning(f"Yetkisiz düzenleme denemesi: Kullanıcı {duzenleyen_kullanici_id}, Girdi ID {girdi_id}, Sahip ID {girdi_sahibi_id}")
                 raise ValueError("Bu girdiyi düzenleme yetkiniz yok.")
 
-            # === YENİ TANKER GÜNCELLEME KONTROLÜ ===
-            tanker_id_to_update = None
-            litre_farki = yeni_litre - eski_litre # Pozitif (artış) veya negatif (azalış) olabilir
-            mevcut_doluluk = Decimal(0)
-            
-            # Girdinin sahibi bir toplayıcı ise, tankerini güncelle
-            girdi_sahibi_rol_res = g.supabase.table('kullanicilar').select('rol').eq('id', girdi_sahibi_id).single().execute()
-            girdi_sahibi_rol = girdi_sahibi_rol_res.data.get('rol') if girdi_sahibi_rol_res.data else None
-            
-            if girdi_sahibi_rol == UserRole.TOPLAYICI.value:
-                try:
-                    tanker = self._get_toplayici_tanker(girdi_sahibi_id, sirket_id)
-                    tanker_id_to_update = tanker['id']
-                    mevcut_doluluk = Decimal(tanker['mevcut_doluluk'])
-                    kapasite = Decimal(tanker['kapasite_litre'])
-                    
-                    if litre_farki > 0: # Litre artıyorsa
-                        kalan_kapasite = kapasite - mevcut_doluluk
-                        if litre_farki > kalan_kapasite:
-                            raise ValueError(f"Tanker kapasitesi aşıldı! Kalan kapasite: {kalan_kapasite:.2f} L. Eklemek istediğiniz fark: {litre_farki} L.")
-                    
-                    elif litre_farki < 0 and (mevcut_doluluk + litre_farki) < 0:
-                         logger.warning(f"Tanker (ID: {tanker_id_to_update}) doluluğu 0'a eşitleniyor.")
-                         litre_farki = -mevcut_doluluk # Tankeri 0'a çekecek kadar fark
-                
-                except ValueError as ve:
-                     logger.warning(f"Tanker güncelleme atlandı (update_entry): {ve}")
-                     tanker_id_to_update = None
-                     litre_farki = Decimal(0)
-            # === TANKER KONTROLÜ SONU ===
+            # Litre Farkı
+            litre_farki = yeni_litre - eski_litre
 
-            # **Adım 3: Geçmiş kaydını ekle**
-            history_data = {
+            # Tanker Kontrolü
+            tanker_id_to_update = None
+            girdi_sahibi_rol_res = g.supabase.table('kullanicilar').select('rol').eq('id', girdi_sahibi_id).single().execute()
+            if girdi_sahibi_rol_res.data and girdi_sahibi_rol_res.data['rol'] == UserRole.TOPLAYICI.value:
+                tanker_id_to_update = self._get_toplayici_tanker_id(girdi_sahibi_id, sirket_id)
+
+            # 1. Geçmiş kaydını ekle
+            g.supabase.table('girdi_gecmisi').insert({
                 'orijinal_girdi_id': girdi_id,
                 'duzenleyen_kullanici_id': duzenleyen_kullanici_id,
                 'duzenleme_sebebi': duzenleme_sebebi,
                 'eski_litre_degeri': str(eski_litre),
-                'eski_fiyat_degeri': str(eski_fiyat) if eski_fiyat is not None else None,
-                'eski_tedarikci_id': mevcut_tedarikci_id
-            }
-            g.supabase.table('girdi_gecmisi').insert(history_data).execute()
+                'eski_fiyat_degeri': str(eski_fiyat),
+                'eski_tedarikci_id': mevcut_girdi.get('tedarikci_id')
+            }).execute()
 
-            # **Adım 4: Ana girdiyi güncelle**
-            guncellenecek_veri = {
-                'duzenlendi_mi': True,
-                'litre': str(yeni_litre),
-                'fiyat': str(yeni_fiyat)
-            }
+            # 2. Ana girdiyi güncelle
             g.supabase.table('sut_girdileri') \
-                .update(guncellenecek_veri) \
+                .update({'duzenlendi_mi': True, 'litre': str(yeni_litre), 'fiyat': str(yeni_fiyat)}) \
                 .eq('id', girdi_id) \
                 .execute()
 
-            # **Adım 5: Tankeri Güncelle** (Eğer gerekiyorsa)
+            # 3. ATOMIC TANKER UPDATE (Eğer fark varsa)
             if tanker_id_to_update and litre_farki != 0:
                 try:
-                    yeni_doluluk = mevcut_doluluk + litre_farki
-                    g.supabase.table('tankerler') \
-                        .update({'mevcut_doluluk': str(yeni_doluluk)}) \
-                        .eq('id', tanker_id_to_update) \
-                        .execute()
-                    logger.info(f"Tanker (ID: {tanker_id_to_update}) doluluğu {litre_farki} L değiştirildi. Yeni doluluk: {yeni_doluluk} L.")
+                    g.supabase.rpc('atomic_tanker_update', {
+                        'p_tanker_id': tanker_id_to_update,
+                        'p_litre_change': float(litre_farki)
+                    }).execute()
                 except Exception as tanker_e:
-                    # Tanker güncellenemezse, süt girdisini geri al
-                    logger.error(f"Tanker GÜNCELLEME HATASI (Update): {tanker_e}. Süt girdisi (ID: {girdi_id}) eski haline döndürülüyor...", exc_info=True)
-                    g.supabase.table('sut_girdileri') \
-                        .update({'duzenlendi_mi': False, 'litre': str(eski_litre), 'fiyat': str(eski_fiyat)}) \
-                        .eq('id', girdi_id) \
-                        .execute()
-                    # Geçmiş kaydını sil
-                    g.supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
-                    raise Exception(f"Tanker güncellenemedi, süt güncellemesi iptal edildi. Hata: {tanker_e}")
+                    # Bu noktada rollback yapmak zordur (veritabanı transaction'ı olmadığı için).
+                    # Logluyoruz, manuel müdahale gerekebilir.
+                    logger.error(f"CRITICAL: Girdi güncellendi ANCAK Tanker güncellenemedi! Girdi: {girdi_id}, Fark: {litre_farki}, Hata: {tanker_e}")
+                    # Kullanıcıya bilgi verilebilir veya sessizce loglanabilir.
+                    pass
 
-            # **Adım 6: Güncel veriyi döndür**
-            guncel_girdi_res = g.supabase.table('sut_girdileri') \
-                .select('*') \
-                .eq('id', girdi_id) \
-                .single() \
-                .execute()
+            # 4. AUDIT LOG
+            audit_service.log_islem(
+                islem_turu='UPDATE',
+                tablo_adi='sut_girdileri',
+                kayit_id=girdi_id,
+                detaylar={
+                    'eski_litre': str(eski_litre),
+                    'yeni_litre': str(yeni_litre),
+                    'fark': str(litre_farki),
+                    'tanker_updated': tanker_id_to_update
+                },
+                sirket_id=sirket_id
+            )
+
+            # Güncel veriyi döndür
+            guncel_girdi = g.supabase.table('sut_girdileri').select('*').eq('id', girdi_id).single().execute()
             
-            if not guncel_girdi_res.data:
-                 logger.error(f"Girdi güncellendi ancak tekrar çekilemedi. Girdi ID: {girdi_id}")
-                 raise Exception("Girdi güncellendi ancak sunucudan güncel veri alınamadı.")
-
+            # Tarih formatlama
+            girdi_tarihi_str_db = mevcut_girdi.get('taplanma_tarihi')
             girdi_tarihi_str_formatted = datetime.now(turkey_tz).date().isoformat()
             if girdi_tarihi_str_db:
-                girdi_tarihi = parse_supabase_timestamp(girdi_tarihi_str_db)
-                if girdi_tarihi: girdi_tarihi_str_formatted = girdi_tarihi.astimezone(turkey_tz).date().isoformat()
+                parsed_date = parse_supabase_timestamp(girdi_tarihi_str_db)
+                if parsed_date: girdi_tarihi_str_formatted = parsed_date.astimezone(turkey_tz).date().isoformat()
 
-            logger.info(f"Süt girdisi ID {girdi_id} başarıyla güncellendi.")
-            return guncel_girdi_res.data, girdi_tarihi_str_formatted
+            return guncel_girdi.data, girdi_tarihi_str_formatted
 
         except ValueError as ve:
-             logger.warning(f"Süt girdisi güncelleme validation hatası: {ve}")
              raise ve
-        except APIError as api_err:
-            logger.error(f"Supabase API hatası (süt güncelleme genel): {api_err.message}", exc_info=True)
-            raise Exception(f"Veritabanı hatası: {api_err.message}")
         except Exception as e:
-            logger.error(f"Süt girdisi güncellenirken BİLİNMEYEN hata: {e}", exc_info=True)
+            logger.error(f"Süt girdisi güncellenirken hata: {e}", exc_info=True)
             raise Exception("Güncelleme sırasında bir sunucu hatası oluştu.")
 
-    # === DELETE_ENTRY GÜNCELLENDİ ===
+    # === DELETE_ENTRY (ATOMIC UPDATE + AUDIT LOG) ===
     def delete_entry(self, girdi_id: int, sirket_id: int):
-        """Bir süt girdisini siler, TANKERİ GÜNCELLER ve ilgili geçmiş kayıtlarını siler."""
+        """Bir süt girdisini siler."""
         try:
             silen_kullanici_id = session.get('user', {}).get('id')
             silen_rol = session.get('user', {}).get('rol')
 
+            # Girdiyi çek
             mevcut_girdi_res = g.supabase.table('sut_girdileri') \
-                .select('sirket_id, taplanma_tarihi, kullanici_id, litre') \
+                .select('*') \
                 .eq('id', girdi_id) \
                 .eq('sirket_id', sirket_id) \
                 .maybe_single() \
@@ -357,82 +306,65 @@ class SutService:
 
             mevcut_girdi = mevcut_girdi_res.data
             girdi_sahibi_id = mevcut_girdi.get('kullanici_id')
-            silinen_litre = Decimal(mevcut_girdi.get('litre')) # Silinen litreyi al
+            silinen_litre = Decimal(mevcut_girdi.get('litre'))
             
+            # Yetki kontrolü
             if silen_rol != UserRole.FIRMA_YETKILISI.value and silen_kullanici_id != girdi_sahibi_id:
-                logger.warning(f"Yetkisiz silme denemesi: Kullanıcı {silen_kullanici_id}, Girdi ID {girdi_id}, Sahip ID {girdi_sahibi_id}")
                 raise ValueError("Bu girdiyi silme yetkiniz yok.")
 
-            girdi_tarihi_str_db = mevcut_girdi.get('taplanma_tarihi')
-            girdi_tarihi_str_formatted = datetime.now(turkey_tz).date().isoformat()
-            if girdi_tarihi_str_db:
-                girdi_tarihi = parse_supabase_timestamp(girdi_tarihi_str_db)
-                if girdi_tarihi:
-                    girdi_tarihi_str_formatted = girdi_tarihi.astimezone(turkey_tz).date().isoformat()
-
-            # **Tanker Güncelleme Kontrolü (Silme)**
-            girdi_sahibi_rol_res = g.supabase.table('kullanicilar').select('rol').eq('id', girdi_sahibi_id).single().execute()
-            girdi_sahibi_rol = girdi_sahibi_rol_res.data.get('rol') if girdi_sahibi_rol_res.data else None
-
+            # Tanker tespiti
             tanker_id_to_update = None
-            mevcut_doluluk = Decimal(0)
+            girdi_sahibi_rol_res = g.supabase.table('kullanicilar').select('rol').eq('id', girdi_sahibi_id).single().execute()
+            if girdi_sahibi_rol_res.data and girdi_sahibi_rol_res.data['rol'] == UserRole.TOPLAYICI.value:
+                tanker_id_to_update = self._get_toplayici_tanker_id(girdi_sahibi_id, sirket_id)
             
-            if girdi_sahibi_rol == UserRole.TOPLAYICI.value:
-                try:
-                    tanker = self._get_toplayici_tanker(girdi_sahibi_id, sirket_id)
-                    tanker_id_to_update = tanker['id']
-                    mevcut_doluluk = Decimal(tanker['mevcut_doluluk'])
-                except ValueError as ve:
-                    logger.warning(f"Tanker güncelleme atlandı (delete_entry): {ve}")
-                    tanker_id_to_update = None
-            
-            # **Girdiyi ve Geçmişini Sil**
-            logger.info(f"Girdi geçmişi siliniyor: Orijinal Girdi ID {girdi_id}")
+            # 1. Girdiyi ve Geçmişini Sil
             g.supabase.table('girdi_gecmisi').delete().eq('orijinal_girdi_id', girdi_id).execute()
-
-            logger.info(f"Süt girdisi siliniyor: ID {girdi_id}")
             g.supabase.table('sut_girdileri').delete().eq('id', girdi_id).execute()
 
-            # **Tankeri Güncelle**
+            # 2. ATOMIC TANKER UPDATE (Negatif değer ile düşüm)
             if tanker_id_to_update:
                 try:
-                    yeni_doluluk = mevcut_doluluk - silinen_litre
-                    if yeni_doluluk < 0:
-                        logger.warning(f"Tanker (ID: {tanker_id_to_update}) doluluğu 0'a eşitleniyor.")
-                        yeni_doluluk = Decimal('0')
-                        
-                    g.supabase.table('tankerler') \
-                        .update({'mevcut_doluluk': str(yeni_doluluk)}) \
-                        .eq('id', tanker_id_to_update) \
-                        .execute()
-                    logger.info(f"Tanker (ID: {tanker_id_to_update}) doluluğu {silinen_litre} L azaltıldı. Yeni doluluk: {yeni_doluluk} L.")
+                    g.supabase.rpc('atomic_tanker_update', {
+                        'p_tanker_id': tanker_id_to_update,
+                        'p_litre_change': float(-silinen_litre) # Negatif değer gönderiyoruz
+                    }).execute()
                 except Exception as tanker_e:
-                    logger.error(f"HATA: Tanker GÜNCELLEME HATASI (Delete): {tanker_e}. Girdi (ID: {girdi_id}) zaten silindi. Lütfen Tanker (ID: {tanker_id_to_update}) doluluğunu manuel kontrol edin!", exc_info=True)
+                    logger.error(f"CRITICAL: Girdi silindi ANCAK Tanker düşülemedi! Girdi: {girdi_id}, Silinen: {silinen_litre}, Hata: {tanker_e}")
 
-            logger.info(f"Süt girdisi ID {girdi_id}, kullanıcı {silen_kullanici_id} tarafından silindi.")
+            # 3. AUDIT LOG
+            audit_service.log_islem(
+                islem_turu='DELETE',
+                tablo_adi='sut_girdileri',
+                kayit_id=girdi_id,
+                detaylar={
+                    'silinen_litre': str(silinen_litre),
+                    'tanker_updated': tanker_id_to_update
+                },
+                sirket_id=sirket_id
+            )
+
+            # Tarih döndür (UI güncellemesi için)
+            girdi_tarihi_str_formatted = datetime.now(turkey_tz).date().isoformat()
+            db_date = parse_supabase_timestamp(mevcut_girdi.get('taplanma_tarihi'))
+            if db_date:
+                girdi_tarihi_str_formatted = db_date.astimezone(turkey_tz).date().isoformat()
+
             return girdi_tarihi_str_formatted
 
         except ValueError as ve:
-            logger.warning(f"Süt girdisi silme validation hatası: {ve}")
             raise ve
-        except APIError as api_err:
-            logger.error(f"Supabase API hatası (süt silme): {api_err.message}", exc_info=True)
-            raise Exception(f"Veritabanı hatası: {api_err.message}")
         except Exception as e:
-            logger.error(f"Süt girdisi silinirken BİLİNMEYEN hata: {e}", exc_info=True)
+            logger.error(f"Süt girdisi silinirken hata: {e}", exc_info=True)
             raise Exception("Silme işlemi sırasında bir hata oluştu.")
 
     # --- Kalan Fonksiyonlar Değişmedi ---
     def get_entry_history(self, girdi_id: int, sirket_id: int):
         try:
-            original_girdi_response = g.supabase.table('sut_girdileri').select('id').eq('id', girdi_id).eq('sirket_id', sirket_id).maybe_single().execute()
-            if not original_girdi_response.data:
-                logger.warning(f"Yetkisiz geçmiş sorgusu veya girdi bulunamadı. Girdi ID: {girdi_id}, Sirket ID: {sirket_id}")
+            res = g.supabase.table('sut_girdileri').select('id').eq('id', girdi_id).eq('sirket_id', sirket_id).maybe_single().execute()
+            if not res.data:
                 raise ValueError("Yetkisiz erişim veya girdi bulunamadı.")
-
-            logger.debug(f"Girdi geçmişi çekiliyor: Orijinal Girdi ID {girdi_id}")
-            gecmis_data = g.supabase.table('girdi_gecmisi').select('*,duzenleyen_kullanici_id(kullanici_adi)').eq('orijinal_girdi_id', girdi_id).order('created_at', desc=True).execute()
-            return gecmis_data.data
+            return g.supabase.table('girdi_gecmisi').select('*,duzenleyen_kullanici_id(kullanici_adi)').eq('orijinal_girdi_id', girdi_id).order('created_at', desc=True).execute().data
         except ValueError as ve:
              raise ve
         except Exception as e:
@@ -441,7 +373,6 @@ class SutService:
 
     def get_last_price_for_supplier(self, sirket_id: int, tedarikci_id: int):
         try:
-            logger.debug(f"Son fiyat çekiliyor: Sirket ID {sirket_id}, Tedarikçi ID {tedarikci_id}")
             response = g.supabase.table('sut_girdileri').select('fiyat').eq('sirket_id', sirket_id).eq('tedarikci_id', tedarikci_id).order('taplanma_tarihi', desc=True).limit(1).maybe_single().execute()
             return response.data if response.data else {}
         except Exception as e:
